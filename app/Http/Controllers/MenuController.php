@@ -16,7 +16,19 @@ class MenuController extends Controller
      */
     public function list(Request $request)
     {
-        $perPage = $request->query('per_page', 10);
+        $validator = Validator::make($request->query(), [
+            'per_page' => 'nullable|integer|min:1|max:100',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Validation error',
+                'data' => $validator->errors()
+            ], 422);
+        }
+
+        $perPage = (int) $request->query('per_page', 10);
 
         $items = MenuItem::orderBy('_id', 'asc')->paginate($perPage);
 
@@ -94,9 +106,9 @@ class MenuController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'price' => 'required|numeric',
+            'price' => 'required|numeric|min:0',
             'category' => 'required|string|max:255',
-            'image_url' => 'nullable|string',
+            'image_url' => 'nullable|string|max:500',
         ]);
 
         if ($validator->fails()) {
@@ -107,7 +119,9 @@ class MenuController extends Controller
             ], 422);
         }
 
-        $item = MenuItem::create($request->all());
+        $validated = $validator->validated();
+
+        $item = MenuItem::create($validated);
 
         return response()->json([
             'status' => 'success',
@@ -137,9 +151,9 @@ class MenuController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'sometimes|required|string|max:255',
             'description' => 'sometimes|nullable|string',
-            'price' => 'sometimes|required|numeric',
+            'price' => 'sometimes|required|numeric|min:0',
             'category' => 'sometimes|required|string|max:255',
-            'image_url' => 'sometimes|nullable|string',
+            'image_url' => 'sometimes|nullable|string|max:500',
         ]);
 
         if ($validator->fails()) {
@@ -150,7 +164,16 @@ class MenuController extends Controller
             ], 422);
         }
 
-        $item->update($request->all());
+        $validated = $validator->validated();
+
+        if (count($validated) === 0) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No valid fields provided for update'
+            ], 422);
+        }
+
+        $item->update($validated);
 
         return response()->json([
             'status' => 'success',
@@ -176,10 +199,7 @@ class MenuController extends Controller
             ], 404);
         }
 
-        if ($item->image_url) {
-            $oldPath = str_replace('/storage/', '', $item->image_url);
-            Storage::disk('public')->delete($oldPath);
-        }
+        $this->deleteStoredMenuImage($item->image_url);
 
         $item->delete();
 
@@ -209,7 +229,7 @@ class MenuController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'image' => 'required|file|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
         ]);
 
         if ($validator->fails()) {
@@ -222,10 +242,7 @@ class MenuController extends Controller
 
         if ($request->hasFile('image')) {
             
-            if ($item->image_url) {
-                $oldPath = str_replace('/storage/', '', $item->image_url);
-                Storage::disk('public')->delete($oldPath);
-            }
+            $this->deleteStoredMenuImage($item->image_url);
             
             // Ensure public disk is configured correctly or use standard storage
             $path = $request->file('image')->store('menu', 'public');
@@ -268,8 +285,7 @@ class MenuController extends Controller
             ], 400);
         }
 
-        $oldPath = str_replace('/storage/', '', $item->image_url);
-        Storage::disk('public')->delete($oldPath);
+        $this->deleteStoredMenuImage($item->image_url);
 
         $item->update(['image_url' => null]);
 
@@ -311,6 +327,21 @@ class MenuController extends Controller
     {
         $menus = MenuItem::where('category', 'Minuman')->get();
         return view('menu', ['menus' => $menus]);
+    }
+
+    private function deleteStoredMenuImage(?string $imageUrl): void
+    {
+        if (!$imageUrl) {
+            return;
+        }
+
+        // Only allow deletion under the expected menu storage directory.
+        if (!str_starts_with($imageUrl, '/storage/menu/')) {
+            return;
+        }
+
+        $oldPath = ltrim(str_replace('/storage/', '', $imageUrl), '/');
+        Storage::disk('public')->delete($oldPath);
     }
 
 }
