@@ -81,7 +81,7 @@
     container.innerHTML = cart.map((item, index) => `
         <div class="flex items-start gap-4 animate-fadeIn">
             <div class="w-24 h-20 flex-shrink-0">
-                <img src="/images/${encodeURIComponent(item.img)}" class="w-full h-full object-cover rounded-xl shadow-sm" onerror="this.src='/images/default.jpg'">
+                <img src="/images/${encodeURIComponent(item.image_url)}" class="w-full h-full object-cover rounded-xl shadow-sm" onerror="this.src='/images/esteh.jpg'">
             </div>
             <div class="flex-grow">
                 <h3 class="font-bold text-gray-800">${item.nama}</h3>

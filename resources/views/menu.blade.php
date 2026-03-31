@@ -48,16 +48,20 @@
             @foreach($menus as $menu)
             <div class="flex bg-white rounded-[24px] p-3 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-50 items-center">
                 <div class="w-28 h-28 flex-shrink-0">
-                    <img src="{{ asset('images/' . $menu['img']) }}" alt="{{ $menu['name'] }}" class="w-full h-full object-cover rounded-[20px]">
+                    <img src="{{ asset('images/' . $menu['image_url']) }}" alt="{{ $menu['name'] }}" class="w-full h-full object-cover rounded-[20px]">
                 </div>
 
                 <div class="ml-4 flex-grow py-1">
                     <h3 class="font-bold text-gray-800 text-lg leading-tight">{{ $menu['name'] }}</h3>
-                    <p class="text-[11px] text-gray-400 leading-snug mt-1 mb-2 line-clamp-2">{{ $menu['desc'] }}</p>
+                    <p class="text-[11px] text-gray-400 leading-snug mt-1 mb-2 line-clamp-2">{{ $menu['description'] }}</p>
                     <div class="flex justify-between items-center">
-                        <span class="font-black text-gray-800 text-base">Rp {{ number_format($menu['price_raw'], 0, ',', '.') }}</span>
+                        <span class="font-black text-gray-800 text-base">Rp {{ number_format($menu['price'], 0, ',', '.') }}</span>
                         
-                        <button onclick="tambahKeKeranjang('{{ $menu['name'] }}', {{ $menu['price_raw'] }}, '{{ $menu['img'] }}', '{{ $menu['desc'] }}')" 
+                        <button onclick="tambahKeKeranjang(this)"
+                                data-nama="{{ $menu['name'] }}"
+                                data-harga="{{ $menu['price'] }}"
+                                data-img="{{ $menu['image_url'] }}"
+                                data-desc="{{ $menu['description'] }}"
                                 class="bg-[#C8641E] text-white p-2.5 rounded-xl shadow-lg shadow-[#C8641E]/20 hover:scale-105 transition active:scale-95">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                         </button>
@@ -90,27 +94,31 @@
             const totalItem = keranjang.reduce((sum, item) => sum + item.qty, 0);
             document.getElementById('cart-badge').innerText = totalItem + " Item";
         }
+        
+        function tambahKeKeranjang(button) {
+            const nama = button.dataset.nama;
+            const harga = button.dataset.harga;
+            const imageUrl = button.dataset.img;
+            const description = button.dataset.desc;
+            
+            let keranjang = JSON.parse(localStorage.getItem('kedaiKlikCart')) || [];
+            const index = keranjang.findIndex(item => item.nama === nama);
 
-        // PERBAIKAN: Menerima harga sebagai angka murni (integer)
-        function tambahKeKeranjang(nama, hargaRaw, img, desc) {
-        let keranjang = JSON.parse(localStorage.getItem('kedaiKlikCart')) || [];
-        const index = keranjang.findIndex(item => item.nama === nama);
+            if (index !== -1) {
+                keranjang[index].qty += 1;
+            } else {
+                keranjang.push({
+                    nama: nama,
+                    harga: harga,
+                    img: imageUrl,
+                    desc: description || 'Deskripsi tidak tersedia',
+                    qty: 1
+                });
+            }
 
-    if (index !== -1) {
-        keranjang[index].qty += 1;
-    } else {
-        keranjang.push({
-            nama: nama,
-            harga: hargaRaw, // PAKAI 'harga', jangan 'harga_raw'
-            img: img,
-            desc: desc || 'Deskripsi tidak tersedia',
-            qty: 1
-        });
-    }
-
-    localStorage.setItem('kedaiKlikCart', JSON.stringify(keranjang));
-    updateBadge();
-}
+            localStorage.setItem('kedaiKlikCart', JSON.stringify(keranjang));
+            updateBadge();
+        }
 
         document.addEventListener('DOMContentLoaded', updateBadge);
     </script>

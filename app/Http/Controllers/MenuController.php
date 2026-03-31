@@ -14,9 +14,12 @@ class MenuController extends Controller
      *
      * @return \Illuminate\Http\JsonResponse
      */
-    public function list()
+    public function list(Request $request)
     {
-        $items = MenuItem::orderBy('_id', 'asc')->get();
+        $perPage = $request->query('per_page', 10);
+
+        $items = MenuItem::orderBy('_id', 'asc')->paginate($perPage);
+
         return response()->json([
             'status' => 'success',
             'message' => 'Menu items retrieved',
@@ -33,6 +36,13 @@ class MenuController extends Controller
     public function search(Request $request)
     {
         $name = $request->query('name');
+
+        if (!$name || trim($name) === '') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Search query cannot be empty'
+            ], 422);
+        }
         
         $items = MenuItem::where('name', 'like', "%{$name}%")
             ->orderBy('_id', 'asc')
@@ -54,6 +64,13 @@ class MenuController extends Controller
     public function filter(Request $request)
     {
         $category = $request->query('category');
+
+        if (!$category || trim($category) === '') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Category query cannot be empty'
+            ], 422);
+        }
         
         $items = MenuItem::where('category', $category)
             ->orderBy('_id', 'asc')
@@ -159,6 +176,11 @@ class MenuController extends Controller
             ], 404);
         }
 
+        if ($item->image_url) {
+            $oldPath = str_replace('/storage/', '', $item->image_url);
+            Storage::disk('public')->delete($oldPath);
+        }
+
         $item->delete();
 
         return response()->json([
@@ -199,6 +221,12 @@ class MenuController extends Controller
         }
 
         if ($request->hasFile('image')) {
+            
+            if ($item->image_url) {
+                $oldPath = str_replace('/storage/', '', $item->image_url);
+                Storage::disk('public')->delete($oldPath);
+            }
+            
             // Ensure public disk is configured correctly or use standard storage
             $path = $request->file('image')->store('menu', 'public');
             $imageUrl = '/storage/' . $path;
@@ -219,6 +247,37 @@ class MenuController extends Controller
             'status' => 'error',
             'message' => 'Image upload failed'
         ], 500);
+        
+    }
+
+    public function deleteImage($id)
+    {
+        $item = MenuItem::find($id);
+
+        if (!$item) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Menu item not found'
+            ], 404);
+        }
+
+        if (!$item->image_url) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Menu item has no image'
+            ], 400);
+        }
+
+        $oldPath = str_replace('/storage/', '', $item->image_url);
+        Storage::disk('public')->delete($oldPath);
+
+        $item->update(['image_url' => null]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Menu image deleted',
+            'data' => ['deleted' => true]
+        ]);
     }
 
     /**
@@ -235,4 +294,23 @@ class MenuController extends Controller
             'data' => ['count' => $count]
         ]);
     }
+
+    public function hidangan()
+    {
+        $menus = MenuItem::where('category', 'Hidangan')->get();
+        return view('menu', ['menus' => $menus]);
+    }
+
+    public function cemilan()
+    {
+        $menus = MenuItem::where('category', 'Cemilan')->get();
+        return view('menu', ['menus' => $menus]);
+    }
+
+    public function minuman()
+    {
+        $menus = MenuItem::where('category', 'Minuman')->get();
+        return view('menu', ['menus' => $menus]);
+    }
+
 }

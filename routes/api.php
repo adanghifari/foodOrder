@@ -28,6 +28,7 @@ Route::group(['prefix' => 'v1/menus'], function ($router) {
         Route::put('/{id}', [MenuController::class, 'update']);
         Route::delete('/{id}', [MenuController::class, 'remove']);
         Route::post('/upload-image/{id}', [MenuController::class, 'uploadImage']);
+        Route::delete('/{id}/image', [MenuController::class, 'deleteImage']);
         Route::get('/count', [MenuController::class, 'count']);
     });
 });

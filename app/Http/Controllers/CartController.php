@@ -192,13 +192,14 @@ class CartController extends Controller
         }
 
         // Keep transaction simple or rely on sequence count if possible
-        $queueNumber = Order::count() + 1;
+        $lastOrder = Order::orderBy('queue_number', 'desc')->first();
+        $queueNumber = $lastOrder ? $lastOrder->queue_number + 1 : 1;
 
         $order = Order::create([
             'customer_id' => $user->_id,
             'table_number' => $tableNumber,
             'status' => 'CONFIRMED',
-            'payment_status' => 'PAID', // Based on the reference code
+            'payment_status' => 'PENDING', // Based on the reference code
             'queue_number' => $queueNumber,
             'total_price' => $totalPrice,
             'items' => $orderMenuItems // Embedded documents paradigm

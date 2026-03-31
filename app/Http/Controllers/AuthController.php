@@ -71,6 +71,19 @@ class AuthController extends Controller
      */
     public function login()
     {
+        $validator = Validator::make(request()->all(), [
+            'username' => 'required|string',
+            'password' => 'required|string|min:6',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Validation error',
+                'data' => $validator->errors()
+            ], 422);
+        }
+
         $credentials = request(['username', 'password']);
 
         if (! $token = auth('api')->attempt($credentials)) {
