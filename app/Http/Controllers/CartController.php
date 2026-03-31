@@ -33,6 +33,13 @@ class CartController extends Controller
         $menuItemId = $request->input('menuItemId');
         $quantity = $request->input('quantity');
 
+        if (! $this->isValidMongoId($menuItemId)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Invalid menu item id format'
+            ], 422);
+        }
+
         $menuItem = MenuItem::find($menuItemId);
         if (!$menuItem) {
             return response()->json(['status' => 'error', 'message' => 'Menu item not found'], 400);
@@ -113,6 +120,13 @@ class CartController extends Controller
 
         $userId = $request->user()->_id;
         $menuItemId = $request->input('menuItemId');
+
+        if (! $this->isValidMongoId($menuItemId)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Invalid menu item id format'
+            ], 422);
+        }
 
         $existing = CartItem::where('customer_id', $userId)
             ->where('menu_item_id', $menuItemId)
@@ -222,5 +236,10 @@ class CartController extends Controller
                 'totalPrice' => $order->total_price,
             ]
         ]);
+    }
+
+    private function isValidMongoId(string $id): bool
+    {
+        return preg_match('/^[a-f0-9]{24}$/i', $id) === 1;
     }
 }
