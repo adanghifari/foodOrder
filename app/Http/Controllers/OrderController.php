@@ -72,13 +72,14 @@ class OrderController extends Controller
             }
         }
 
-        $queueNumber = Order::count() + 1;
+        $lastOrder = Order::orderBy('queue_number', 'desc')->first();
+        $queueNumber = $lastOrder ? $lastOrder->queue_number + 1 : 1;
 
         $order = Order::create([
             'customer_id' => $userId,
             'table_number' => $tableNumber,
             'status' => 'CONFIRMED',
-            'payment_status' => 'PAID',
+            'payment_status' => 'PENDING',
             'queue_number' => $queueNumber,
             'total_price' => $totalPrice,
             'items' => $orderMenuItems
