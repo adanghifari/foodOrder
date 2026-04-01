@@ -3,10 +3,13 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-use App\Http\Controllers\AuthController;
-use App\Http\Controllers\CartController;
-use App\Http\Controllers\MenuController;
-use App\Http\Controllers\OrderController;
+use App\Http\Controllers\Admin\MenuController as AdminMenuController;
+use App\Http\Controllers\Admin\OrderController as AdminOrderController;
+use App\Http\Controllers\Mobile\Customer\AuthController;
+use App\Http\Controllers\Mobile\Customer\CartController as CustomerCartController;
+use App\Http\Controllers\Mobile\Customer\MenuController as MobileCustomerMenuController;
+use App\Http\Controllers\Mobile\Customer\OrderController as CustomerOrderController;
+use App\Http\Controllers\Web\Customer\TableController as WebCustomerTableController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\OverviewController;
 
@@ -19,39 +22,45 @@ Route::group(['prefix' => 'v1/auth'], function ($router) {
 });
 
 Route::group(['prefix' => 'v1/menus'], function ($router) {
-    Route::get('/', [MenuController::class, 'list']);
-    Route::get('/search', [MenuController::class, 'search']);
-    Route::get('/filter', [MenuController::class, 'filter']);
+    Route::get('/', [MobileCustomerMenuController::class, 'list']);
+    Route::get('/search', [MobileCustomerMenuController::class, 'search']);
+    Route::get('/filter', [MobileCustomerMenuController::class, 'filter']);
     
     Route::middleware(['auth:api', 'role:ADMIN'])->group(function () {
-        Route::post('/', [MenuController::class, 'create']);
-        Route::put('/{id}', [MenuController::class, 'update']);
-        Route::delete('/{id}', [MenuController::class, 'remove']);
-        Route::post('/upload-image/{id}', [MenuController::class, 'uploadImage']);
-        Route::delete('/{id}/image', [MenuController::class, 'deleteImage']);
-        Route::get('/count', [MenuController::class, 'count']);
+        Route::post('/', [AdminMenuController::class, 'create']);
+        Route::put('/{id}', [AdminMenuController::class, 'update']);
+        Route::delete('/{id}', [AdminMenuController::class, 'remove']);
+        Route::post('/upload-image/{id}', [AdminMenuController::class, 'uploadImage']);
+        Route::delete('/{id}/image', [AdminMenuController::class, 'deleteImage']);
+        Route::get('/count', [AdminMenuController::class, 'count']);
     });
 });
 
 Route::group(['prefix' => 'v1/cart', 'middleware' => ['auth:api', 'role:CUSTOMER']], function () {
-    Route::post('/', [CartController::class, 'add']);
-    Route::get('/', [CartController::class, 'get']);
-    Route::delete('/', [CartController::class, 'remove']);
-    Route::post('/checkout', [CartController::class, 'checkout']);
+    Route::post('/', [CustomerCartController::class, 'add']);
+    Route::get('/', [CustomerCartController::class, 'get']);
+    Route::delete('/', [CustomerCartController::class, 'remove']);
+    Route::post('/checkout', [CustomerCartController::class, 'checkout'])->middleware('web');
 });
+
+Route::post('v1/table-session/clear', [WebCustomerTableController::class, 'clearTableSession'])
+    ->middleware('web');
+
+Route::get('v1/tables/{tableId}/availability', [WebCustomerTableController::class, 'checkTableAvailability'])
+    ->whereNumber('tableId');
 
 Route::group(['prefix' => 'v1/orders', 'middleware' => 'auth:api'], function () {
     // Admin routes
     Route::group(['middleware' => 'role:ADMIN'], function () {
-        Route::get('/', [OrderController::class, 'list']);
-        Route::patch('/{id}/status', [OrderController::class, 'updateStatus']);
-        Route::get('/count', [OrderController::class, 'count']);
+        Route::get('/', [AdminOrderController::class, 'list']);
+        Route::patch('/{id}/status', [AdminOrderController::class, 'updateStatus']);
+        Route::get('/count', [AdminOrderController::class, 'count']);
     });
     
     // Customer routes (Some might overlap, specifically creating directly)
     Route::group(['middleware' => 'role:CUSTOMER'], function () {
-        Route::post('/', [OrderController::class, 'create']);
-        Route::get('/me', [OrderController::class, 'myOrders']);
+        Route::post('/', [CustomerOrderController::class, 'create']);
+        Route::get('/me', [CustomerOrderController::class, 'myOrders']);
     });
 });
 
