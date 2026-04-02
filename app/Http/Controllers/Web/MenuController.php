@@ -4,30 +4,52 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Domains\Menu\Services\MenuService;
+use App\Domains\Table\Services\TableService;
+use Illuminate\Http\Request;
 
 class MenuController extends Controller
 {
-	public function __construct(private readonly MenuService $menuService)
+	public function __construct(
+		private readonly MenuService $menuService,
+		private readonly TableService $tableService
+	)
 	{
 	}
 
-	public function hidangan()
+	public function semua(Request $request)
 	{
-		return $this->renderCategory('Hidangan');
+		$this->tableService->clearTableSessionIfInactive($request);
+
+		$menus = $this->menuService->listAll();
+		return view('menu', ['menus' => $menus]);
 	}
 
-	public function cemilan()
+	public function makananUtama(Request $request)
 	{
-		return $this->renderCategory('Cemilan');
+		return $this->renderCategory($request, 'makanan utama');
 	}
 
-	public function minuman()
+	public function hidangan(Request $request)
 	{
-		return $this->renderCategory('Minuman');
+		return $this->makananUtama($request);
 	}
 
-	private function renderCategory(string $category)
+	public function cemilan(Request $request)
 	{
+		return $this->renderCategory($request, 'cemilan');
+	}
+
+	public function minuman(Request $request)
+	{
+		return $this->renderCategory($request, 'minuman');
+	}
+
+	private function renderCategory(Request $request, string $category)
+	{
+		// If all orders for the current session table are no longer active
+		// (e.g. moved to DELIVERED), clear stale table context from session.
+		$this->tableService->clearTableSessionIfInactive($request);
+
 		$menus = $this->menuService->filterByCategory($category);
 		return view('menu', ['menus' => $menus]);
 	}
