@@ -1,9 +1,9 @@
 <?php
 
-namespace App\Http\Controllers\Web\Customer;
+namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
-use App\Services\TableService;
+use App\Domains\Table\Services\TableService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 

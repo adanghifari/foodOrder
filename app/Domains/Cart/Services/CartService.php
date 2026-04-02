@@ -1,9 +1,11 @@
 <?php
 
-namespace App\Services;
+namespace App\Domains\Cart\Services;
 
 use App\Models\CartItem;
 use App\Models\MenuItem;
+use App\Domains\Order\Services\OrderService;
+use App\Domains\Table\Services\TableService;
 
 class CartService
 {

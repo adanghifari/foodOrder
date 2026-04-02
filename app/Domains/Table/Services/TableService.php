@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Domains\Table\Services;
 
 use App\Models\Order;
 use App\Support\TableGuard;
