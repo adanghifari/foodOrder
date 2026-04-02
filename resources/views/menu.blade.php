@@ -21,7 +21,8 @@
             <div class="flex gap-3 overflow-x-auto no-scrollbar pb-4">
                 @php
                     $tabs = [
-                        ['name' => 'Hidangan', 'url' => 'menu/hidangan'],
+                        ['name' => 'Semua', 'url' => 'menu'],
+                        ['name' => 'Makanan utama', 'url' => 'menu/makanan-utama'],
                         ['name' => 'Cemilan', 'url' => 'menu/cemilan'],
                         ['name' => 'Minuman', 'url' => 'menu/minuman'],
                     ];
@@ -30,7 +31,7 @@
                 @foreach($tabs as $tab)
                     <a href="/{{ $tab['url'] }}" 
                        class="whitespace-nowrap px-6 py-2.5 rounded-xl font-bold transition-all duration-300 shadow-sm border
-                       {{ request()->is($tab['url']) ? 'bg-[#C8641E] text-white border-[#C8641E]' : 'bg-white text-gray-500 border-gray-100' }}">
+                       {{ ($tab['url'] === 'menu' ? request()->is('menu') || request()->is('menu/semua') : request()->is($tab['url'])) ? 'bg-[#C8641E] text-white border-[#C8641E]' : 'bg-white text-gray-500 border-gray-100' }}">
                        {{ $tab['name'] }}
                     </a>
                 @endforeach
@@ -48,7 +49,13 @@
             @foreach($menus as $menu)
             <div class="flex bg-white rounded-[24px] p-3 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-50 items-center">
                 <div class="w-28 h-28 flex-shrink-0">
-                    <img src="{{ asset('images/' . $menu['image_url']) }}" alt="{{ $menu['name'] }}" class="w-full h-full object-cover rounded-[20px]">
+                    @php
+                        $rawImageUrl = $menu['image_url'] ?? '';
+                        $imageSrc = str_starts_with($rawImageUrl, 'http://') || str_starts_with($rawImageUrl, 'https://') || str_starts_with($rawImageUrl, '/')
+                            ? $rawImageUrl
+                            : asset('images/' . $rawImageUrl);
+                    @endphp
+                    <img src="{{ $imageSrc }}" alt="{{ $menu['name'] }}" class="w-full h-full object-cover rounded-[20px]">
                 </div>
 
                 <div class="ml-4 flex-grow py-1">
@@ -56,22 +63,31 @@
                     <p class="text-[11px] text-gray-400 leading-snug mt-1 mb-2 line-clamp-2">{{ $menu['description'] }}</p>
                     <div class="flex justify-between items-center">
                         <span class="font-black text-gray-800 text-base">Rp {{ number_format($menu['price'], 0, ',', '.') }}</span>
-                        
-                        <button onclick="tambahKeKeranjang(this)"
-                                data-nama="{{ $menu['name'] }}"
-                                data-harga="{{ $menu['price'] }}"
-                                data-img="{{ $menu['image_url'] }}"
-                                data-desc="{{ $menu['description'] }}"
-                                class="bg-[#C8641E] text-white p-2.5 rounded-xl shadow-lg shadow-[#C8641E]/20 hover:scale-105 transition active:scale-95">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-                        </button>
+
+                        <div class="flex items-center gap-2" data-menu-name="{{ $menu['name'] }}">
+                            <button onclick="kurangiDariKeranjang(this)"
+                                    data-nama="{{ $menu['name'] }}"
+                                    class="minus-btn hidden bg-[#C8641E]/20 text-[#C8641E] w-9 h-9 rounded-xl flex items-center justify-center font-bold transition active:scale-95">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M20 12H4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                            </button>
+                            <span class="qty-label hidden min-w-[20px] text-center font-bold text-gray-700">0</span>
+
+                            <button onclick="tambahKeKeranjang(this)"
+                                    data-nama="{{ $menu['name'] }}"
+                                    data-harga="{{ $menu['price'] }}"
+                                    data-img="{{ $menu['image_url'] }}"
+                                    data-desc="{{ $menu['description'] }}"
+                                    class="bg-[#C8641E] text-white p-2.5 rounded-xl shadow-lg shadow-[#C8641E]/20 hover:scale-105 transition active:scale-95">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
             @endforeach
         </div>
 
-        <div class="absolute bottom-8 left-0 right-0 px-6 z-50">
+        <div id="cart-cta" class="absolute bottom-8 left-0 right-0 px-6 z-50 hidden">
             <a href="/keranjang" class="flex items-center justify-between bg-[#C8641E] text-white px-6 py-4 rounded-[22px] shadow-[0_20px_50px_rgba(200,100,30,0.3)] hover:bg-[#A85318] transition-all active:scale-[0.98]">
                 <div class="flex items-center gap-3">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -90,9 +106,38 @@
     <script>
         let keranjang = JSON.parse(localStorage.getItem('kedaiKlikCart')) || [];
 
+        function getQtyByName(nama) {
+            const item = keranjang.find((cartItem) => cartItem.nama === nama);
+            return item ? item.qty : 0;
+        }
+
+        function syncItemQtyControls() {
+            document.querySelectorAll('[data-menu-name]').forEach((control) => {
+                const nama = control.dataset.menuName;
+                const qty = getQtyByName(nama);
+                const minusButton = control.querySelector('.minus-btn');
+                const qtyLabel = control.querySelector('.qty-label');
+
+                if (!minusButton || !qtyLabel) {
+                    return;
+                }
+
+                qtyLabel.textContent = qty;
+
+                const hasItem = qty > 0;
+                minusButton.classList.toggle('hidden', !hasItem);
+                qtyLabel.classList.toggle('hidden', !hasItem);
+            });
+        }
+
         function updateBadge() {
             const totalItem = keranjang.reduce((sum, item) => sum + item.qty, 0);
             document.getElementById('cart-badge').innerText = totalItem + " Item";
+
+            const cartCta = document.getElementById('cart-cta');
+            if (cartCta) {
+                cartCta.classList.toggle('hidden', totalItem === 0);
+            }
         }
         
         function tambahKeKeranjang(button) {
@@ -100,8 +145,7 @@
             const harga = button.dataset.harga;
             const imageUrl = button.dataset.img;
             const description = button.dataset.desc;
-            
-            let keranjang = JSON.parse(localStorage.getItem('kedaiKlikCart')) || [];
+
             const index = keranjang.findIndex(item => item.nama === nama);
 
             if (index !== -1) {
@@ -118,9 +162,32 @@
 
             localStorage.setItem('kedaiKlikCart', JSON.stringify(keranjang));
             updateBadge();
+            syncItemQtyControls();
         }
 
-        document.addEventListener('DOMContentLoaded', updateBadge);
+        function kurangiDariKeranjang(button) {
+            const nama = button.dataset.nama;
+            const index = keranjang.findIndex(item => item.nama === nama);
+
+            if (index === -1) {
+                return;
+            }
+
+            keranjang[index].qty -= 1;
+
+            if (keranjang[index].qty <= 0) {
+                keranjang.splice(index, 1);
+            }
+
+            localStorage.setItem('kedaiKlikCart', JSON.stringify(keranjang));
+            updateBadge();
+            syncItemQtyControls();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            updateBadge();
+            syncItemQtyControls();
+        });
     </script>
 </body>
 </html>

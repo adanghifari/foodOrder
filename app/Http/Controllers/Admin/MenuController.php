@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Validator;
 
 class MenuController extends Controller
 {
+	private array $allowedCategories = ['makanan utama', 'cemilan', 'minuman'];
+
 	public function __construct(private readonly MenuService $menuService)
 	{
 	}
@@ -19,7 +21,7 @@ class MenuController extends Controller
 			'name' => 'required|string|max:255',
 			'description' => 'nullable|string',
 			'price' => 'required|numeric|min:0',
-			'category' => 'required|string|max:255',
+			'category' => 'required|string|in:' . implode(',', $this->allowedCategories),
 			'image_url' => 'nullable|string|max:500',
 		]);
 
@@ -56,7 +58,7 @@ class MenuController extends Controller
 			'name' => 'sometimes|required|string|max:255',
 			'description' => 'sometimes|nullable|string',
 			'price' => 'sometimes|required|numeric|min:0',
-			'category' => 'sometimes|required|string|max:255',
+			'category' => 'sometimes|required|string|in:' . implode(',', $this->allowedCategories),
 			'image_url' => 'sometimes|nullable|string|max:500',
 		]);
 

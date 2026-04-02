@@ -60,14 +60,19 @@ class MenuController extends Controller
 
 	public function filter(Request $request)
 	{
-		$category = $request->query('category');
+		$validator = Validator::make($request->query(), [
+			'category' => 'required|string|in:makanan utama,cemilan,minuman',
+		]);
 
-		if (!$category || trim($category) === '') {
+		if ($validator->fails()) {
 			return response()->json([
 				'status' => 'error',
-				'message' => 'Category query cannot be empty'
+				'message' => 'Validation error',
+				'data' => $validator->errors()
 			], 422);
 		}
+
+		$category = (string) $request->query('category');
 
 		$items = $this->menuService->filterByCategory($category);
 

@@ -61,6 +61,11 @@ class MenuService
         return MenuItem::orderBy('_id', 'asc')->paginate($perPage);
     }
 
+    public function listAll()
+    {
+        return MenuItem::orderBy('_id', 'asc')->get();
+    }
+
     public function searchByName(string $name)
     {
         return MenuItem::where('name', 'like', "%{$name}%")

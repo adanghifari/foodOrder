@@ -35,6 +35,6 @@ class QrScanController extends Controller
 
 		$this->tableService->storeTableSession($request, $tableId);
 
-		return redirect('/menu/hidangan');
+		return redirect('/menu');
 	}
 }

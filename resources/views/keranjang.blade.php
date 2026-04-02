@@ -11,7 +11,7 @@
     <div class="w-full max-w-md bg-white min-h-screen shadow-2xl relative flex flex-col p-6">
         
         <div class="flex items-center mb-8">
-            <a href="/menu/hidangan" class="p-2 -ml-2">
+            <a href="/menu" class="p-2 -ml-2">
                 <svg class="w-6 h-6 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path>
                 </svg>
@@ -24,12 +24,18 @@
 
         <div class="space-y-4 mb-8">
             <div>
+                <label class="block text-gray-700 font-bold mb-2">Nomor Meja</label>
+                <input id="table-number-input" type="text" value="{{ $tableNumber ?? '-' }}" readonly class="w-full bg-gray-100 border border-gray-200 rounded-xl py-3 px-4 text-gray-600 outline-none cursor-not-allowed">
+            </div>
+            <div>
                 <label class="block text-gray-700 font-bold mb-2">Email</label>
-                <input type="email" placeholder="Email" class="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 outline-none focus:ring-2 focus:ring-[#C8641E]/30 transition">
+                <input id="email-input" type="email" placeholder="Email" class="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 outline-none focus:ring-2 focus:ring-[#C8641E]/30 transition">
+                <p id="email-error" class="text-red-500 text-xs mt-1 hidden">Email wajib diisi dengan format yang valid.</p>
             </div>
             <div>
                 <label class="block text-gray-700 font-bold mb-2">Nama Pemesan</label>
-                <input type="text" placeholder="Nama Pemesan" class="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 outline-none focus:ring-2 focus:ring-[#C8641E]/30 transition">
+                <input id="customer-name-input" type="text" placeholder="Nama Pemesan" class="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 outline-none focus:ring-2 focus:ring-[#C8641E]/30 transition">
+                <p id="customer-name-error" class="text-red-500 text-xs mt-1 hidden">Nama pemesan wajib diisi.</p>
             </div>
         </div>
 
@@ -52,7 +58,7 @@
         </div>
 
         <div class="flex gap-4 mt-auto pb-4">
-            <a href="/menu/hidangan" class="flex-1 text-center py-4 rounded-xl border-2 border-[#C8641E] text-[#C8641E] font-bold hover:bg-orange-50 transition">
+            <a href="/menu" class="flex-1 text-center py-4 rounded-xl border-2 border-[#C8641E] text-[#C8641E] font-bold hover:bg-orange-50 transition">
                 Tambah Item
             </a>
             <button onclick="prosesBayar()" class="flex-1 py-4 rounded-xl bg-[#C19A6B] text-white font-bold shadow-lg hover:bg-[#b0895a] transition">
@@ -64,24 +70,33 @@
 
     <script>
         // Fungsi untuk merender item dari localStorage
+       function resolveCartImageSrc(item) {
+    const raw = item.img || item.image_url || '';
+
+    if (!raw) {
+        return '/images/esteh.jpg';
+    }
+
+    if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('/')) {
+        return raw;
+    }
+
+    return `/images/${encodeURIComponent(raw)}`;
+}
+
        function renderCart() {
     const container = document.getElementById('cart-items-container');
     const cart = JSON.parse(localStorage.getItem('kedaiKlikCart')) || [];
     
     if (cart.length === 0) {
-        container.innerHTML = `
-            <div class="text-center py-10">
-                <p class="text-gray-400">Keranjang kamu kosong nih...</p>
-            </div>
-        `;
-        updateTotals(0);
+        window.location.href = '/menu';
         return;
     }
 
     container.innerHTML = cart.map((item, index) => `
         <div class="flex items-start gap-4 animate-fadeIn">
             <div class="w-24 h-20 flex-shrink-0">
-                <img src="/images/${encodeURIComponent(item.image_url)}" class="w-full h-full object-cover rounded-xl shadow-sm" onerror="this.src='/images/esteh.jpg'">
+                <img src="${resolveCartImageSrc(item)}" class="w-full h-full object-cover rounded-xl shadow-sm" onerror="this.src='/images/esteh.jpg'">
             </div>
             <div class="flex-grow">
                 <h3 class="font-bold text-gray-800">${item.nama}</h3>
@@ -130,15 +145,82 @@
             document.getElementById('total-payment').innerText = "Rp " + total.toLocaleString('id-ID');
         }
 
+        function validateCustomerInfo() {
+            const emailInput = document.getElementById('email-input');
+            const nameInput = document.getElementById('customer-name-input');
+            const emailError = document.getElementById('email-error');
+            const nameError = document.getElementById('customer-name-error');
+
+            const email = (emailInput?.value || '').trim();
+            const customerName = (nameInput?.value || '').trim();
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+            const isEmailValid = emailRegex.test(email);
+            const isNameValid = customerName.length > 0;
+
+            emailError?.classList.toggle('hidden', isEmailValid);
+            nameError?.classList.toggle('hidden', isNameValid);
+
+            if (emailInput) {
+                emailInput.classList.toggle('border-red-400', !isEmailValid);
+            }
+
+            if (nameInput) {
+                nameInput.classList.toggle('border-red-400', !isNameValid);
+            }
+
+            return {
+                valid: isEmailValid && isNameValid,
+                email,
+                customerName,
+            };
+        }
+
         function prosesBayar() {
             const cart = JSON.parse(localStorage.getItem('kedaiKlikCart')) || [];
+            const tableNumber = (document.getElementById('table-number-input')?.value || '').trim();
+
             if (cart.length === 0) {
                 alert("Pilih menu dulu ya!");
                 return;
             }
+
+            if (!tableNumber || tableNumber === '-') {
+                alert("Nomor meja belum tersedia. Silakan scan QR meja terlebih dahulu.");
+                window.location.href = '/menu';
+                return;
+            }
+
+            const customerInfo = validateCustomerInfo();
+            if (!customerInfo.valid) {
+                alert("Lengkapi nama dan email yang valid dulu ya.");
+                return;
+            }
+
+            const subtotal = cart.reduce((sum, item) => sum + ((item.harga || 0) * item.qty), 0);
+            const serviceFee = subtotal > 0 ? 5000 : 0;
+            const totalPayment = subtotal + serviceFee;
+
+            // Temporary payload for backoffice integration until checkout API is wired from web flow.
+            localStorage.setItem('kedaiKlikCustomerInfo', JSON.stringify({
+                name: customerInfo.customerName,
+                email: customerInfo.email,
+            }));
+
+            localStorage.setItem('kedaiKlikLastCheckout', JSON.stringify({
+                tableNumber,
+                customerName: customerInfo.customerName,
+                customerEmail: customerInfo.email,
+                items: cart,
+                subtotal,
+                serviceFee,
+                totalPayment,
+                createdAt: new Date().toISOString(),
+            }));
+
             alert("Terima kasih! Pesanan kamu sedang diproses.");
             localStorage.removeItem('kedaiKlikCart'); // Kosongkan keranjang setelah bayar
-            window.location.href = '/menu/hidangan';
+            window.location.href = '/menu';
         }
 
         // Jalankan saat halaman dimuat
