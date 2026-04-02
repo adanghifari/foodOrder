@@ -1,9 +1,9 @@
 <?php
 
-namespace App\Http\Controllers\Web\Customer;
+namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
-use App\Services\MenuService;
+use App\Domains\Menu\Services\MenuService;
 
 class MenuController extends Controller
 {

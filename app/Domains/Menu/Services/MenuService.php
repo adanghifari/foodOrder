@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Domains\Menu\Services;
 
 use App\Models\MenuItem;
 use Illuminate\Http\UploadedFile;

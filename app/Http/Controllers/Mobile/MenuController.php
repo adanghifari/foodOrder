@@ -1,9 +1,9 @@
 <?php
 
-namespace App\Http\Controllers\Mobile\Customer;
+namespace App\Http\Controllers\Mobile;
 
 use App\Http\Controllers\Controller;
-use App\Services\MenuService;
+use App\Domains\Menu\Services\MenuService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 

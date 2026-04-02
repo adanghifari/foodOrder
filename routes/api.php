@@ -5,11 +5,11 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\Admin\MenuController as AdminMenuController;
 use App\Http\Controllers\Admin\OrderController as AdminOrderController;
-use App\Http\Controllers\Mobile\Customer\AuthController;
-use App\Http\Controllers\Mobile\Customer\CartController as CustomerCartController;
-use App\Http\Controllers\Mobile\Customer\MenuController as MobileCustomerMenuController;
-use App\Http\Controllers\Mobile\Customer\OrderController as CustomerOrderController;
-use App\Http\Controllers\Web\Customer\TableController as WebCustomerTableController;
+use App\Http\Controllers\Mobile\AuthController;
+use App\Http\Controllers\Mobile\CartController as CustomerCartController;
+use App\Http\Controllers\Mobile\MenuController as MobileCustomerMenuController;
+use App\Http\Controllers\Mobile\OrderController as CustomerOrderController;
+use App\Http\Controllers\Web\TableController as WebCustomerTableController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\OverviewController;
 

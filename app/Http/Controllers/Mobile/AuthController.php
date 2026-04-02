@@ -1,9 +1,9 @@
 <?php
 
-namespace App\Http\Controllers\Mobile\Customer;
+namespace App\Http\Controllers\Mobile;
 
 use App\Http\Controllers\Controller;
-use App\Services\AuthService;
+use App\Domains\Auth\Services\AuthService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 

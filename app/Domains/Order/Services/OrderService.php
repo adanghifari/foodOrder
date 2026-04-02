@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Domains\Order\Services;
 
 use App\Models\MenuItem;
 use App\Models\Order;
