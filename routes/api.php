@@ -3,13 +3,13 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-use App\Http\Controllers\Admin\MenuController as AdminMenuController;
-use App\Http\Controllers\Admin\OrderController as AdminOrderController;
-use App\Http\Controllers\Mobile\AuthController;
-use App\Http\Controllers\Mobile\CartController as CustomerCartController;
-use App\Http\Controllers\Mobile\MenuController as MobileCustomerMenuController;
-use App\Http\Controllers\Mobile\OrderController as CustomerOrderController;
-use App\Http\Controllers\Web\TableController as WebCustomerTableController;
+use App\Http\Controllers\Backoffice\Admin\MenuController as AdminMenuController;
+use App\Http\Controllers\Backoffice\Admin\OrderController as AdminOrderController;
+use App\Http\Controllers\Frontliner\Mobile\AuthController;
+use App\Http\Controllers\Frontliner\Mobile\CartController as CustomerCartController;
+use App\Http\Controllers\Frontliner\Mobile\MenuController as MobileCustomerMenuController;
+use App\Http\Controllers\Frontliner\Mobile\OrderController as CustomerOrderController;
+use App\Http\Controllers\Frontliner\Web\TableController as FrontlinerTableController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\OverviewController;
 
@@ -43,10 +43,10 @@ Route::group(['prefix' => 'v1/cart', 'middleware' => ['auth:api', 'role:CUSTOMER
     Route::post('/checkout', [CustomerCartController::class, 'checkout'])->middleware('web');
 });
 
-Route::post('v1/table-session/clear', [WebCustomerTableController::class, 'clearTableSession'])
+Route::post('v1/table-session/clear', [FrontlinerTableController::class, 'clearTableSession'])
     ->middleware('web');
 
-Route::get('v1/tables/{tableId}/availability', [WebCustomerTableController::class, 'checkTableAvailability'])
+Route::get('v1/tables/{tableId}/availability', [FrontlinerTableController::class, 'checkTableAvailability'])
     ->whereNumber('tableId');
 
 Route::group(['prefix' => 'v1/orders', 'middleware' => 'auth:api'], function () {
