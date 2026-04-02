@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Web;
+namespace App\Http\Controllers\Frontliner\Web;
 
 use App\Http\Controllers\Controller;
 use App\Domains\Table\Services\TableService;

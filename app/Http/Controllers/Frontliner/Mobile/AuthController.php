@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Mobile;
+namespace App\Http\Controllers\Frontliner\Mobile;
 
 use App\Http\Controllers\Controller;
 use App\Domains\Auth\Services\AuthService;
