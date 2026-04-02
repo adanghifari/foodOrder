@@ -21,7 +21,7 @@ class MenuController extends Controller
 		$this->tableService->clearTableSessionIfInactive($request);
 
 		$menus = $this->menuService->listAll();
-		return view('menu', ['menus' => $menus]);
+		return view('frontliner.menu', ['menus' => $menus]);
 	}
 
 	public function makananUtama(Request $request)
@@ -51,6 +51,6 @@ class MenuController extends Controller
 		$this->tableService->clearTableSessionIfInactive($request);
 
 		$menus = $this->menuService->filterByCategory($category);
-		return view('menu', ['menus' => $menus]);
+		return view('frontliner.menu', ['menus' => $menus]);
 	}
 }

@@ -14,7 +14,7 @@ Route::get('/menu/{tableId}', [\App\Http\Controllers\Web\QrScanController::class
     ->whereNumber('tableId');
 Route::get('/scan', [\App\Http\Controllers\Web\QrScanController::class, 'accessFromQueryParam']);
 Route::get('/keranjang', function (Request $request) {
-    return view('keranjang', [
+    return view('frontliner.keranjang', [
         'tableNumber' => $request->session()->get('table_id'),
     ]);
 });
