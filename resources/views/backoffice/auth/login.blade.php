@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Login Backoffice</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -161,11 +162,14 @@
                 loginSubmit.textContent = 'Memproses...';
 
                 try {
-                    const response = await fetch('/api/v1/auth/login', {
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+                    const response = await fetch('/backoffice/login', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'Accept': 'application/json'
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken
                         },
                         body: JSON.stringify({
                             username: usernameInput.value.trim(),
@@ -177,18 +181,10 @@
                         return {};
                     });
 
-                    if (!response.ok || !result?.data?.token) {
+                    if (!response.ok || result?.status !== 'success') {
                         const message = result?.message || 'Login gagal. Periksa username/password.';
                         throw new Error(message);
                     }
-
-                    const role = result?.data?.user?.role || '';
-                    if (role !== 'ADMIN') {
-                        throw new Error('Akun ini bukan akun admin backoffice.');
-                    }
-
-                    localStorage.setItem('backofficeToken', result.data.token);
-                    localStorage.setItem('backofficeUser', JSON.stringify(result.data.user || {}));
 
                     document.body.classList.add('nav-leave');
                     window.setTimeout(function () {

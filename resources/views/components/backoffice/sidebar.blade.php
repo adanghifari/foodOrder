@@ -20,7 +20,7 @@
             <span class="sidebar-label">Overview</span>
         </a>
 
-        <a href="/backoffice/daftar_menu" class="sidebar-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition {{ request()->is('backoffice/daftar_menu') || request()->is('backoffice/add_menu') ? 'bg-[#6A2B09] text-[#FCB861]' : 'text-[#6A2B09] hover:bg-white/45' }}">
+        <a href="/backoffice/daftar_menu" class="sidebar-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition {{ request()->is('backoffice/daftar_menu') || request()->is('backoffice/daftar_menu/*') || request()->is('backoffice/add_menu') ? 'bg-[#6A2B09] text-[#FCB861]' : 'text-[#6A2B09] hover:bg-white/45' }}">
             <svg xmlns="http://www.w3.org/2000/svg" class="sidebar-icon w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
             <span class="sidebar-label">Kelola Menu</span>
         </a>
@@ -30,12 +30,17 @@
             <span class="sidebar-label">Kelola Pesanan</span>
         </a>
 
-        <a href="/backoffice/dashboard#payment-panel" class="sidebar-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition text-[#6A2B09] hover:bg-white/45">
+        <a href="/backoffice/dashboard#table-panel" class="sidebar-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition text-[#6A2B09] hover:bg-white/45">
+            <svg xmlns="http://www.w3.org/2000/svg" class="sidebar-icon w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 4v16"/></svg>
+            <span class="sidebar-label">Kelola Meja</span>
+        </a>
+
+        <a href="/backoffice/pembayaran" class="sidebar-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition {{ request()->is('backoffice/pembayaran') ? 'bg-[#6A2B09] text-[#FCB861]' : 'text-[#6A2B09] hover:bg-white/45' }}">
             <svg xmlns="http://www.w3.org/2000/svg" class="sidebar-icon w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
             <span class="sidebar-label">Pembayaran</span>
         </a>
 
-        <a href="/backoffice/dashboard#user-panel" class="sidebar-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition text-[#6A2B09] hover:bg-white/45">
+        <a href="/backoffice/pengguna" class="sidebar-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition {{ request()->is('backoffice/pengguna') ? 'bg-[#6A2B09] text-[#FCB861]' : 'text-[#6A2B09] hover:bg-white/45' }}">
             <svg xmlns="http://www.w3.org/2000/svg" class="sidebar-icon w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>
             <span class="sidebar-label">Pengguna</span>
         </a>

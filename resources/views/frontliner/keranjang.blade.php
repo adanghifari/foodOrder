@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>KedaiKlik - Pesanan Saya</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -61,7 +62,7 @@
             <a href="/menu" class="flex-1 text-center py-4 rounded-xl border-2 border-[#C8641E] text-[#C8641E] font-bold hover:bg-orange-50 transition">
                 Tambah Item
             </a>
-            <button onclick="prosesBayar()" class="flex-1 py-4 rounded-xl bg-[#C19A6B] text-white font-bold shadow-lg hover:bg-[#b0895a] transition">
+            <button id="bayar-button" onclick="prosesBayar()" class="flex-1 py-4 rounded-xl bg-[#C19A6B] text-white font-bold shadow-lg hover:bg-[#b0895a] transition">
                 Bayar
             </button>
         </div>
@@ -176,9 +177,10 @@
             };
         }
 
-        function prosesBayar() {
+        async function prosesBayar() {
             const cart = JSON.parse(localStorage.getItem('kedaiKlikCart')) || [];
             const tableNumber = (document.getElementById('table-number-input')?.value || '').trim();
+            const payButton = document.getElementById('bayar-button');
 
             if (cart.length === 0) {
                 alert("Pilih menu dulu ya!");
@@ -194,6 +196,22 @@
             const customerInfo = validateCustomerInfo();
             if (!customerInfo.valid) {
                 alert("Lengkapi nama dan email yang valid dulu ya.");
+                return;
+            }
+
+            const condensedItems = cart.map(function (item) {
+                return {
+                    menuId: String(item.id || ''),
+                    qty: Number(item.qty || 0),
+                };
+            });
+
+            const invalidItem = condensedItems.find(function (item) {
+                return item.menuId === '' || item.qty <= 0;
+            });
+
+            if (invalidItem) {
+                alert("Ada item keranjang yang tidak valid. Silakan kembali ke menu dan pilih ulang item.");
                 return;
             }
 
@@ -218,9 +236,70 @@
                 createdAt: new Date().toISOString(),
             }));
 
-            alert("Terima kasih! Pesanan kamu sedang diproses.");
-            localStorage.removeItem('kedaiKlikCart'); // Kosongkan keranjang setelah bayar
-            window.location.href = '/menu';
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+            try {
+                if (payButton) {
+                    payButton.disabled = true;
+                    payButton.classList.add('opacity-70', 'cursor-not-allowed');
+                    payButton.textContent = 'Memproses...';
+                }
+
+                const response = await fetch('/frontliner/pembayaran/create', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                    },
+                    body: JSON.stringify({
+                        tableNumber: Number(tableNumber),
+                        customerName: customerInfo.customerName,
+                        customerEmail: customerInfo.email,
+                        items: condensedItems,
+                    }),
+                });
+
+                const result = await response.json();
+
+                if (!response.ok || result?.status !== 'success') {
+                    throw new Error(result?.message || 'Gagal membuat transaksi pembayaran.');
+                }
+
+                const redirectUrl = result?.data?.redirect_url || '';
+                const orderId = result?.data?.order_id || '';
+                const midtransOrderId = result?.data?.midtrans_order_id || '';
+
+                localStorage.setItem('kedaiKlikLastCheckout', JSON.stringify({
+                    tableNumber,
+                    customerName: customerInfo.customerName,
+                    customerEmail: customerInfo.email,
+                    items: cart,
+                    subtotal,
+                    serviceFee,
+                    totalPayment,
+                    orderId,
+                    midtransOrderId,
+                    createdAt: new Date().toISOString(),
+                }));
+
+                if (!redirectUrl) {
+                    throw new Error('URL pembayaran Midtrans tidak tersedia.');
+                }
+
+                // Payment has been successfully triggered on backend; reset cart for next order cycle.
+                localStorage.removeItem('kedaiKlikCart');
+
+                window.location.href = redirectUrl;
+            } catch (error) {
+                alert(error?.message || 'Terjadi kesalahan saat memproses pembayaran.');
+
+                if (payButton) {
+                    payButton.disabled = false;
+                    payButton.classList.remove('opacity-70', 'cursor-not-allowed');
+                    payButton.textContent = 'Bayar';
+                }
+            }
         }
 
         // Jalankan saat halaman dimuat
