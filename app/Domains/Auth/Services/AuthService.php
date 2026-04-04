@@ -9,8 +9,10 @@ class AuthService
 {
     public function registerCustomer(array $input): User
     {
+        $username = strtolower(trim((string) ($input['username'] ?? '')));
+
         return User::create([
-            'username' => $input['username'],
+            'username' => $username,
             'name' => $input['name'],
             'no_telp' => $input['no_telp'],
             'password' => Hash::make($input['password']),
@@ -20,6 +22,10 @@ class AuthService
 
     public function attemptLogin(array $credentials): ?string
     {
+        if (isset($credentials['username'])) {
+            $credentials['username'] = strtolower(trim((string) $credentials['username']));
+        }
+
         $token = auth('api')->attempt($credentials);
 
         return $token ?: null;

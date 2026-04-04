@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use MongoDB\Laravel\Eloquent\Model;
 
 class Order extends Model
@@ -12,11 +13,24 @@ class Order extends Model
 
     protected $fillable = [
         'customer_id',
+        'customer_name',
+        'customer_email',
         'table_number',
         'payment_status',
+        'midtrans_order_id',
+        'payment_type',
+        'payment_url',
+        'payment_payload',
+        'paid_at',
+        'delivered_at',
         'queue_number',
         'status',
         'total_price',
         'items', // Array of embedded items
     ];
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'customer_id', '_id');
+    }
 }

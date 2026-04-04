@@ -15,8 +15,12 @@ class AuthController extends Controller
 
 	public function register(Request $request)
 	{
+		$request->merge([
+			'username' => strtolower(trim((string) $request->input('username'))),
+		]);
+
 		$validator = Validator::make($request->all(), [
-			'username' => 'required|string|max:255|unique:users',
+			'username' => 'required|string|max:255|unique:users,username',
 			'name'     => 'required|string|max:255',
 			'no_telp'  => 'required|string|max:20',
 			'password' => 'required|string|min:6',
@@ -39,9 +43,13 @@ class AuthController extends Controller
 		], 201);
 	}
 
-	public function login()
+	public function login(Request $request)
 	{
-		$validator = Validator::make(request()->all(), [
+		$request->merge([
+			'username' => strtolower(trim((string) $request->input('username'))),
+		]);
+
+		$validator = Validator::make($request->all(), [
 			'username' => 'required|string',
 			'password' => 'required|string|min:6',
 		]);
@@ -54,7 +62,7 @@ class AuthController extends Controller
 			], 422);
 		}
 
-		$credentials = request(['username', 'password']);
+		$credentials = $request->only(['username', 'password']);
 		$token = $this->authService->attemptLogin($credentials);
 
 		if (! $token) {

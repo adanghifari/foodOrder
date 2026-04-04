@@ -1,12 +1,13 @@
 @props([
     'pageTitle' => 'Dashboard',
-    'pageSubtitle' => 'Manage today\'s restaurant operations',
+    'pageSubtitle' => null,
 ])
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $pageTitle }} - Backoffice KedaiKlik</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -120,7 +121,9 @@
             <header class="h-16 border-b border-slate-200 bg-white px-4 md:px-6 flex items-center gap-3 sticky top-0 z-30">
                 <div class="min-w-0">
                     <h1 class="title-font text-lg md:text-xl font-bold text-[var(--rich-black)] truncate">{{ $pageTitle }}</h1>
-                    <p class="text-xs md:text-sm text-slate-500 truncate">{{ $pageSubtitle }}</p>
+                    @if (!empty($pageSubtitle))
+                        <p class="text-xs md:text-sm text-slate-500 truncate">{{ $pageSubtitle }}</p>
+                    @endif
                 </div>
             </header>
 
@@ -137,6 +140,7 @@
         const profileToggle = document.getElementById('bo-profile-toggle');
         const profileMenu = document.getElementById('bo-profile-menu');
         const logoutButton = document.getElementById('bo-logout-btn');
+        const sidebarStateKey = 'boSidebarCollapsed';
 
         function isDesktop() {
             return window.matchMedia('(min-width: 1024px)').matches;
@@ -170,10 +174,33 @@
             }
         }
 
+        function persistSidebarState() {
+            if (!isDesktop()) {
+                return;
+            }
+
+            const isCollapsed = document.body.classList.contains('sidebar-collapsed');
+            localStorage.setItem(sidebarStateKey, isCollapsed ? '1' : '0');
+        }
+
+        function hydrateSidebarState() {
+            if (!isDesktop()) {
+                return;
+            }
+
+            const savedState = localStorage.getItem(sidebarStateKey);
+            if (savedState === '1') {
+                document.body.classList.add('sidebar-collapsed');
+            } else {
+                document.body.classList.remove('sidebar-collapsed');
+            }
+        }
+
         if (sidebarToggle) {
             sidebarToggle.addEventListener('click', function () {
                 if (isDesktop()) {
                     document.body.classList.toggle('sidebar-collapsed');
+                    persistSidebarState();
                 } else {
                     if (document.body.classList.contains('sidebar-mobile-open')) {
                         closeMobileSidebar();
@@ -194,6 +221,7 @@
                     if (isDesktop() && document.body.classList.contains('sidebar-collapsed')) {
                         event.preventDefault();
                         document.body.classList.remove('sidebar-collapsed');
+                        persistSidebarState();
                         updateSidebarToggleIcon();
                     }
                 });
@@ -203,6 +231,7 @@
         window.addEventListener('resize', function () {
             if (isDesktop()) {
                 closeMobileSidebar();
+                hydrateSidebarState();
             }
             updateSidebarToggleIcon();
         });
@@ -229,6 +258,7 @@
                 if (isDesktop() && document.body.classList.contains('sidebar-collapsed')) {
                     document.body.classList.remove('sidebar-collapsed');
                     profileMenu.classList.add('hidden');
+                    persistSidebarState();
                     updateSidebarToggleIcon();
                     return;
                 }
@@ -239,28 +269,25 @@
 
         if (logoutButton) {
             logoutButton.addEventListener('click', async function () {
-                const token = localStorage.getItem('backofficeToken');
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
                 try {
-                    if (token) {
-                        await fetch('/api/v1/auth/logout', {
-                            method: 'POST',
-                            headers: {
-                                'Accept': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            }
-                        });
-                    }
+                    await fetch('/backoffice/logout', {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken
+                        }
+                    });
                 } catch (error) {
                     // Ignore logout API errors and continue local cleanup.
                 } finally {
-                    localStorage.removeItem('backofficeToken');
-                    localStorage.removeItem('backofficeUser');
                     window.location.href = '/backoffice/login';
                 }
             });
         }
 
+        hydrateSidebarState();
         updateSidebarToggleIcon();
     </script>
 </body>

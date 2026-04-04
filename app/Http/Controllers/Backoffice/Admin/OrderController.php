@@ -15,6 +15,50 @@ class OrderController extends Controller
 	{
 	}
 
+	public function indexPage()
+	{
+		$orders = collect($this->orderService->adminList());
+		$detailOrderId = request()->query('detail');
+		$selectedOrder = null;
+
+		if (!empty($detailOrderId)) {
+			$selectedOrder = $orders->firstWhere('orderId', (string) $detailOrderId);
+		}
+
+		$summary = [
+			'total' => $orders->count(),
+			'waiting' => $orders->whereIn('status', ['CONFIRMED', 'IN_QUEUE'])->count(),
+			'processing' => $orders->where('status', 'IN_PROGRESS')->count(),
+			'delivered' => $orders->where('status', 'DELIVERED')->count(),
+		];
+
+		return view('backoffice.order.index', [
+			'orders' => $orders,
+			'summary' => $summary,
+			'selectedOrder' => $selectedOrder,
+			'statusOptions' => $this->allowedStatuses,
+		]);
+	}
+
+	public function updateStatusPage(Request $request, $id)
+	{
+		$validator = Validator::make($request->all(), [
+			'status' => 'required|string|in:' . implode(',', $this->allowedStatuses),
+		]);
+
+		if ($validator->fails()) {
+			return redirect()->back()->withErrors($validator)->withInput();
+		}
+
+		$updated = $this->orderService->updateStatus((string) $id, (string) $request->input('status'));
+
+		if (!$updated) {
+			return redirect()->back()->with('error', 'Order tidak ditemukan.');
+		}
+
+		return redirect()->back()->with('success', 'Status order berhasil diperbarui.');
+	}
+
 	public function list()
 	{
 		$data = $this->orderService->adminList();

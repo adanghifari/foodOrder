@@ -16,7 +16,15 @@
     <div class="w-full max-w-md bg-white min-h-screen shadow-2xl relative flex flex-col">
         
         <div class="p-6 pb-0">
-            <h1 class="text-3xl font-extrabold text-gray-800 mb-6">Menu</h1>
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-3xl font-extrabold text-gray-800">Menu</h1>
+                <a href="/frontliner/pembayaran/struk" class="inline-flex items-center gap-2 rounded-xl border border-[#C8641E] text-[#C8641E] bg-white px-3 py-2 text-sm font-bold hover:bg-orange-50 transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17h6M9 13h6m-9 8h12a2 2 0 002-2V5a2 2 0 00-2-2H6a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                    </svg>
+                    <span>Lihat Struk</span>
+                </a>
+            </div>
 
             <div class="flex gap-3 overflow-x-auto no-scrollbar pb-4">
                 @php
@@ -73,6 +81,7 @@
                             <span class="qty-label hidden min-w-[20px] text-center font-bold text-gray-700">0</span>
 
                             <button onclick="tambahKeKeranjang(this)"
+                                    data-id="{{ (string) $menu->_id }}"
                                     data-nama="{{ $menu['name'] }}"
                                     data-harga="{{ $menu['price'] }}"
                                     data-img="{{ $menu['image_url'] }}"
@@ -87,13 +96,16 @@
             @endforeach
         </div>
 
-        <div id="cart-cta" class="absolute bottom-8 left-0 right-0 px-6 z-50 hidden">
+        <div id="cart-cta" class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[calc(28rem-2rem)] z-50 hidden">
             <a href="/keranjang" class="flex items-center justify-between bg-[#C8641E] text-white px-6 py-4 rounded-[22px] shadow-[0_20px_50px_rgba(200,100,30,0.3)] hover:bg-[#A85318] transition-all active:scale-[0.98]">
                 <div class="flex items-center gap-3">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path>
                     </svg>
-                    <span class="font-bold text-lg">Ke Keranjang</span>
+                    <div>
+                        <span class="block font-bold text-lg leading-tight">Ke Keranjang</span>
+                        <span id="cart-total" class="block text-xs font-semibold text-orange-100">Rp 0</span>
+                    </div>
                 </div>
                 <span id="cart-badge" class="bg-white/20 backdrop-blur-md text-white px-4 py-1 rounded-full font-bold text-sm border border-white/30">
                     0 Item
@@ -132,7 +144,9 @@
 
         function updateBadge() {
             const totalItem = keranjang.reduce((sum, item) => sum + item.qty, 0);
+            const totalPrice = keranjang.reduce((sum, item) => sum + ((Number(item.harga) || 0) * (Number(item.qty) || 0)), 0);
             document.getElementById('cart-badge').innerText = totalItem + " Item";
+            document.getElementById('cart-total').innerText = "Rp " + totalPrice.toLocaleString('id-ID');
 
             const cartCta = document.getElementById('cart-cta');
             if (cartCta) {
@@ -141,6 +155,7 @@
         }
         
         function tambahKeKeranjang(button) {
+            const id = button.dataset.id;
             const nama = button.dataset.nama;
             const harga = button.dataset.harga;
             const imageUrl = button.dataset.img;
@@ -152,6 +167,7 @@
                 keranjang[index].qty += 1;
             } else {
                 keranjang.push({
+                    id: id,
                     nama: nama,
                     harga: harga,
                     img: imageUrl,

@@ -10,10 +10,15 @@ class MenuItem extends Model
 
     protected $primaryKey = '_id';
 
+    protected $attributes = [
+        'stock' => 0,
+    ];
+
     protected $fillable = [
         'name',
         'description',
         'price',
+        'stock',
         'category',
         'image_url',
     ];

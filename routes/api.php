@@ -5,13 +5,14 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\Backoffice\Admin\MenuController as AdminMenuController;
 use App\Http\Controllers\Backoffice\Admin\OrderController as AdminOrderController;
+use App\Http\Controllers\Backoffice\Admin\OverviewController as AdminOverviewController;
 use App\Http\Controllers\Frontliner\Mobile\AuthController;
 use App\Http\Controllers\Frontliner\Mobile\CartController as CustomerCartController;
 use App\Http\Controllers\Frontliner\Mobile\MenuController as MobileCustomerMenuController;
 use App\Http\Controllers\Frontliner\Mobile\OrderController as CustomerOrderController;
+use App\Http\Controllers\Frontliner\Mobile\PaymentController as MobilePaymentController;
 use App\Http\Controllers\Frontliner\Web\TableController as FrontlinerTableController;
-use App\Http\Controllers\PaymentController;
-use App\Http\Controllers\OverviewController;
+use App\Http\Controllers\Integrations\MidtransWebhookController;
 
 Route::group(['prefix' => 'v1/auth'], function ($router) {
     Route::post('register', [AuthController::class, 'register']);
@@ -65,9 +66,12 @@ Route::group(['prefix' => 'v1/orders', 'middleware' => 'auth:api'], function () 
 });
 
 Route::group(['prefix' => 'v1/payments'], function () {
-    Route::get('/', [PaymentController::class, 'list']);
+    Route::get('/', [MobilePaymentController::class, 'list'])->middleware(['auth:api', 'role:ADMIN']);
+    Route::post('/create', [MobilePaymentController::class, 'create'])->middleware(['auth:api', 'throttle:30,1']);
+    Route::get('/webhook', [MidtransWebhookController::class, 'landing'])->middleware('throttle:20,1');
+    Route::post('/webhook', [MidtransWebhookController::class, 'handle'])->middleware('throttle:120,1');
 });
 
-Route::group(['prefix' => 'v1/overview'], function () {
-    Route::get('/', [OverviewController::class, 'get']);
+Route::group(['prefix' => 'v1/overview', 'middleware' => ['auth:api', 'role:ADMIN']], function () {
+    Route::get('/', [AdminOverviewController::class, 'get']);
 });

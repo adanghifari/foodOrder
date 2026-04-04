@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Backoffice\Admin;
 use App\Http\Controllers\Controller;
 use App\Domains\Menu\Services\MenuService;
 use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Validator;
 
 class MenuController extends Controller
@@ -15,12 +16,138 @@ class MenuController extends Controller
 	{
 	}
 
+	public function indexPage(Request $request)
+	{
+		$menus = $this->menuService->listAll()->map(function ($item) {
+			$item->stock = (int) ($item->stock ?? 0);
+			return $item;
+		});
+
+		$selectedMenu = null;
+		$selectedEditMenu = null;
+		$showCreateModal = $request->query('create') === '1';
+		$detailId = (string) $request->query('detail', '');
+		$editId = (string) $request->query('edit', '');
+
+		if ($detailId !== '') {
+			$selectedMenu = $this->menuService->findById($detailId);
+			if ($selectedMenu) {
+				$selectedMenu->stock = (int) ($selectedMenu->stock ?? 0);
+			}
+		}
+
+		if ($editId !== '') {
+			$selectedEditMenu = $this->menuService->findById($editId);
+			if ($selectedEditMenu) {
+				$selectedEditMenu->stock = (int) ($selectedEditMenu->stock ?? 0);
+			}
+		}
+
+		return view('backoffice.menu.index', [
+			'menus' => $menus,
+			'selectedMenu' => $selectedMenu,
+			'selectedEditMenu' => $selectedEditMenu,
+			'showCreateModal' => $showCreateModal,
+			'allowedCategories' => $this->allowedCategories,
+		]);
+	}
+
+	public function createPage(): RedirectResponse
+	{
+		return redirect('/backoffice/daftar_menu?create=1');
+	}
+
+	public function storePage(Request $request): RedirectResponse
+	{
+		$validator = Validator::make($request->all(), [
+			'name' => 'required|string|max:255',
+			'description' => 'nullable|string',
+			'price' => 'required|numeric|min:0',
+			'stock' => 'required|integer|min:0',
+			'category' => 'required|string|in:' . implode(',', $this->allowedCategories),
+			'image' => 'nullable|file|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
+		]);
+
+		if ($validator->fails()) {
+			return redirect('/backoffice/daftar_menu?create=1')
+				->withErrors($validator)
+				->withInput();
+		}
+
+		$validated = $validator->safe()->except('image');
+		$validated['stock'] = (int) ($validated['stock'] ?? 0);
+
+		$item = $this->menuService->create($validated);
+
+		if ($request->hasFile('image')) {
+			$this->menuService->uploadImage($item, $request->file('image'));
+		}
+
+		return redirect('/backoffice/daftar_menu')->with('success', 'Menu baru berhasil ditambahkan.');
+	}
+
+	public function showPage(string $id): RedirectResponse
+	{
+		return redirect('/backoffice/daftar_menu?detail=' . urlencode($id));
+	}
+
+	public function editPage(string $id): RedirectResponse
+	{
+		$menu = $this->menuService->findById($id);
+
+		if (!$menu) {
+			abort(404);
+		}
+
+		return redirect('/backoffice/daftar_menu?edit=' . urlencode($id));
+	}
+
+	public function updatePage(Request $request, string $id): RedirectResponse
+	{
+		$item = $this->menuService->findById($id);
+
+		if (!$item) {
+			abort(404);
+		}
+
+		$validator = Validator::make($request->all(), [
+			'name' => 'required|string|max:255',
+			'description' => 'nullable|string',
+			'price' => 'required|numeric|min:0',
+			'stock' => 'required|integer|min:0',
+			'category' => 'required|string|in:' . implode(',', $this->allowedCategories),
+			'image' => 'nullable|file|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
+			'remove_image' => 'nullable|boolean',
+		]);
+
+		if ($validator->fails()) {
+			return redirect('/backoffice/daftar_menu?edit=' . urlencode($id))
+				->withErrors($validator)
+				->withInput();
+		}
+
+		$validated = $validator->safe()->except(['image', 'remove_image']);
+		$validated['stock'] = (int) ($validated['stock'] ?? 0);
+		$removeImage = $request->boolean('remove_image');
+
+		$this->menuService->update($item, $validated);
+
+		if ($request->hasFile('image')) {
+			$this->menuService->uploadImage($item, $request->file('image'));
+		} elseif ($removeImage && $item->image_url) {
+			$this->menuService->deleteImage($item);
+		}
+
+		return redirect('/backoffice/daftar_menu')->with('success', 'Menu berhasil diperbarui.');
+	}
+
 	public function create(Request $request)
 	{
 		$validator = Validator::make($request->all(), [
 			'name' => 'required|string|max:255',
 			'description' => 'nullable|string',
 			'price' => 'required|numeric|min:0',
+			'stock' => 'sometimes|integer|min:0',
 			'category' => 'required|string|in:' . implode(',', $this->allowedCategories),
 			'image_url' => 'nullable|string|max:500',
 		]);
@@ -34,6 +161,7 @@ class MenuController extends Controller
 		}
 
 		$validated = $validator->validated();
+		$validated['stock'] = (int) ($validated['stock'] ?? 0);
 		$item = $this->menuService->create($validated);
 
 		return response()->json([
@@ -58,6 +186,7 @@ class MenuController extends Controller
 			'name' => 'sometimes|required|string|max:255',
 			'description' => 'sometimes|nullable|string',
 			'price' => 'sometimes|required|numeric|min:0',
+			'stock' => 'sometimes|required|integer|min:0',
 			'category' => 'sometimes|required|string|in:' . implode(',', $this->allowedCategories),
 			'image_url' => 'sometimes|nullable|string|max:500',
 		]);

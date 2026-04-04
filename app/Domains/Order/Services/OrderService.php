@@ -100,7 +100,12 @@ class OrderService
             return false;
         }
 
-        $order->update(['status' => $status]);
+        $payload = ['status' => $status];
+        if ($status === 'DELIVERED') {
+            $payload['delivered_at'] = now();
+        }
+
+        $order->update($payload);
         return true;
     }
 
@@ -152,12 +157,14 @@ class OrderService
                 'id' => (string) $customer->_id,
                 'name' => $customer->name,
                 'username' => $customer->username,
+                'email' => $customer->email ?? null,
             ];
         } elseif ($order->customer) {
             $customerData = [
                 'id' => (string) $order->customer->_id,
                 'name' => $order->customer->name,
                 'username' => $order->customer->username,
+                'email' => $order->customer->email ?? null,
             ];
         }
 

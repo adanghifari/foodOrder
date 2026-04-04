@@ -13,6 +13,14 @@ class MenuController extends Controller
 	{
 	}
 
+	private function withStock($item): array
+	{
+		$data = $item->toArray();
+		$data['stock'] = (int) ($data['stock'] ?? 0);
+
+		return $data;
+	}
+
 	public function list(Request $request)
 	{
 		$validator = Validator::make($request->query(), [
@@ -30,6 +38,9 @@ class MenuController extends Controller
 		$perPage = (int) $request->query('per_page', 10);
 
 		$items = $this->menuService->listPaginated($perPage);
+		$items->setCollection(
+			$items->getCollection()->map(fn ($item) => $this->withStock($item))
+		);
 
 		return response()->json([
 			'status' => 'success',
@@ -50,6 +61,7 @@ class MenuController extends Controller
 		}
 
 		$items = $this->menuService->searchByName($name);
+		$items = $items->map(fn ($item) => $this->withStock($item));
 
 		return response()->json([
 			'status' => 'success',
@@ -75,6 +87,7 @@ class MenuController extends Controller
 		$category = (string) $request->query('category');
 
 		$items = $this->menuService->filterByCategory($category);
+		$items = $items->map(fn ($item) => $this->withStock($item));
 
 		return response()->json([
 			'status' => 'success',
