@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Backoffice\AuthController as BackofficeAuthController;
 use App\Http\Controllers\Backoffice\Admin\DashboardController as BackofficeDashboardController;
+use App\Http\Controllers\Backoffice\Admin\OverviewController as BackofficeOverviewController;
 use App\Http\Controllers\Backoffice\Admin\MenuController as BackofficeMenuController;
 use App\Http\Controllers\Backoffice\Admin\OrderController as BackofficeOrderController;
 use App\Http\Controllers\Backoffice\Admin\PaymentController as BackofficePaymentController;
@@ -28,6 +29,7 @@ Route::prefix('backoffice')->group(function () {
             return redirect('/backoffice/dashboard');
         });
         Route::get('/dashboard', [BackofficeDashboardController::class, 'index']);
+        Route::get('/overview', [BackofficeOverviewController::class, 'indexPage']);
         Route::get('/daftar_menu', [BackofficeMenuController::class, 'indexPage']);
         Route::post('/daftar_menu', [BackofficeMenuController::class, 'storePage']);
         Route::get('/daftar_menu/{id}', [BackofficeMenuController::class, 'showPage']);
