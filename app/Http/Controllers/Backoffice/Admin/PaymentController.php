@@ -7,9 +7,12 @@ use App\Models\Order;
 
 class PaymentController extends Controller
 {
+    private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
+
     public function indexPage()
     {
         $payments = Order::with('customer')
+            ->whereIn('payment_status', self::PAID_STATUSES)
             ->orderBy('_id', 'desc')
             ->get()
             ->map(function (Order $order) {
@@ -38,9 +41,9 @@ class PaymentController extends Controller
 
         $summary = [
             'total' => $payments->count(),
-            'paid' => $payments->whereIn('paymentStatus', ['PAID', 'SUCCESS'])->count(),
-            'pending' => $payments->whereIn('paymentStatus', ['PENDING', 'UNPAID'])->count(),
-            'failed' => $payments->whereIn('paymentStatus', ['FAILED', 'CANCELED', 'EXPIRED'])->count(),
+            'revenue' => (float) $payments->sum('totalPrice'),
+            'average' => (float) ($payments->count() > 0 ? ($payments->sum('totalPrice') / $payments->count()) : 0),
+            'tables' => $payments->pluck('tableNumber')->filter(fn ($tableNumber) => (int) $tableNumber > 0)->unique()->count(),
         ];
 
         $detailOrderId = request()->query('detail');

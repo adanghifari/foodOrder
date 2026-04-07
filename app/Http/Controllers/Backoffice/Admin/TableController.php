@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Validator;
 class TableController extends Controller
 {
     private const ACTIVE_ORDER_STATUSES = ['CONFIRMED', 'IN_QUEUE', 'IN_PROGRESS'];
+    private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
 
     public function __construct(private readonly TableService $tableService)
     {
@@ -27,13 +28,27 @@ class TableController extends Controller
             ));
         }
 
+        $occupyingOrders = Order::with('customer')
+            ->whereIn('payment_status', self::PAID_STATUSES)
+            ->where(function ($query) {
+                $query->whereIn('status', self::ACTIVE_ORDER_STATUSES)
+                    ->orWhere(function ($deliveredQuery) {
+                        $deliveredQuery->where('status', 'DELIVERED')
+                            ->whereNull('table_cleared_at');
+                    });
+            })
+            ->orderBy('queue_number', 'asc')
+            ->orderBy('_id', 'desc')
+            ->get();
+
         $activeOrders = Order::with('customer')
+            ->whereIn('payment_status', self::PAID_STATUSES)
             ->whereIn('status', self::ACTIVE_ORDER_STATUSES)
             ->orderBy('queue_number', 'asc')
             ->orderBy('_id', 'desc')
             ->get();
 
-        $ordersByTable = $activeOrders->groupBy(function (Order $order) {
+        $ordersByTable = $occupyingOrders->groupBy(function (Order $order) {
             return (int) $order->table_number;
         });
 
@@ -93,11 +108,22 @@ class TableController extends Controller
             return redirect()->back()->with('error', 'Hanya order aktif yang bisa dipindahkan meja.')->withInput();
         }
 
+        if (! in_array(strtoupper((string) ($order->payment_status ?? '')), self::PAID_STATUSES, true)) {
+            return redirect()->back()->with('error', 'Hanya order dengan pembayaran lunas yang bisa dipindahkan meja.')->withInput();
+        }
+
         $sourceTable = (int) ($order->table_number ?? 0);
 
         if ($sourceTable !== $targetTable) {
             $targetHasActiveOrders = Order::where('table_number', $targetTable)
-                ->whereIn('status', self::ACTIVE_ORDER_STATUSES)
+                ->whereIn('payment_status', self::PAID_STATUSES)
+                ->where(function ($query) {
+                    $query->whereIn('status', self::ACTIVE_ORDER_STATUSES)
+                        ->orWhere(function ($deliveredQuery) {
+                            $deliveredQuery->where('status', 'DELIVERED')
+                                ->whereNull('table_cleared_at');
+                        });
+                })
                 ->where('_id', '!=', $order->_id)
                 ->exists();
 
@@ -113,6 +139,46 @@ class TableController extends Controller
         return redirect('/backoffice/kelola_meja')->with(
             'success',
             'Order ' . $this->displayOrderId($order) . ' berhasil dipindahkan dari meja ' . $sourceTable . ' ke meja ' . $targetTable . '.'
+        );
+    }
+
+    public function clearPage(int $tableId)
+    {
+        if (! $this->tableService->isKnownTable($tableId)) {
+            return redirect('/backoffice/kelola_meja')->with('error', 'Nomor meja tidak terdaftar.');
+        }
+
+        $occupyingOrders = Order::where('table_number', $tableId)
+            ->whereIn('payment_status', self::PAID_STATUSES)
+            ->where(function ($query) {
+                $query->whereIn('status', self::ACTIVE_ORDER_STATUSES)
+                    ->orWhere(function ($deliveredQuery) {
+                        $deliveredQuery->where('status', 'DELIVERED')
+                            ->whereNull('table_cleared_at');
+                    });
+            })
+            ->get();
+
+        if ($occupyingOrders->isEmpty()) {
+            return redirect('/backoffice/kelola_meja')->with('success', 'Meja ' . $tableId . ' sudah dalam kondisi kosong.');
+        }
+
+        foreach ($occupyingOrders as $order) {
+            $payload = [
+                'table_cleared_at' => now(),
+            ];
+
+            if (in_array((string) $order->status, self::ACTIVE_ORDER_STATUSES, true)) {
+                $payload['status'] = 'DELIVERED';
+                $payload['delivered_at'] = now();
+            }
+
+            $order->update($payload);
+        }
+
+        return redirect('/backoffice/kelola_meja')->with(
+            'success',
+            'Meja ' . $tableId . ' berhasil dikosongkan dan ' . $occupyingOrders->count() . ' order terkait sudah dilepas dari meja.'
         );
     }
 
