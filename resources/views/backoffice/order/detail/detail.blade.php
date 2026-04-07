@@ -37,6 +37,16 @@
 
         $detailCustomerName = trim((string) (data_get($selectedOrder, 'customer.name') ?: data_get($selectedOrder, 'customer.username') ?: '-'));
         $detailCustomerEmail = trim((string) (data_get($selectedOrder, 'customer.email') ?: '-'));
+        $detailPaidAtRaw = (string) ($selectedOrder['paidAt'] ?? '');
+        $detailPaidAtLabel = '-';
+
+        if ($detailPaidAtRaw !== '') {
+            try {
+                $detailPaidAtLabel = \Carbon\Carbon::parse($detailPaidAtRaw)->format('d M Y, H:i:s');
+            } catch (\Throwable $exception) {
+                $detailPaidAtLabel = $detailPaidAtRaw;
+            }
+        }
     @endphp
 
     <div class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"></div>
@@ -88,6 +98,10 @@
                                     <td class="px-4 py-3">
                                         <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $detailPaymentClass }}">{{ $detailPaymentLabel }}</span>
                                     </td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3 font-semibold text-slate-600">Waktu Pemesanan</td>
+                                    <td class="px-4 py-3 text-slate-800">{{ $detailPaidAtLabel }}</td>
                                 </tr>
                                 <tr>
                                     <td class="px-4 py-3 font-semibold text-slate-600">Total Pesanan</td>
