@@ -23,6 +23,7 @@ class Order extends Model
         'payment_payload',
         'paid_at',
         'delivered_at',
+        'table_cleared_at',
         'queue_number',
         'status',
         'total_price',

@@ -39,6 +39,21 @@ class PaymentController extends Controller
         }
 
         $validated = $validator->validated();
+
+        if (! $this->tableService->isKnownTable((int) $validated['tableNumber'])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Nomor meja tidak terdaftar.',
+            ], 422);
+        }
+
+        if (! $this->tableService->isTableAvailable((int) $validated['tableNumber'])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Meja masih terisi. Kosongkan meja terlebih dahulu sebelum menerima order baru.',
+            ], 409);
+        }
+
         $rawItems = collect($validated['items']);
 
         $menuIds = $rawItems->pluck('menuId')->map(fn ($id) => (string) $id)->unique()->values()->all();
@@ -91,6 +106,7 @@ class PaymentController extends Controller
             'table_number' => (int) $validated['tableNumber'],
             'status' => 'CONFIRMED',
             'payment_status' => 'PENDING',
+            'table_cleared_at' => null,
             'queue_number' => $queueNumber,
             'total_price' => $totalPrice,
             'items' => $embeddedItems,

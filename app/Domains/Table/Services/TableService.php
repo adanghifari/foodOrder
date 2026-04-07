@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 class TableService
 {
     private const ACTIVE_ORDER_STATUSES = ['CONFIRMED', 'IN_QUEUE', 'IN_PROGRESS'];
+    private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
 
     public function isKnownTable(int $tableId): bool
     {
@@ -18,9 +19,20 @@ class TableService
 
     public function isTableAvailable(int $tableId): bool
     {
-        return !Order::where('table_number', $tableId)
-            ->whereIn('status', self::ACTIVE_ORDER_STATUSES)
-            ->exists();
+        return ! $this->occupyingOrdersQuery($tableId)->exists();
+    }
+
+    public function occupyingOrdersQuery(int $tableId)
+    {
+        return Order::where('table_number', $tableId)
+            ->whereIn('payment_status', self::PAID_STATUSES)
+            ->where(function ($query) {
+                $query->whereIn('status', self::ACTIVE_ORDER_STATUSES)
+                    ->orWhere(function ($deliveredQuery) {
+                        $deliveredQuery->where('status', 'DELIVERED')
+                            ->whereNull('table_cleared_at');
+                    });
+            });
     }
 
     public function clearTableSessionIfInactive(Request $request): bool

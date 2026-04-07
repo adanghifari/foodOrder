@@ -67,6 +67,7 @@ class OrderService
             'table_number' => $tableNumber,
             'status' => 'CONFIRMED',
             'payment_status' => 'PENDING',
+            'table_cleared_at' => null,
             'queue_number' => $queueNumber,
             'total_price' => $totalPrice,
             'items' => $orderMenuItems,
@@ -103,6 +104,7 @@ class OrderService
         $payload = ['status' => $status];
         if ($status === 'DELIVERED') {
             $payload['delivered_at'] = now();
+            $payload['table_cleared_at'] = null;
         }
 
         $order->update($payload);

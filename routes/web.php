@@ -45,6 +45,8 @@ Route::prefix('backoffice')->group(function () {
         Route::get('/daftar_meja', [BackofficeTableController::class, 'indexPage']);
         Route::patch('/kelola_meja/assign', [BackofficeTableController::class, 'assignPage']);
         Route::patch('/daftar_meja/assign', [BackofficeTableController::class, 'assignPage']);
+        Route::patch('/kelola_meja/{tableId}/clear', [BackofficeTableController::class, 'clearPage'])->whereNumber('tableId');
+        Route::patch('/daftar_meja/{tableId}/clear', [BackofficeTableController::class, 'clearPage'])->whereNumber('tableId');
     });
 });
 

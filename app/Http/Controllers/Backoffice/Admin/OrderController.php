@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Validator;
 class OrderController extends Controller
 {
 	private $allowedStatuses = ['CONFIRMED', 'IN_QUEUE', 'IN_PROGRESS', 'DELIVERED'];
+	private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
 
 	public function __construct(private readonly OrderService $orderService)
 	{
@@ -17,7 +18,11 @@ class OrderController extends Controller
 
 	public function indexPage()
 	{
-		$orders = collect($this->orderService->adminList());
+		$orders = collect($this->orderService->adminList())
+			->filter(function ($order) {
+				return in_array(strtoupper((string) ($order['paymentStatus'] ?? '')), self::PAID_STATUSES, true);
+			})
+			->values();
 		$detailOrderId = request()->query('detail');
 		$selectedOrder = null;
 

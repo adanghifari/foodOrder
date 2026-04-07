@@ -51,7 +51,7 @@
 
         <section class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div class="overflow-x-auto">
-                <table class="w-full min-w-[1100px] text-left">
+                <table class="w-full min-w-[980px] text-left">
                     <thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
                         <tr>
                             <th class="px-4 py-3 font-bold">Order ID</th>
@@ -60,7 +60,6 @@
                             <th class="px-4 py-3 font-bold">No Antrian</th>
                             <th class="px-4 py-3 font-bold">No Meja</th>
                             <th class="px-4 py-3 font-bold">Status</th>
-                            <th class="px-4 py-3 font-bold">Pembayaran</th>
                             <th class="px-4 py-3 font-bold">Total</th>
                             <th class="px-4 py-3 font-bold">Aksi</th>
                         </tr>
@@ -69,7 +68,6 @@
                         @forelse (($orders ?? []) as $order)
                             @php
                                 $status = strtoupper((string) ($order['status'] ?? 'UNKNOWN'));
-                                $paymentStatus = strtoupper((string) ($order['paymentStatus'] ?? 'PENDING'));
                                 $queueNumber = (int) ($order['queueNumber'] ?? 0);
                                 $tableNumber = (int) ($order['tableNumber'] ?? 0);
                                 $totalPrice = (float) ($order['totalPrice'] ?? 0);
@@ -94,20 +92,6 @@
                                     'DELIVERED' => 'bg-emerald-100 text-emerald-700',
                                     default => 'bg-slate-100 text-slate-700',
                                 };
-
-                                $paymentLabel = match ($paymentStatus) {
-                                    'PAID', 'SUCCESS', 'SETTLEMENT' => 'Lunas',
-                                    'FAILED', 'DENY' => 'Gagal',
-                                    'CANCELED', 'CANCEL' => 'Dibatalkan',
-                                    'EXPIRED', 'EXPIRE' => 'Kedaluwarsa',
-                                    default => 'Menunggu',
-                                };
-
-                                $paymentClass = match ($paymentLabel) {
-                                    'Lunas' => 'bg-emerald-100 text-emerald-700',
-                                    'Gagal', 'Dibatalkan', 'Kedaluwarsa' => 'bg-rose-100 text-rose-700',
-                                    default => 'bg-amber-100 text-amber-700',
-                                };
                             @endphp
                             <tr
                                 class="order-row"
@@ -126,9 +110,6 @@
                                 <td class="px-4 py-3 text-sm text-slate-700">{{ $tableNumber > 0 ? $tableNumber : '-' }}</td>
                                 <td class="px-4 py-3">
                                     <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $statusClass }}">{{ $statusLabel }}</span>
-                                </td>
-                                <td class="px-4 py-3">
-                                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $paymentClass }}">{{ $paymentLabel }}</span>
                                 </td>
                                 <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format($totalPrice, 0, ',', '.') }}</td>
                                 <td class="px-4 py-3">
@@ -159,7 +140,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="9" class="px-4 py-10 text-center text-sm font-semibold text-slate-500">Belum ada data pesanan.</td>
+                                <td colspan="8" class="px-4 py-10 text-center text-sm font-semibold text-slate-500">Belum ada data pesanan dengan pembayaran lunas.</td>
                             </tr>
                         @endforelse
                     </tbody>

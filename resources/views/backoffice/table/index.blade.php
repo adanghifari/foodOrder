@@ -112,13 +112,29 @@
                         </div>
                     @endif
 
-                    <button
-                        type="button"
-                        class="js-pick-table mt-3 w-full inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-extrabold px-3 py-2 transition"
-                        data-table-id="{{ $tableId }}"
-                    >
-                        Gunakan Meja Ini
-                    </button>
+                    @if ($isOccupied)
+                        <form
+                            method="POST"
+                            action="/backoffice/kelola_meja/{{ $tableId }}/clear"
+                            class="mt-3"
+                            data-notify-confirm
+                            data-confirm-type="warning"
+                            data-confirm-badge="Kosongkan Meja"
+                            data-confirm-title="Kosongkan meja {{ $tableId }}?"
+                            data-confirm-message="Semua order aktif di meja ini akan ditandai selesai agar meja bisa dipakai lagi."
+                            data-confirm-button="Ya, kosongkan"
+                            data-cancel-button="Batal"
+                        >
+                            @csrf
+                            @method('PATCH')
+                            <button
+                                type="submit"
+                                class="w-full inline-flex items-center justify-center rounded-lg border border-red-200 bg-white hover:bg-red-50 text-red-700 text-xs font-extrabold px-3 py-2 transition"
+                            >
+                                Kosongkan Meja
+                            </button>
+                        </form>
+                    @endif
                 </article>
             @empty
                 <article class="md:col-span-2 xl:col-span-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
@@ -128,23 +144,4 @@
         </section>
     </section>
 
-    <script>
-        (function () {
-            const tableSelect = document.getElementById('table_number');
-            const quickButtons = Array.from(document.querySelectorAll('.js-pick-table'));
-
-            if (!tableSelect || quickButtons.length === 0) {
-                return;
-            }
-
-            quickButtons.forEach(function (button) {
-                button.addEventListener('click', function () {
-                    const tableId = String(button.dataset.tableId || '');
-                    tableSelect.value = tableId;
-                    tableSelect.focus();
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                });
-            });
-        })();
-    </script>
 </x-backoffice.layout>
