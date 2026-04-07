@@ -15,7 +15,7 @@
             <span class="sidebar-label">Dashboard</span>
         </a>
 
-        <a href="/backoffice/dashboard#overview-panel" class="sidebar-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition text-[#6A2B09] hover:bg-white/45">
+        <a href="/backoffice/overview" class="sidebar-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition text-[#6A2B09] hover:bg-white/45">
             <svg xmlns="http://www.w3.org/2000/svg" class="sidebar-icon w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/></svg>
             <span class="sidebar-label">Overview</span>
         </a>
