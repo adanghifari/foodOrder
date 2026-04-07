@@ -28,10 +28,10 @@
 
                     <div class="flex flex-wrap gap-2">
                         <button type="button" class="order-status-tab inline-flex items-center rounded-xl border border-[#6A2B09] bg-[#6A2B09] text-[#FCB861] text-xs font-bold px-3 py-2 transition" data-status="all">Semua</button>
-                        <button type="button" class="order-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="CONFIRMED">Terkonfirmasi</button>
-                        <button type="button" class="order-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="IN_QUEUE">Dalam Antrean</button>
-                        <button type="button" class="order-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="IN_PROGRESS">Sedang Diproses</button>
-                        <button type="button" class="order-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="DELIVERED">Disajikan</button>
+                        <button type="button" class="order-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="confirmed">Terkonfirmasi</button>
+                        <button type="button" class="order-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="in_queue">Dalam Antrean</button>
+                        <button type="button" class="order-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="in_progress">Sedang Diproses</button>
+                        <button type="button" class="order-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="delivered">Disajikan</button>
                     </div>
                 </div>
 
@@ -49,142 +49,154 @@
             </div>
         </article>
 
-        <section id="order-grid" class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            @forelse (($orders ?? []) as $order)
-                @php
-                    $status = (string) ($order['status'] ?? 'UNKNOWN');
-                    $paymentStatus = (string) ($order['paymentStatus'] ?? 'PENDING');
-                    $queueNumber = (int) ($order['queueNumber'] ?? 0);
-                    $tableNumber = (int) ($order['tableNumber'] ?? 0);
-                    $totalPrice = (float) ($order['totalPrice'] ?? 0);
-                    $customerName = trim((string) data_get($order, 'customer.name', '-'));
-                    $customerEmail = trim((string) (data_get($order, 'customer.email') ?: data_get($order, 'customer.username', '-')));
-                    $orderId = (string) ($order['orderId'] ?? '');
-                    $displayId = 'ORD-' . strtoupper(substr((string) ($order['orderId'] ?? ''), -6));
+        <section class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full min-w-[1100px] text-left">
+                    <thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                            <th class="px-4 py-3 font-bold">Order ID</th>
+                            <th class="px-4 py-3 font-bold">Nama</th>
+                            <th class="px-4 py-3 font-bold">Email</th>
+                            <th class="px-4 py-3 font-bold">No Antrian</th>
+                            <th class="px-4 py-3 font-bold">No Meja</th>
+                            <th class="px-4 py-3 font-bold">Status</th>
+                            <th class="px-4 py-3 font-bold">Pembayaran</th>
+                            <th class="px-4 py-3 font-bold">Total</th>
+                            <th class="px-4 py-3 font-bold">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="order-table-body" class="divide-y divide-slate-200">
+                        @forelse (($orders ?? []) as $order)
+                            @php
+                                $status = strtoupper((string) ($order['status'] ?? 'UNKNOWN'));
+                                $paymentStatus = strtoupper((string) ($order['paymentStatus'] ?? 'PENDING'));
+                                $queueNumber = (int) ($order['queueNumber'] ?? 0);
+                                $tableNumber = (int) ($order['tableNumber'] ?? 0);
+                                $totalPrice = (float) ($order['totalPrice'] ?? 0);
+                                $orderId = (string) ($order['orderId'] ?? '');
+                                $displayId = 'ORD-' . strtoupper(substr($orderId, -6));
 
-                    $statusClass = match ($status) {
-                        'CONFIRMED' => 'bg-amber-100 text-amber-700',
-                        'IN_QUEUE' => 'bg-orange-100 text-orange-700',
-                        'IN_PROGRESS' => 'bg-blue-100 text-blue-700',
-                        'DELIVERED' => 'bg-emerald-100 text-emerald-700',
-                        default => 'bg-slate-100 text-slate-700',
-                    };
+                                $customerName = trim((string) (data_get($order, 'customer.name') ?: data_get($order, 'customer.username') ?: '-'));
+                                $customerEmail = trim((string) (data_get($order, 'customer.email') ?: '-'));
 
-                    $statusLabel = $status === 'DELIVERED' ? 'Disajikan' : str_replace('_', ' ', $status);
+                                $statusLabel = match ($status) {
+                                    'CONFIRMED' => 'Terkonfirmasi',
+                                    'IN_QUEUE' => 'Dalam Antrean',
+                                    'IN_PROGRESS' => 'Sedang Diproses',
+                                    'DELIVERED' => 'Disajikan',
+                                    default => ucfirst(strtolower(str_replace('_', ' ', $status))),
+                                };
 
-                    $paymentClass = in_array($paymentStatus, ['PAID', 'SUCCESS'], true)
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'bg-slate-100 text-slate-700';
-                @endphp
+                                $statusClass = match ($status) {
+                                    'CONFIRMED' => 'bg-amber-100 text-amber-700',
+                                    'IN_QUEUE' => 'bg-orange-100 text-orange-700',
+                                    'IN_PROGRESS' => 'bg-blue-100 text-blue-700',
+                                    'DELIVERED' => 'bg-emerald-100 text-emerald-700',
+                                    default => 'bg-slate-100 text-slate-700',
+                                };
 
-                <article
-                    class="order-card rounded-2xl border border-slate-200 bg-white shadow-sm p-4 md:p-5"
-                    data-order-id="{{ strtolower($displayId) }}"
-                    data-customer="{{ strtolower($customerName) }}"
-                    data-email="{{ strtolower($customerEmail) }}"
-                    data-table="{{ $tableNumber }}"
-                    data-status="{{ strtolower($status) }}"
-                    data-queue="{{ $queueNumber }}"
-                    data-total="{{ $totalPrice }}"
-                >
-                    <div class="flex items-start justify-between gap-3">
-                        <div>
-                            <h3 class="text-base font-extrabold text-[var(--rich-black)]">{{ $displayId }}</h3>
-                            <p class="text-xs text-slate-500">Customer: <span class="font-semibold text-slate-700">{{ $customerName !== '' ? $customerName : '-' }}</span></p>
-                            <p class="text-xs text-slate-500 mt-0.5">Email: <span class="font-semibold text-slate-700">{{ $customerEmail !== '' ? $customerEmail : '-' }}</span></p>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-xs text-slate-500">Antrian</p>
-                            <p class="text-lg font-extrabold text-[var(--philippine-bronze)]">#{{ $queueNumber }}</p>
-                        </div>
-                    </div>
+                                $paymentLabel = match ($paymentStatus) {
+                                    'PAID', 'SUCCESS', 'SETTLEMENT' => 'Lunas',
+                                    'FAILED', 'DENY' => 'Gagal',
+                                    'CANCELED', 'CANCEL' => 'Dibatalkan',
+                                    'EXPIRED', 'EXPIRE' => 'Kedaluwarsa',
+                                    default => 'Menunggu',
+                                };
 
-                    <div class="mt-3 flex flex-wrap items-center gap-2">
-                        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $statusClass }}">{{ $statusLabel }}</span>
-                        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $paymentClass }}">{{ $paymentStatus }}</span>
-                        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold bg-slate-100 text-slate-700">Meja {{ $tableNumber > 0 ? $tableNumber : '-' }}</span>
-                    </div>
+                                $paymentClass = match ($paymentLabel) {
+                                    'Lunas' => 'bg-emerald-100 text-emerald-700',
+                                    'Gagal', 'Dibatalkan', 'Kedaluwarsa' => 'bg-rose-100 text-rose-700',
+                                    default => 'bg-amber-100 text-amber-700',
+                                };
+                            @endphp
+                            <tr
+                                class="order-row"
+                                data-order-id="{{ strtolower($displayId) }}"
+                                data-customer="{{ strtolower($customerName) }}"
+                                data-email="{{ strtolower($customerEmail) }}"
+                                data-status="{{ strtolower($status) }}"
+                                data-total="{{ $totalPrice }}"
+                                data-table="{{ $tableNumber }}"
+                                data-queue="{{ $queueNumber }}"
+                            >
+                                <td class="px-4 py-3 text-sm font-extrabold text-[var(--rich-black)]">{{ $displayId }}</td>
+                                <td class="px-4 py-3 text-sm font-semibold text-slate-800">{{ $customerName !== '' ? $customerName : '-' }}</td>
+                                <td class="px-4 py-3 text-sm text-slate-700">{{ $customerEmail !== '' ? $customerEmail : '-' }}</td>
+                                <td class="px-4 py-3 text-sm font-bold text-slate-700">#{{ $queueNumber }}</td>
+                                <td class="px-4 py-3 text-sm text-slate-700">{{ $tableNumber > 0 ? $tableNumber : '-' }}</td>
+                                <td class="px-4 py-3">
+                                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $statusClass }}">{{ $statusLabel }}</span>
+                                </td>
+                                <td class="px-4 py-3">
+                                    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $paymentClass }}">{{ $paymentLabel }}</span>
+                                </td>
+                                <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format($totalPrice, 0, ',', '.') }}</td>
+                                <td class="px-4 py-3">
+                                    <div class="flex items-center gap-2">
+                                        <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2">
+                                            @csrf
+                                            @method('PATCH')
+                                            <select name="status" class="min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
+                                                @foreach (($statusOptions ?? []) as $statusOption)
+                                                    @php
+                                                        $optionLabel = match ($statusOption) {
+                                                            'CONFIRMED' => 'Terkonfirmasi',
+                                                            'IN_QUEUE' => 'Dalam Antrean',
+                                                            'IN_PROGRESS' => 'Sedang Diproses',
+                                                            'DELIVERED' => 'Disajikan',
+                                                            default => $statusOption,
+                                                        };
+                                                    @endphp
+                                                    <option value="{{ $statusOption }}" {{ $status === $statusOption ? 'selected' : '' }}>{{ $optionLabel }}</option>
+                                                @endforeach
+                                            </select>
+                                            <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>
+                                        </form>
 
-                    <div class="mt-3 pt-3 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                        <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2 w-full sm:w-auto">
-                            @csrf
-                            @method('PATCH')
-                            <select name="status" class="w-full sm:w-auto min-w-44 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
-                                @foreach (($statusOptions ?? []) as $statusOption)
-                                    @php
-                                        $optionLabel = match ($statusOption) {
-                                            'CONFIRMED' => 'Terkonfirmasi',
-                                            'IN_QUEUE' => 'Dalam Antrean',
-                                            'IN_PROGRESS' => 'Sedang Diproses',
-                                            'DELIVERED' => 'Disajikan',
-                                            default => $statusOption,
-                                        };
-                                    @endphp
-                                    <option value="{{ $statusOption }}" {{ $status === $statusOption ? 'selected' : '' }}>{{ $optionLabel }}</option>
-                                @endforeach
-                            </select>
-                            <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-[var(--alloy-orange)] hover:bg-[var(--philippine-bronze)] text-white text-xs font-extrabold px-3 py-2 transition">Update</button>
-                        </form>
+                                        <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
+                                    </div>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="9" class="px-4 py-10 text-center text-sm font-semibold text-slate-500">Belum ada data pesanan.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
 
-                        <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" class="inline-flex items-center justify-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition sm:ml-auto">Lihat Detail Pesanan</a>
-                    </div>
-
-                    <div class="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p class="text-xs font-bold uppercase tracking-wide text-slate-500">Items</p>
-                        <ul class="mt-2 space-y-1.5">
-                            @forelse (($order['items'] ?? []) as $item)
-                                <li class="flex items-center justify-between text-sm text-slate-700 gap-2">
-                                    <span class="font-semibold">{{ $item['name'] ?? '-' }} <span class="text-slate-500">x{{ (int) ($item['quantity'] ?? 0) }}</span></span>
-                                    <span class="text-slate-600">Rp {{ number_format((float) ($item['price'] ?? 0), 0, ',', '.') }}</span>
-                                </li>
-                            @empty
-                                <li class="text-sm text-slate-500">Tidak ada item.</li>
-                            @endforelse
-                        </ul>
-                    </div>
-
-                    <div class="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between gap-3">
-                        <p class="text-sm text-slate-500">Total</p>
-                        <p class="text-base font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format($totalPrice, 0, ',', '.') }}</p>
-                    </div>
-                </article>
-            @empty
-                <article class="xl:col-span-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-                    <p class="text-sm font-semibold text-slate-500">Belum ada data pesanan.</p>
-                </article>
-            @endforelse
-
-            <article id="order-filter-empty" class="hidden xl:col-span-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+            <div id="order-filter-empty" class="hidden px-4 py-8 text-center border-t border-slate-200">
                 <p class="text-sm font-semibold text-slate-500">Pesanan tidak ditemukan untuk filter ini.</p>
-            </article>
+            </div>
         </section>
     </section>
 
     <script>
         (function () {
-            const grid = document.getElementById('order-grid');
+            const tableBody = document.getElementById('order-table-body');
             const searchInput = document.getElementById('order-search');
             const sortSelect = document.getElementById('order-sort');
             const tabs = Array.from(document.querySelectorAll('.order-status-tab'));
             const emptyState = document.getElementById('order-filter-empty');
 
-            if (!grid) {
+            if (!tableBody) {
                 return;
             }
 
-            const cards = Array.from(grid.querySelectorAll('.order-card'));
-            if (cards.length === 0) {
+            const rows = Array.from(tableBody.querySelectorAll('.order-row'));
+            if (rows.length === 0) {
                 return;
             }
 
-            const baseOrder = new Map(cards.map((card, index) => [card, index]));
+            const baseOrder = new Map(rows.map((row, index) => [row, index]));
             let activeStatus = 'all';
 
             function normalize(text) {
                 return String(text || '').toLowerCase().trim();
             }
 
-            function sortCards(list) {
+            function sortRows(list) {
                 const mode = sortSelect ? sortSelect.value : 'default';
 
                 if (mode === 'default') {
@@ -221,12 +233,12 @@
             function applyFilters() {
                 const keyword = normalize(searchInput ? searchInput.value : '');
 
-                let visible = cards.filter(function (card) {
-                    const orderId = normalize(card.dataset.orderId);
-                    const customer = normalize(card.dataset.customer);
-                    const email = normalize(card.dataset.email);
-                    const table = normalize(card.dataset.table);
-                    const status = normalize(card.dataset.status);
+                let visible = rows.filter(function (row) {
+                    const orderId = normalize(row.dataset.orderId);
+                    const customer = normalize(row.dataset.customer);
+                    const email = normalize(row.dataset.email);
+                    const table = normalize(row.dataset.table);
+                    const status = normalize(row.dataset.status);
 
                     const bySearch = keyword === '' || orderId.includes(keyword) || customer.includes(keyword) || email.includes(keyword) || table.includes(keyword);
                     const byStatus = activeStatus === 'all' || status === activeStatus;
@@ -234,15 +246,15 @@
                     return bySearch && byStatus;
                 });
 
-                visible = sortCards(visible);
+                visible = sortRows(visible);
 
-                cards.forEach(function (card) {
-                    card.classList.add('hidden');
+                rows.forEach(function (row) {
+                    row.classList.add('hidden');
                 });
 
-                visible.forEach(function (card) {
-                    card.classList.remove('hidden');
-                    grid.appendChild(card);
+                visible.forEach(function (row) {
+                    row.classList.remove('hidden');
+                    tableBody.appendChild(row);
                 });
 
                 if (emptyState) {
@@ -280,73 +292,5 @@
         })();
     </script>
 
-    @if (!empty($selectedOrder))
-        @php
-            $detailStatus = (string) ($selectedOrder['status'] ?? 'UNKNOWN');
-            $detailStatusLabel = match ($detailStatus) {
-                'CONFIRMED' => 'Terkonfirmasi',
-                'IN_QUEUE' => 'Dalam Antrean',
-                'IN_PROGRESS' => 'Sedang Diproses',
-                'DELIVERED' => 'Disajikan',
-                default => str_replace('_', ' ', $detailStatus),
-            };
-            $detailOrderId = (string) ($selectedOrder['orderId'] ?? '');
-            $detailDisplayId = 'ORD-' . strtoupper(substr($detailOrderId, -6));
-            $detailCustomerName = trim((string) data_get($selectedOrder, 'customer.name', '-'));
-            $detailCustomerEmail = trim((string) (data_get($selectedOrder, 'customer.email') ?: data_get($selectedOrder, 'customer.username', '-')));
-        @endphp
-
-        <div class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"></div>
-        <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div class="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
-                <div class="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-3">
-                    <div>
-                        <h3 class="text-lg font-extrabold text-[var(--rich-black)]">Detail Pesanan</h3>
-                        <p class="text-sm font-semibold text-slate-500">{{ $detailDisplayId }}</p>
-                    </div>
-                    <a href="/backoffice/daftar_pesanan" class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold px-3 py-1.5 transition">Tutup</a>
-                </div>
-
-                <div class="p-5 space-y-4 max-h-[72vh] overflow-y-auto">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <p class="text-xs font-bold uppercase tracking-wide text-slate-500">Nama Pemesan</p>
-                            <p class="mt-1 text-sm font-semibold text-slate-700">{{ $detailCustomerName !== '' ? $detailCustomerName : '-' }}</p>
-                        </div>
-                        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <p class="text-xs font-bold uppercase tracking-wide text-slate-500">Email</p>
-                            <p class="mt-1 text-sm font-semibold text-slate-700">{{ $detailCustomerEmail !== '' ? $detailCustomerEmail : '-' }}</p>
-                        </div>
-                        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <p class="text-xs font-bold uppercase tracking-wide text-slate-500">Status</p>
-                            <p class="mt-1 text-sm font-semibold text-slate-700">{{ $detailStatusLabel }}</p>
-                        </div>
-                        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <p class="text-xs font-bold uppercase tracking-wide text-slate-500">Meja</p>
-                            <p class="mt-1 text-sm font-semibold text-slate-700">{{ (int) ($selectedOrder['tableNumber'] ?? 0) }}</p>
-                        </div>
-                    </div>
-
-                    <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p class="text-xs font-bold uppercase tracking-wide text-slate-500">Detail Item</p>
-                        <ul class="mt-2 space-y-2">
-                            @forelse (($selectedOrder['items'] ?? []) as $item)
-                                <li class="flex items-center justify-between text-sm text-slate-700 gap-3">
-                                    <span class="font-semibold">{{ $item['name'] ?? '-' }} x{{ (int) ($item['quantity'] ?? 0) }}</span>
-                                    <span>Rp {{ number_format((float) ($item['price'] ?? 0), 0, ',', '.') }}</span>
-                                </li>
-                            @empty
-                                <li class="text-sm text-slate-500">Tidak ada item.</li>
-                            @endforelse
-                        </ul>
-                    </div>
-
-                    <div class="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
-                        <p class="text-sm text-slate-500">Total Pembayaran</p>
-                        <p class="text-base font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format((float) ($selectedOrder['totalPrice'] ?? 0), 0, ',', '.') }}</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    @endif
+    @include('backoffice.order.detail.detail', ['selectedOrder' => $selectedOrder])
 </x-backoffice.layout>

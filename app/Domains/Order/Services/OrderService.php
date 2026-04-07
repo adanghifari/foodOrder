@@ -116,6 +116,9 @@ class OrderService
 
     public function buildOrderResponse($order, $customer = null): array
     {
+        $fallbackName = (string) ($order->customer_name ?? '');
+        $fallbackEmail = (string) ($order->customer_email ?? '');
+
         $quantityMap = [];
         $itemLookup = [];
 
@@ -155,16 +158,23 @@ class OrderService
         if ($customer) {
             $customerData = [
                 'id' => (string) $customer->_id,
-                'name' => $customer->name,
+                'name' => $customer->name ?: $fallbackName,
                 'username' => $customer->username,
-                'email' => $customer->email ?? null,
+                'email' => $customer->email ?? ($customer->username ?? $fallbackEmail),
             ];
         } elseif ($order->customer) {
             $customerData = [
                 'id' => (string) $order->customer->_id,
-                'name' => $order->customer->name,
+                'name' => $order->customer->name ?: $fallbackName,
                 'username' => $order->customer->username,
-                'email' => $order->customer->email ?? null,
+                'email' => $order->customer->email ?? ($order->customer->username ?? $fallbackEmail),
+            ];
+        } elseif ($fallbackName !== '' || $fallbackEmail !== '') {
+            $customerData = [
+                'id' => null,
+                'name' => $fallbackName,
+                'username' => $fallbackEmail,
+                'email' => $fallbackEmail,
             ];
         }
 
