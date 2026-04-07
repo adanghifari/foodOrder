@@ -69,6 +69,8 @@
 
     </div>
 
+    <x-notification-center />
+
     <script>
         // Fungsi untuk merender item dari localStorage
        function resolveCartImageSrc(item) {
@@ -146,6 +148,21 @@
             document.getElementById('total-payment').innerText = "Rp " + total.toLocaleString('id-ID');
         }
 
+        function showNotification(options) {
+            if (window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
+                window.KedaiKlikNotify.show(options);
+                return;
+            }
+        }
+
+        function showNotificationAndRedirect(options, redirectUrl, delay) {
+            showNotification(options);
+
+            window.setTimeout(function () {
+                window.location.href = redirectUrl;
+            }, delay || 1400);
+        }
+
         function validateCustomerInfo() {
             const emailInput = document.getElementById('email-input');
             const nameInput = document.getElementById('customer-name-input');
@@ -183,19 +200,25 @@
             const payButton = document.getElementById('bayar-button');
 
             if (cart.length === 0) {
-                alert("Pilih menu dulu ya!");
+                showNotification({ type: 'warning', title: 'Keranjang kosong', message: 'Pilih menu dulu ya!' });
                 return;
             }
 
             if (!tableNumber || tableNumber === '-') {
-                alert("Nomor meja belum tersedia. Silakan scan QR meja terlebih dahulu.");
-                window.location.href = '/menu';
+                showNotificationAndRedirect(
+                    {
+                        type: 'warning',
+                        title: 'Nomor meja belum ada',
+                        message: 'Silakan scan QR meja terlebih dahulu sebelum lanjut pembayaran.',
+                    },
+                    '/menu'
+                );
                 return;
             }
 
             const customerInfo = validateCustomerInfo();
             if (!customerInfo.valid) {
-                alert("Lengkapi nama dan email yang valid dulu ya.");
+                showNotification({ type: 'warning', title: 'Data belum lengkap', message: 'Lengkapi nama dan email yang valid dulu ya.' });
                 return;
             }
 
@@ -211,7 +234,11 @@
             });
 
             if (invalidItem) {
-                alert("Ada item keranjang yang tidak valid. Silakan kembali ke menu dan pilih ulang item.");
+                showNotification({
+                    type: 'error',
+                    title: 'Item tidak valid',
+                    message: 'Ada item keranjang yang tidak valid. Silakan kembali ke menu dan pilih ulang item.',
+                });
                 return;
             }
 
@@ -292,7 +319,11 @@
 
                 window.location.href = redirectUrl;
             } catch (error) {
-                alert(error?.message || 'Terjadi kesalahan saat memproses pembayaran.');
+                showNotification({
+                    type: 'error',
+                    title: 'Pembayaran gagal',
+                    message: error?.message || 'Terjadi kesalahan saat memproses pembayaran.',
+                });
 
                 if (payButton) {
                     payButton.disabled = false;

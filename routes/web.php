@@ -37,6 +37,7 @@ Route::prefix('backoffice')->group(function () {
         Route::get('/daftar_pesanan', [BackofficeOrderController::class, 'indexPage']);
         Route::patch('/daftar_pesanan/{id}/status', [BackofficeOrderController::class, 'updateStatusPage']);
         Route::get('/pembayaran', [BackofficePaymentController::class, 'indexPage']);
+        Route::delete('/pembayaran/{id}', [BackofficePaymentController::class, 'delete']);
         Route::get('/pengguna', [BackofficeUserController::class, 'indexPage']);
         Route::get('/kelola_meja', [BackofficeTableController::class, 'indexPage']);
         Route::get('/daftar_meja', [BackofficeTableController::class, 'indexPage']);

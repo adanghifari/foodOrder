@@ -26,9 +26,12 @@ class PaymentController extends Controller
                     'tableNumber' => (int) ($order->table_number ?? 0),
                     'orderStatus' => (string) ($order->status ?? 'UNKNOWN'),
                     'paymentStatus' => $paymentStatus,
+                    'paymentType' => (string) ($order->payment_type ?? ''),
+                    'paymentPayload' => is_array($order->payment_payload) ? $order->payment_payload : [],
                     'totalPrice' => (float) ($order->total_price ?? 0),
                     'items' => is_array($order->items) ? $order->items : [],
                     'createdAt' => optional($order->created_at)?->toDateTimeString(),
+                    'paidAt' => optional($order->paid_at)?->toDateTimeString(),
                 ];
             })
             ->values();
@@ -52,5 +55,19 @@ class PaymentController extends Controller
             'summary' => $summary,
             'selectedPayment' => $selectedPayment,
         ]);
+    }
+
+    public function delete(string $id)
+    {
+        $order = Order::find($id);
+
+        if (!$order) {
+            return redirect('/backoffice/pembayaran')->with('error', 'Data pembayaran tidak ditemukan.');
+        }
+
+        $displayId = 'ORD-' . strtoupper(substr((string) $order->_id, -6));
+        $order->delete();
+
+        return redirect('/backoffice/pembayaran')->with('success', 'Data pembayaran ' . $displayId . ' berhasil dihapus.');
     }
 }

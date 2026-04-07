@@ -133,12 +133,23 @@
         function prosesBayar() {
             const cart = JSON.parse(localStorage.getItem('kedaiKlikCart')) || [];
             if (cart.length === 0) {
-                alert("Pilih menu dulu ya!");
+                const message = document.createElement('div');
+                message.className = 'fixed top-4 left-1/2 -translate-x-1/2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700 shadow-lg';
+                message.textContent = 'Pilih menu dulu ya!';
+                document.body.appendChild(message);
+                window.setTimeout(function () {
+                    message.remove();
+                }, 1800);
                 return;
             }
-            alert("Terima kasih! Pesanan kamu sedang diproses.");
+            const message = document.createElement('div');
+            message.className = 'fixed top-4 left-1/2 -translate-x-1/2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700 shadow-lg';
+            message.textContent = 'Terima kasih! Pesanan kamu sedang diproses.';
+            document.body.appendChild(message);
             localStorage.removeItem('kedaiKlikCart'); // Kosongkan keranjang setelah bayar
-            window.location.href = '/menu/hidangan';
+            window.setTimeout(function () {
+                window.location.href = '/menu/hidangan';
+            }, 1200);
         }
 
         // Jalankan saat halaman dimuat
