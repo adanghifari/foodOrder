@@ -39,98 +39,129 @@
 						<option value="default">Sort by: Terbaru</option>
 						<option value="total-asc">Total Termurah</option>
 						<option value="total-desc">Total Termahal</option>
+						<option value="status-asc">Status A-Z</option>
+						<option value="status-desc">Status Z-A</option>
 					</select>
 				</div>
 			</div>
 		</article>
 
-		<section id="payment-grid" class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-			@forelse (($payments ?? []) as $payment)
-				@php
-					$paymentStatus = strtoupper((string) ($payment['paymentStatus'] ?? 'PENDING'));
-					$isPaid = in_array($paymentStatus, ['PAID', 'SUCCESS'], true);
-					$isFailed = in_array($paymentStatus, ['FAILED', 'CANCELED', 'EXPIRED'], true);
+		<section class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+			<div class="overflow-x-auto">
+				<table class="w-full min-w-[980px] text-left">
+					<thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+						<tr>
+							<th class="px-4 py-3 font-bold">Order ID</th>
+							<th class="px-4 py-3 font-bold">Nama</th>
+							<th class="px-4 py-3 font-bold">Email</th>
+							<th class="px-4 py-3 font-bold">No Meja</th>
+							<th class="px-4 py-3 font-bold">Status</th>
+							<th class="px-4 py-3 font-bold">Total Bayar</th>
+							<th class="px-4 py-3 font-bold">Aksi</th>
+						</tr>
+					</thead>
+					<tbody id="payment-table-body" class="divide-y divide-slate-200">
+						@forelse (($payments ?? []) as $payment)
+							@php
+								$paymentStatus = strtoupper((string) ($payment['paymentStatus'] ?? 'PENDING'));
+								$isPaid = in_array($paymentStatus, ['PAID', 'SUCCESS'], true);
+								$isFailed = in_array($paymentStatus, ['FAILED', 'CANCELED', 'EXPIRED'], true);
 
-					$statusFamily = $isPaid ? 'paid' : ($isFailed ? 'failed' : 'pending');
+								$statusFamily = $isPaid ? 'paid' : ($isFailed ? 'failed' : 'pending');
 
-					$paymentStatusLabel = $isPaid
-						? 'Lunas'
-						: ($isFailed ? 'Gagal' : 'Menunggu');
+								$paymentStatusLabel = $isPaid
+									? 'Lunas'
+									: ($isFailed ? 'Gagal' : 'Menunggu');
 
-					$paymentBadgeClass = $isPaid
-						? 'bg-emerald-100 text-emerald-700'
-						: ($isFailed ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700');
-				@endphp
+								$paymentBadgeClass = $isPaid
+									? 'bg-emerald-100 text-emerald-700'
+									: ($isFailed ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700');
+							@endphp
+							<tr
+								class="payment-row"
+								data-order-id="{{ strtolower((string) ($payment['displayId'] ?? '')) }}"
+								data-customer="{{ strtolower((string) ($payment['customerName'] ?? '')) }}"
+								data-email="{{ strtolower((string) ($payment['customerEmail'] ?? '')) }}"
+								data-status-family="{{ $statusFamily }}"
+								data-total="{{ (float) ($payment['totalPrice'] ?? 0) }}"
+							>
+								<td class="px-4 py-3 text-sm font-extrabold text-[var(--rich-black)]">{{ $payment['displayId'] ?? '-' }}</td>
+								<td class="px-4 py-3 text-sm font-semibold text-slate-800">{{ $payment['customerName'] ?? '-' }}</td>
+								<td class="px-4 py-3 text-sm text-slate-700">{{ $payment['customerEmail'] ?? '-' }}</td>
+								<td class="px-4 py-3 text-sm text-slate-700">{{ (int) ($payment['tableNumber'] ?? 0) }}</td>
+								<td class="px-4 py-3">
+									<span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $paymentBadgeClass }}">{{ $paymentStatusLabel }}</span>
+								</td>
+								<td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format((float) ($payment['totalPrice'] ?? 0), 0, ',', '.') }}</td>
+								<td class="px-4 py-3">
+									<div class="flex items-center gap-2">
+										<a href="/backoffice/pembayaran?detail={{ urlencode((string) ($payment['orderId'] ?? '')) }}" class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
+										<form
+											method="POST"
+											action="/backoffice/pembayaran/{{ urlencode((string) ($payment['orderId'] ?? '')) }}"
+											data-notify-confirm
+											data-confirm-type="warning"
+											data-confirm-badge="Hapus Data"
+											data-confirm-title="Hapus pembayaran?"
+											data-confirm-message="Data pembayaran {{ $payment['displayId'] ?? '-' }} akan dihapus permanen."
+											data-confirm-button="Ya, hapus"
+											data-cancel-button="Batal"
+										>
+											@csrf
+											@method('DELETE')
+											<button type="submit" aria-label="Hapus pembayaran" title="Hapus pembayaran" class="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 p-2 transition">
+												<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+													<path d="M3 6h18"/>
+													<path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/>
+													<path d="M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6"/>
+													<path d="M10 11v6"/>
+													<path d="M14 11v6"/>
+												</svg>
+											</button>
+										</form>
+									</div>
+								</td>
+							</tr>
+						@empty
+							<tr>
+								<td colspan="7" class="px-4 py-10 text-center text-sm font-semibold text-slate-500">Belum ada data pembayaran.</td>
+							</tr>
+						@endforelse
+					</tbody>
+				</table>
+			</div>
 
-				<article
-					class="payment-card rounded-2xl border border-slate-200 bg-white shadow-sm p-4 md:p-5"
-					data-order-id="{{ strtolower((string) ($payment['displayId'] ?? '')) }}"
-					data-customer="{{ strtolower((string) ($payment['customerName'] ?? '')) }}"
-					data-email="{{ strtolower((string) ($payment['customerEmail'] ?? '')) }}"
-					data-status-family="{{ $statusFamily }}"
-					data-total="{{ (float) ($payment['totalPrice'] ?? 0) }}"
-				>
-					<div class="flex items-start justify-between gap-3">
-						<div>
-							<h3 class="text-base font-extrabold text-[var(--rich-black)]">{{ $payment['displayId'] ?? '-' }}</h3>
-							<p class="text-xs text-slate-500">Nama: <span class="font-semibold text-slate-700">{{ $payment['customerName'] ?? '-' }}</span></p>
-							<p class="text-xs text-slate-500 mt-0.5">Email: <span class="font-semibold text-slate-700">{{ $payment['customerEmail'] ?? '-' }}</span></p>
-						</div>
-						<span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $paymentBadgeClass }}">{{ $paymentStatusLabel }}</span>
-					</div>
-
-					<div class="mt-3 grid grid-cols-1 gap-2">
-						<div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-							<p class="text-[11px] text-slate-500 font-bold uppercase">No Meja</p>
-							<p class="text-sm font-extrabold text-slate-700">{{ (int) ($payment['tableNumber'] ?? 0) }}</p>
-						</div>
-					</div>
-
-					<div class="mt-3 flex items-center justify-between border-t border-slate-200 pt-3">
-						<div>
-							<p class="text-xs text-slate-500">Total Bayar</p>
-							<p class="text-base font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format((float) ($payment['totalPrice'] ?? 0), 0, ',', '.') }}</p>
-						</div>
-						<a href="/backoffice/pembayaran?detail={{ urlencode((string) ($payment['orderId'] ?? '')) }}" class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
-					</div>
-				</article>
-			@empty
-				<article class="xl:col-span-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-					<p class="text-sm font-semibold text-slate-500">Belum ada data pembayaran.</p>
-				</article>
-			@endforelse
-
-			<article id="payment-filter-empty" class="hidden xl:col-span-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+			<div id="payment-filter-empty" class="hidden px-4 py-8 text-center border-t border-slate-200">
 				<p class="text-sm font-semibold text-slate-500">Data pembayaran tidak ditemukan untuk filter ini.</p>
-			</article>
+			</div>
 		</section>
 	</section>
 
 	<script>
 		(function () {
-			const grid = document.getElementById('payment-grid');
+			const tableBody = document.getElementById('payment-table-body');
 			const searchInput = document.getElementById('payment-search');
 			const sortSelect = document.getElementById('payment-sort');
 			const tabs = Array.from(document.querySelectorAll('.payment-status-tab'));
 			const emptyState = document.getElementById('payment-filter-empty');
 
-			if (!grid) {
+			if (!tableBody) {
 				return;
 			}
 
-			const cards = Array.from(grid.querySelectorAll('.payment-card'));
-			if (cards.length === 0) {
+			const rows = Array.from(tableBody.querySelectorAll('.payment-row'));
+			if (rows.length === 0) {
 				return;
 			}
 
-			const baseOrder = new Map(cards.map((card, index) => [card, index]));
+			const baseOrder = new Map(rows.map((row, index) => [row, index]));
 			let activeStatus = 'all';
 
 			function normalize(text) {
 				return String(text || '').toLowerCase().trim();
 			}
 
-			function sortCards(list) {
+			function sortRows(list) {
 				const mode = sortSelect ? sortSelect.value : 'default';
 
 				if (mode === 'default') {
@@ -145,17 +176,25 @@
 					return list.sort((a, b) => Number(b.dataset.total || 0) - Number(a.dataset.total || 0));
 				}
 
+				if (mode === 'status-asc') {
+					return list.sort((a, b) => normalize(a.dataset.statusFamily).localeCompare(normalize(b.dataset.statusFamily)));
+				}
+
+				if (mode === 'status-desc') {
+					return list.sort((a, b) => normalize(b.dataset.statusFamily).localeCompare(normalize(a.dataset.statusFamily)));
+				}
+
 				return list;
 			}
 
 			function applyFilters() {
 				const keyword = normalize(searchInput ? searchInput.value : '');
 
-				let visible = cards.filter(function (card) {
-					const orderId = normalize(card.dataset.orderId);
-					const customer = normalize(card.dataset.customer);
-					const email = normalize(card.dataset.email);
-					const status = normalize(card.dataset.statusFamily);
+				let visible = rows.filter(function (row) {
+					const orderId = normalize(row.dataset.orderId);
+					const customer = normalize(row.dataset.customer);
+					const email = normalize(row.dataset.email);
+					const status = normalize(row.dataset.statusFamily);
 
 					const bySearch = keyword === '' || orderId.includes(keyword) || customer.includes(keyword) || email.includes(keyword);
 					const byStatus = activeStatus === 'all' || status === activeStatus;
@@ -163,15 +202,15 @@
 					return bySearch && byStatus;
 				});
 
-				visible = sortCards(visible);
+				visible = sortRows(visible);
 
-				cards.forEach(function (card) {
-					card.classList.add('hidden');
+				rows.forEach(function (row) {
+					row.classList.add('hidden');
 				});
 
-				visible.forEach(function (card) {
-					card.classList.remove('hidden');
-					grid.appendChild(card);
+				visible.forEach(function (row) {
+					row.classList.remove('hidden');
+					tableBody.appendChild(row);
 				});
 
 				if (emptyState) {
@@ -209,69 +248,5 @@
 		})();
 	</script>
 
-	@if (!empty($selectedPayment))
-		@php
-			$modalStatus = strtoupper((string) ($selectedPayment['paymentStatus'] ?? 'PENDING'));
-			$modalStatusLabel = in_array($modalStatus, ['PAID', 'SUCCESS'], true)
-				? 'Lunas'
-				: (in_array($modalStatus, ['FAILED', 'CANCELED', 'EXPIRED'], true) ? 'Gagal' : 'Menunggu');
-		@endphp
-
-		<div class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"></div>
-		<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-			<div class="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
-				<div class="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-3">
-					<div>
-						<h3 class="text-lg font-extrabold text-[var(--rich-black)]">Detail Pembayaran</h3>
-						<p class="text-sm font-semibold text-slate-500">{{ $selectedPayment['displayId'] ?? '-' }}</p>
-					</div>
-					<a href="/backoffice/pembayaran" class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold px-3 py-1.5 transition">Tutup</a>
-				</div>
-
-				<div class="p-5 space-y-4 max-h-[72vh] overflow-y-auto">
-					<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-						<div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-							<p class="text-xs font-bold uppercase tracking-wide text-slate-500">Nama Pemesan</p>
-							<p class="mt-1 text-sm font-semibold text-slate-700">{{ $selectedPayment['customerName'] ?? '-' }}</p>
-						</div>
-						<div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-							<p class="text-xs font-bold uppercase tracking-wide text-slate-500">Email</p>
-							<p class="mt-1 text-sm font-semibold text-slate-700">{{ $selectedPayment['customerEmail'] ?? '-' }}</p>
-						</div>
-						<div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-							<p class="text-xs font-bold uppercase tracking-wide text-slate-500">Status Pembayaran</p>
-							<p class="mt-1 text-sm font-semibold text-slate-700">{{ $modalStatusLabel }}</p>
-						</div>
-						<div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-							<p class="text-xs font-bold uppercase tracking-wide text-slate-500">Status Pesanan</p>
-							<p class="mt-1 text-sm font-semibold text-slate-700">{{ str_replace('_', ' ', (string) ($selectedPayment['orderStatus'] ?? '-')) }}</p>
-						</div>
-					</div>
-
-					<div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-						<p class="text-xs font-bold uppercase tracking-wide text-slate-500">Rincian Item</p>
-						<ul class="mt-2 space-y-2">
-							@forelse (($selectedPayment['items'] ?? []) as $item)
-								@php
-									$itemName = is_array($item) ? ($item['name'] ?? '-') : (is_object($item) ? ($item->name ?? '-') : '-');
-									$itemPrice = is_array($item) ? ($item['price'] ?? 0) : (is_object($item) ? ($item->price ?? 0) : 0);
-								@endphp
-								<li class="flex items-center justify-between text-sm text-slate-700 gap-3">
-									<span class="font-semibold">{{ $itemName }}</span>
-									<span>Rp {{ number_format((float) $itemPrice, 0, ',', '.') }}</span>
-								</li>
-							@empty
-								<li class="text-sm text-slate-500">Tidak ada item.</li>
-							@endforelse
-						</ul>
-					</div>
-
-					<div class="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
-						<p class="text-sm text-slate-500">Total Pembayaran</p>
-						<p class="text-base font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format((float) ($selectedPayment['totalPrice'] ?? 0), 0, ',', '.') }}</p>
-					</div>
-				</div>
-			</div>
-		</div>
-	@endif
+	@include('backoffice.payment.detail.detail', ['selectedPayment' => $selectedPayment])
 </x-backoffice.layout>

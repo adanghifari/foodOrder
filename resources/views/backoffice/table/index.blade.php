@@ -8,29 +8,6 @@
                 <a href="/backoffice/daftar_pesanan" class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold px-3.5 py-2 transition">Lihat Kelola Pesanan</a>
             </div>
 
-            @if (session('success'))
-                <div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
-                    {{ session('success') }}
-                </div>
-            @endif
-
-            @if (session('error'))
-                <div class="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-                    {{ session('error') }}
-                </div>
-            @endif
-
-            @if ($errors->any())
-                <div class="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    <p class="font-bold">Validasi gagal:</p>
-                    <ul class="mt-1 list-disc pl-5">
-                        @foreach ($errors->all() as $error)
-                            <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
-            @endif
-
             <div class="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <div class="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
                     <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Total Meja</p>

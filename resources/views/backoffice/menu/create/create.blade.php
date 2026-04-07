@@ -11,17 +11,6 @@
     scrollableBody="true"
     bodyMaxHeightClass="max-h-[58vh]"
 >
-    @if ($errors->any())
-        <div class="md:col-span-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <p class="font-semibold mb-1">Periksa input berikut:</p>
-            <ul class="list-disc pl-5 space-y-0.5">
-                @foreach ($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
-        </div>
-    @endif
-
     <form id="create-menu-form" action="/backoffice/daftar_menu" method="POST" enctype="multipart/form-data" class="contents">
         @csrf
 

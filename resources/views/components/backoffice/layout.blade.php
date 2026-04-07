@@ -133,6 +133,8 @@
         </div>
     </div>
 
+    <x-notification-center />
+
     <script>
         const sidebar = document.getElementById('bo-sidebar');
         const sidebarToggle = document.getElementById('bo-sidebar-toggle');
