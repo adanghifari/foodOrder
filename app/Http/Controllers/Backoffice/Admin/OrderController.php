@@ -20,6 +20,9 @@ class OrderController extends Controller
 	{
 		$orders = collect($this->orderService->adminList())
 			->filter(function ($order) {
+				return empty($order['orderDeletedAt']);
+			})
+			->filter(function ($order) {
 				return in_array(strtoupper((string) ($order['paymentStatus'] ?? '')), self::PAID_STATUSES, true);
 			})
 			->values();
@@ -62,6 +65,26 @@ class OrderController extends Controller
 		}
 
 		return redirect()->back()->with('success', 'Status order berhasil diperbarui.');
+	}
+
+	public function deletePage(string $id)
+	{
+		$order = \App\Models\Order::find($id);
+
+		if (!$order) {
+			return redirect('/backoffice/daftar_pesanan')->with('error', 'Order tidak ditemukan.');
+		}
+
+		$order->update([
+			'order_deleted_at' => now(),
+		]);
+
+		$displayId = 'ORD-' . strtoupper(substr((string) $order->_id, -6));
+
+		return redirect('/backoffice/daftar_pesanan')->with(
+			'success',
+			'Order ' . $displayId . ' berhasil dihapus dari daftar pesanan. Riwayat pembayaran tetap tersimpan.'
+		);
 	}
 
 	public function list()

@@ -24,6 +24,7 @@ class Order extends Model
         'paid_at',
         'delivered_at',
         'table_cleared_at',
+        'order_deleted_at',
         'queue_number',
         'status',
         'total_price',

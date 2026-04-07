@@ -186,6 +186,8 @@ class OrderService
             'tableNumber' => $order->table_number,
             'status' => $order->status,
             'paymentStatus' => $order->payment_status,
+            'paidAt' => optional($order->paid_at)?->toDateTimeString(),
+            'orderDeletedAt' => optional($order->order_deleted_at)?->toDateTimeString(),
             'queueNumber' => $order->queue_number,
             'totalPrice' => $order->total_price,
             'items' => $itemsResponse,
