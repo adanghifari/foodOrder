@@ -8,9 +8,11 @@ use App\Http\Controllers\Backoffice\Admin\MenuController as BackofficeMenuContro
 use App\Http\Controllers\Backoffice\Admin\OrderController as BackofficeOrderController;
 use App\Http\Controllers\Backoffice\Admin\PaymentController as BackofficePaymentController;
 use App\Http\Controllers\Backoffice\Admin\UserController as BackofficeUserController;
+use App\Http\Controllers\Backoffice\Admin\TableController as BackofficeTableController;
 use App\Http\Controllers\Frontliner\Web\MenuController as FrontlinerMenuController;
 use App\Http\Controllers\Frontliner\Web\PaymentController as FrontlinerPaymentController;
 use App\Http\Controllers\Frontliner\Web\QrScanController as FrontlinerQrScanController;
+
 
 Route::redirect('/', '/frontliner');
 
@@ -36,6 +38,10 @@ Route::prefix('backoffice')->group(function () {
         Route::patch('/daftar_pesanan/{id}/status', [BackofficeOrderController::class, 'updateStatusPage']);
         Route::get('/pembayaran', [BackofficePaymentController::class, 'indexPage']);
         Route::get('/pengguna', [BackofficeUserController::class, 'indexPage']);
+        Route::get('/kelola_meja', [BackofficeTableController::class, 'indexPage']);
+        Route::get('/daftar_meja', [BackofficeTableController::class, 'indexPage']);
+        Route::patch('/kelola_meja/assign', [BackofficeTableController::class, 'assignPage']);
+        Route::patch('/daftar_meja/assign', [BackofficeTableController::class, 'assignPage']);
     });
 });
 

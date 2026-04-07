@@ -30,7 +30,7 @@
             <span class="sidebar-label">Kelola Pesanan</span>
         </a>
 
-        <a href="/backoffice/dashboard#table-panel" class="sidebar-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition text-[#6A2B09] hover:bg-white/45">
+        <a href="/backoffice/kelola_meja" class="sidebar-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition text-[#6A2B09] hover:bg-white/45">
             <svg xmlns="http://www.w3.org/2000/svg" class="sidebar-icon w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 4v16"/></svg>
             <span class="sidebar-label">Kelola Meja</span>
         </a>

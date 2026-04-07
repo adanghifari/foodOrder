@@ -4,7 +4,6 @@
             <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
                     <h2 class="text-xl md:text-2xl font-extrabold text-[var(--rich-black)]">Kelola Meja</h2>
-                    <p class="mt-1 text-sm text-slate-600">Pindahkan customer ke meja lain saat meja tujuan masih tersedia.</p>
                 </div>
                 <a href="/backoffice/daftar_pesanan" class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold px-3.5 py-2 transition">Lihat Kelola Pesanan</a>
             </div>
