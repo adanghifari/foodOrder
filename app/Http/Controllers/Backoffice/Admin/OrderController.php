@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Backoffice\Admin;
 use App\Http\Controllers\Controller;
 use App\Domains\Order\Services\OrderService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Validator;
 
 class OrderController extends Controller
@@ -26,6 +27,31 @@ class OrderController extends Controller
 				return in_array(strtoupper((string) ($order['paymentStatus'] ?? '')), self::PAID_STATUSES, true);
 			})
 			->values();
+
+		$businessTimezone = 'Asia/Jakarta';
+		$todayStart = Carbon::now($businessTimezone)->startOfDay();
+		$todayEnd = Carbon::now($businessTimezone)->endOfDay();
+
+		$todayOrders = $orders->filter(function ($order) use ($todayStart, $todayEnd, $businessTimezone) {
+			$paidAt = (string) ($order['paidAt'] ?? '');
+
+			if ($paidAt === '') {
+				return false;
+			}
+
+			try {
+				$paidAtDate = Carbon::parse($paidAt)->setTimezone($businessTimezone);
+			} catch (\Throwable $exception) {
+				return false;
+			}
+
+			return $paidAtDate->between($todayStart, $todayEnd);
+		})->values();
+
+		$previousOrders = $orders->reject(function ($order) use ($todayOrders) {
+			return $todayOrders->contains('orderId', (string) ($order['orderId'] ?? ''));
+		})->values();
+
 		$detailOrderId = request()->query('detail');
 		$selectedOrder = null;
 
@@ -34,17 +60,19 @@ class OrderController extends Controller
 		}
 
 		$summary = [
-			'total' => $orders->count(),
-			'waiting' => $orders->whereIn('status', ['CONFIRMED', 'IN_QUEUE'])->count(),
-			'processing' => $orders->where('status', 'IN_PROGRESS')->count(),
-			'delivered' => $orders->where('status', 'DELIVERED')->count(),
+			'total' => $todayOrders->count(),
+			'waiting' => $todayOrders->whereIn('status', ['CONFIRMED', 'IN_QUEUE'])->count(),
+			'processing' => $todayOrders->where('status', 'IN_PROGRESS')->count(),
+			'delivered' => $todayOrders->where('status', 'DELIVERED')->count(),
 		];
 
 		return view('backoffice.order.index', [
-			'orders' => $orders,
+			'todayOrders' => $todayOrders,
+			'previousOrders' => $previousOrders,
 			'summary' => $summary,
 			'selectedOrder' => $selectedOrder,
 			'statusOptions' => $this->allowedStatuses,
+			'businessDateLabel' => $todayStart->translatedFormat('d M Y'),
 		]);
 	}
 

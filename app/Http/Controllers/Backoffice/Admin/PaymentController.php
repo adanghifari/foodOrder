@@ -4,15 +4,13 @@ namespace App\Http\Controllers\Backoffice\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use Illuminate\Support\Carbon;
 
 class PaymentController extends Controller
 {
-    private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
-
     public function indexPage()
     {
         $payments = Order::with('customer')
-            ->whereIn('payment_status', self::PAID_STATUSES)
             ->orderBy('_id', 'desc')
             ->get()
             ->map(function (Order $order) {
@@ -35,15 +33,42 @@ class PaymentController extends Controller
                     'items' => is_array($order->items) ? $order->items : [],
                     'createdAt' => optional($order->created_at)?->toDateTimeString(),
                     'paidAt' => optional($order->paid_at)?->toDateTimeString(),
+                    'effectiveAt' => optional($order->paid_at ?? $order->created_at)?->toDateTimeString(),
                 ];
             })
             ->values();
 
+        $businessTimezone = 'Asia/Jakarta';
+        $todayStart = Carbon::now($businessTimezone)->startOfDay();
+        $todayEnd = Carbon::now($businessTimezone)->endOfDay();
+
+        $todayPayments = $payments->filter(function ($payment) use ($todayStart, $todayEnd, $businessTimezone) {
+            $effectiveAt = (string) ($payment['effectiveAt'] ?? '');
+
+            if ($effectiveAt === '') {
+                return false;
+            }
+
+            try {
+                $effectiveAtDate = Carbon::parse($effectiveAt)->setTimezone($businessTimezone);
+            } catch (\Throwable $exception) {
+                return false;
+            }
+
+            return $effectiveAtDate->between($todayStart, $todayEnd);
+        })->values();
+
+        $previousPayments = $payments->reject(function ($payment) use ($todayPayments) {
+            return $todayPayments->contains('orderId', (string) ($payment['orderId'] ?? ''));
+        })->values();
+
         $summary = [
-            'total' => $payments->count(),
-            'revenue' => (float) $payments->sum('totalPrice'),
-            'average' => (float) ($payments->count() > 0 ? ($payments->sum('totalPrice') / $payments->count()) : 0),
-            'tables' => $payments->pluck('tableNumber')->filter(fn ($tableNumber) => (int) $tableNumber > 0)->unique()->count(),
+            'total' => $todayPayments->count(),
+            'paid' => $todayPayments->whereIn('paymentStatus', ['PAID', 'SUCCESS', 'SETTLEMENT'])->count(),
+            'pending' => $todayPayments->whereIn('paymentStatus', ['PENDING', 'UNPAID'])->count(),
+            'failed' => $todayPayments->filter(function ($payment) {
+                return in_array(strtoupper((string) ($payment['paymentStatus'] ?? '')), ['FAILED', 'DENY', 'CANCELED', 'CANCEL', 'EXPIRED', 'EXPIRE'], true);
+            })->count(),
         ];
 
         $detailOrderId = request()->query('detail');
@@ -54,9 +79,11 @@ class PaymentController extends Controller
         }
 
         return view('backoffice.payment.index', [
-            'payments' => $payments,
+            'todayPayments' => $todayPayments,
+            'previousPayments' => $previousPayments,
             'summary' => $summary,
             'selectedPayment' => $selectedPayment,
+            'businessDateLabel' => $todayStart->translatedFormat('d M Y'),
         ]);
     }
 
