@@ -1,59 +1,208 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# ♨️ KedaiKlik Food Order System
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+KedaiKlik adalah aplikasi pemesanan makanan berbasis Laravel untuk skenario dine-in (makan di tempat) yang mencakup:
+- Frontliner web flow (scan meja, pilih menu, keranjang, checkout, struk)
+- Backoffice admin (dashboard, kelola menu, pesanan, pembayaran, pengguna, meja)
+- REST API untuk integrasi mobile/client
+- Integrasi Midtrans untuk pembayaran
+- MongoDB sebagai database utama
 
-## About Laravel
+## 📌 Project Overview
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+KedaiKlik menggunakan struktur domain-based agar logika bisnis lebih terorganisir. Domain utama di proyek ini:
+- Auth
+- Cart
+- Menu
+- Order
+- Payment
+- Table
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Aplikasi menyediakan 3 jalur utama:
+- Web Backoffice: `/backoffice`
+- Web Frontliner: `/menu`, `/keranjang`, `/frontliner/pembayaran/*`
+- REST API v1: `/api/v1/*`
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## ✨ Main Features
 
-## Learning Laravel
+- Login backoffice berbasis session untuk role ADMIN
+- CRUD menu termasuk upload/hapus gambar menu
+- Manajemen pesanan dan update status order
+- Manajemen pembayaran dan webhook Midtrans
+- Role-based API auth (ADMIN, CUSTOMER) menggunakan JWT
+- Table session handling untuk flow dine-in
+- UI backoffice dan frontliner berbasis Blade + Tailwind
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+## 🛠️ Tech Stack
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- Backend Framework: Laravel 12
+- Bahasa: PHP 8.2+
+- Database: MongoDB
+- API Auth: JWT (`php-open-source-saver/jwt-auth`)
+- MongoDB Driver: `mongodb/laravel-mongodb`
+- Payment Gateway: Midtrans (`midtrans/midtrans-php`)
+- Frontend: Blade-laravel
+- Styling: Tailwind CSS v4
+- HTTP Client: Axios
+- Testing: PHPUnit
 
-## Laravel Sponsors
+## ✅ Requirements
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Pastikan environment lokal memiliki:
+- PHP `>= 8.2`
+- Composer `>= 2.x`
+- Node.js `>= 18` (disarankan LTS)
+- npm `>= 9`
+- MongoDB
+- Git
 
-### Premium Partners
+## ⚡ Quick Start
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+### 5.1 Clone Repository and Install Dependencies
 
-## Contributing
+```bash
+git clone https://github.com/adanghifari/foodOrder.git
+cd foodOrder
+composer install
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### 5.2 Setup Environment File
 
-## Code of Conduct
+```bash
+cp .env.example .env
+php artisan key:generate
+php artisan jwt:secret
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### 5.3 Set MongoDB Database in `.env`
 
-## Security Vulnerabilities
+Minimal konfigurasi:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```env
+DB_CONNECTION=mongodb
+DB_HOST=127.0.0.1
+DB_PORT=27017
+DB_DATABASE=foodOrder_db
+DB_USERNAME=
+DB_PASSWORD=
+```
 
-## License
+### 5.4 Configure Midtrans (Sandbox)
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```env
+MIDTRANS_IS_PRODUCTION=false
+MIDTRANS_SERVER_KEY=SB-Mid-server-xxxx
+MIDTRANS_CLIENT_KEY=SB-Mid-client-xxxx
+MIDTRANS_MERCHANT_ID=Gxxxx
+MIDTRANS_CALLBACK_URL=http://127.0.0.1:8000/api/v1/payments/webhook
+MIDTRANS_FINISH_REDIRECT_URL=http://127.0.0.1:8000/frontliner/pembayaran/selesai
+```
+
+### 5.5 Create Symbolic Link for Upload Files
+
+```bash
+php artisan storage:link
+```
+
+### 5.6 Run Application (Quick Option)
+
+```bash
+composer run dev
+```
+
+Perintah di atas menjalankan:
+- Laravel server
+- Queue listener
+- Log watcher
+- Vite dev server
+
+### 5.7 Run Application 
+
+```bash
+php artisan serve
+```
+
+Akses aplikasi:
+- Frontliner: `http://127.0.0.1:8000/frontliner`
+- Backoffice Login: `http://127.0.0.1:8000/backoffice/login`
+- API base: `http://127.0.0.1:8000/api/v1`
+
+## 🔐 Important ENV Configuration
+
+Selain DB, beberapa variabel penting di `.env`:
+
+```env
+APP_NAME=Laravel
+APP_ENV=local
+APP_DEBUG=true
+APP_URL=http://localhost
+
+FILESYSTEM_DISK=local
+QUEUE_CONNECTION=sync
+SESSION_DRIVER=file
+
+JWT_SECRET=
+JWT_TTL=60
+
+MIDTRANS_IS_PRODUCTION=false
+MIDTRANS_SERVER_KEY=
+MIDTRANS_CLIENT_KEY=
+MIDTRANS_MERCHANT_ID=
+MIDTRANS_CALLBACK_URL=
+MIDTRANS_FINISH_REDIRECT_URL=
+```
+
+## 🧭 Main Route Structure
+
+### Web Routes
+- `/backoffice/*` untuk panel admin
+- `/menu` untuk halaman menu customer
+- `/keranjang` untuk keranjang customer
+- `/frontliner/pembayaran/struk` untuk struk pembayaran
+
+### API Routes (v1)
+- `/api/v1/auth/*`
+- `/api/v1/menus/*`
+- `/api/v1/cart/*`
+- `/api/v1/orders/*`
+- `/api/v1/payments/*`
+- `/api/v1/overview/*`
+
+## 🗄️ Database and Schema Notes
+
+- Proyek menggunakan MongoDB Eloquent model dari package `mongodb/laravel-mongodb`
+- Koleksi penting mencakup `users`, `menu_item`, dan koleksi terkait order/payment
+- Tersedia command custom untuk validator schema menu:
+
+```bash
+php artisan mongo:ensure-menu-schema
+```
+
+## 🔑 Authentication and Roles
+
+Role yang digunakan:
+- ADMIN
+- CUSTOMER
+
+Backoffice auth:
+- Login admin melalui `/backoffice/login`
+- Proteksi panel menggunakan session (`backoffice_is_admin`)
+
+API auth:
+- Register customer: `POST /api/v1/auth/register`
+- Login: `POST /api/v1/auth/login`
+- Protected route menggunakan middleware `auth:api`
+- Otorisasi role menggunakan middleware role (`ADMIN`/`CUSTOMER`)
+
+## 🧪 Testing
+
+Jalankan test:
+
+```bash
+php artisan test
+```
+
+atau:
+
+```bash
+composer test
+```
