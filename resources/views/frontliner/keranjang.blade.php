@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>KedaiKlik - Pesanan Saya</title>
+    <link rel="icon" type="image/png" href="/images/KedaiKlikLogo.png">
+    <link rel="apple-touch-icon" href="/images/KedaiKlikLogo.png">
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 flex justify-center">
@@ -62,7 +64,7 @@
             <a href="/menu" class="flex-1 text-center py-4 rounded-xl border-2 border-[#C8641E] text-[#C8641E] font-bold hover:bg-orange-50 transition">
                 Tambah Item
             </a>
-            <button id="bayar-button" onclick="prosesBayar()" class="flex-1 py-4 rounded-xl bg-[#C19A6B] text-white font-bold shadow-lg hover:bg-[#b0895a] transition">
+            <button id="bayar-button" onclick="prosesBayar()" class="flex-1 py-4 rounded-xl bg-[#C8641E] text-white font-bold shadow-lg hover:bg-[#A85318] transition">
                 Bayar
             </button>
         </div>

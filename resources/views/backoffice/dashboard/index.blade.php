@@ -50,18 +50,17 @@
             <article class="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 md:p-6">
                 <h2 class="text-lg font-extrabold text-[var(--rich-black)] mb-4">Aksi Cepat</h2>
                 <div class="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-1 gap-3">
-                    <a href="/backoffice/daftar_menu" class="text-center rounded-xl bg-[var(--alloy-orange)] hover:bg-[var(--philippine-bronze)] text-white font-bold py-3 transition shadow-sm">Edit Menu</a>
-                    <a href="/backoffice/daftar_menu" class="text-center rounded-xl bg-[var(--rajah)] hover:brightness-95 text-[var(--philippine-bronze)] font-bold py-3 transition shadow-sm">Kelola Menu</a>
-                    <a href="/backoffice/daftar_pesanan" class="text-center rounded-xl bg-[var(--auro-metal-saurus)] hover:brightness-95 text-white font-bold py-3 transition shadow-sm">Lihat Pesanan</a>
-                    <a href="/backoffice/dashboard#table-panel" class="text-center rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-3 transition shadow-sm">Kelola Meja</a>
+                    <a href="/backoffice/daftar_menu" class="text-center rounded-xl bg-[var(--alloy-orange)] hover:bg-[var(--philippine-bronze)] text-white font-bold py-3 transition shadow-sm">Kelola Menu</a>
+                    <a href="/backoffice/daftar_pesanan" class="text-center rounded-xl bg-[var(--rajah)] hover:brightness-95 text-[var(--philippine-bronze)] font-bold py-3 transition shadow-sm">Lihat Pesanan</a>
+                    <a href="/backoffice/daftar_meja" class="text-center rounded-xl bg-[var(--auro-metal-saurus)] hover:brightness-95 text-white font-bold py-3 transition shadow-sm">Kelola Meja</a>
                 </div>
             </article>
 
             <article id="payment-panel" class="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 md:p-6">
                 <h2 class="text-lg font-extrabold text-[var(--rich-black)] mb-4">Notifikasi</h2>
                 <div class="space-y-2.5">
-                    <div class="rounded-xl border border-yellow-200 bg-yellow-50 px-3.5 py-3 text-sm text-yellow-800 font-semibold">{{ $notifications['new_paid_orders'] }} pesanan baru masuk (pembayaran sukses)</div>
-                    <div class="rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-800 font-semibold">{{ $notifications['out_of_stock_menus'] }} menu stok habis</div>
+                    <div class="rounded-xl border border-yellow-200 bg-yellow-50 px-3.5 py-3 text-sm text-yellow-800 font-semibold">{{ $notifications['new_paid_orders'] }} Pesanan Baru Masuk (Pembayaran Sukses)</div>
+                    <div class="rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-800 font-semibold">{{ $notifications['out_of_stock_menus'] }} Menu Stok Habis</div>
                 </div>
             </article>
 

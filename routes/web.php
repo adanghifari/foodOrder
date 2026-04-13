@@ -35,6 +35,7 @@ Route::prefix('backoffice')->group(function () {
         Route::get('/daftar_menu/{id}', [BackofficeMenuController::class, 'showPage']);
         Route::get('/daftar_menu/{id}/edit', [BackofficeMenuController::class, 'editPage']);
         Route::put('/daftar_menu/{id}', [BackofficeMenuController::class, 'updatePage']);
+        Route::delete('/daftar_menu/{id}', [BackofficeMenuController::class, 'deletePage']);
         Route::get('/add_menu', [BackofficeMenuController::class, 'createPage']);
         Route::get('/daftar_pesanan', [BackofficeOrderController::class, 'indexPage']);
         Route::patch('/daftar_pesanan/{id}/status', [BackofficeOrderController::class, 'updateStatusPage']);
