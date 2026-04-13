@@ -11,10 +11,10 @@
     'bodyMaxHeightClass' => 'max-h-[44vh]',
 ])
 
-<section class="fixed inset-0 {{ $zIndex }}">
-    <a href="{{ $closeHref }}" class="absolute inset-0 {{ $overlayClass }}" aria-label="Tutup"></a>
+<section class="{{ $zIndex }} fixed top-0 left-0 w-screen h-screen">
+    <a href="{{ $closeHref }}" class="fixed top-0 left-0 w-screen h-screen {{ $overlayClass }}" aria-label="Tutup"></a>
 
-    <div class="relative z-[121] h-full w-full flex items-center justify-center p-4 md:p-5">
+    <div class="relative z-[121] w-screen h-screen flex items-center justify-center p-4 md:p-5">
         <article class="w-full {{ $maxWidth }} rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
             <div class="flex items-center justify-between px-4 py-3.5 border-b border-slate-200">
                 <div>

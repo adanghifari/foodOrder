@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KedaiKlik - Menu</title>
+    <link rel="icon" type="image/png" href="/images/KedaiKlikLogo.png">
+    <link rel="apple-touch-icon" href="/images/KedaiKlikLogo.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Menghilangkan scrollbar tapi fungsi scroll tetap ada */

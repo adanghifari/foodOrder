@@ -141,6 +141,19 @@ class MenuController extends Controller
 		return redirect('/backoffice/daftar_menu')->with('success', 'Menu berhasil diperbarui.');
 	}
 
+	public function deletePage(string $id): RedirectResponse
+	{
+		$item = $this->menuService->findById($id);
+
+		if (!$item) {
+			return redirect('/backoffice/daftar_menu')->with('error', 'Menu tidak ditemukan.');
+		}
+
+		$this->menuService->remove($item);
+
+		return redirect('/backoffice/daftar_menu')->with('success', 'Menu berhasil dihapus.');
+	}
+
 	public function create(Request $request)
 	{
 		$validator = Validator::make($request->all(), [

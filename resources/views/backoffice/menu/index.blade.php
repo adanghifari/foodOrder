@@ -63,6 +63,11 @@
                         <p class="text-sm font-semibold text-[var(--philippine-bronze)]">Rp {{ number_format((float) $menu->price, 0, ',', '.') }}</p>
                         <div class="flex items-center gap-2">
                             <a href="/backoffice/daftar_menu?edit={{ urlencode((string) $menu->_id) }}" class="inline-flex items-center rounded-lg bg-[var(--rajah)] hover:brightness-95 text-[var(--philippine-bronze)] text-sm font-bold px-3.5 py-2 transition">Edit Menu</a>
+                            <form action="/backoffice/daftar_menu/{{ urlencode((string) $menu->_id) }}" method="POST" class="menu-delete-form" data-menu-name="{{ $menu->name }}">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="inline-flex items-center rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold px-3.5 py-2 transition">Hapus Menu</button>
+                            </form>
                             <a href="/backoffice/daftar_menu?detail={{ urlencode((string) $menu->_id) }}" class="ml-auto inline-flex items-center rounded-xl border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-sm font-bold px-5 py-2.5 transition">See Detail</a>
                         </div>
                     </div>
@@ -90,6 +95,29 @@
             @include('backoffice.menu.create.create', ['allowedCategories' => $allowedCategories])
         @endif
 
+        <section id="delete-confirm-modal" class="hidden fixed top-0 left-0 w-screen h-screen z-[130]">
+            <div id="delete-confirm-overlay" class="fixed top-0 left-0 w-screen h-screen bg-white/15 backdrop-blur-sm"></div>
+
+            <div class="relative z-[131] w-screen h-screen flex items-center justify-center p-4 md:p-5">
+                <article class="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+                    <div class="flex items-center justify-between px-4 py-3.5 border-b border-slate-200">
+                        <h2 class="text-lg font-extrabold text-[var(--rich-black)]">Konfirmasi Hapus Menu</h2>
+                        <button id="delete-confirm-close" type="button" class="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-600 font-bold transition" aria-label="Tutup">✕</button>
+                    </div>
+
+                    <div class="p-4 md:p-5 space-y-2">
+                        <p class="text-sm text-slate-600">Menu <span id="delete-confirm-name" class="font-bold text-slate-800"></span> akan dihapus permanen.</p>
+                        <p class="text-xs text-slate-500">Aksi ini juga akan menghapus relasi data gambar menu yang tersimpan.</p>
+                    </div>
+
+                    <div class="px-4 pb-4 md:px-5 md:pb-5 flex items-center justify-end gap-3">
+                        <button id="delete-confirm-cancel" type="button" class="inline-flex items-center rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-bold px-4 py-2.5 transition">Batal</button>
+                        <button id="delete-confirm-submit" type="button" class="inline-flex items-center rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold px-4 py-2.5 transition">Ya, Hapus</button>
+                    </div>
+                </article>
+            </div>
+        </section>
+
     </section>
 
     <script>
@@ -99,6 +127,15 @@
             const sortSelect = document.getElementById('menu-sort');
             const tabs = Array.from(document.querySelectorAll('.menu-category-tab'));
             const emptyState = document.getElementById('menu-filter-empty');
+            const deleteForms = Array.from(document.querySelectorAll('.menu-delete-form'));
+            const deleteModal = document.getElementById('delete-confirm-modal');
+            const deleteOverlay = document.getElementById('delete-confirm-overlay');
+            const deleteClose = document.getElementById('delete-confirm-close');
+            const deleteCancel = document.getElementById('delete-confirm-cancel');
+            const deleteSubmit = document.getElementById('delete-confirm-submit');
+            const deleteName = document.getElementById('delete-confirm-name');
+
+            let pendingDeleteForm = null;
 
             if (!grid) {
                 return;
@@ -203,6 +240,52 @@
                     applyFilters();
                 });
             });
+
+            function closeDeleteModal() {
+                if (!deleteModal) {
+                    return;
+                }
+
+                deleteModal.classList.add('hidden');
+                pendingDeleteForm = null;
+            }
+
+            function openDeleteModal(form) {
+                if (!deleteModal || !deleteName) {
+                    form.submit();
+                    return;
+                }
+
+                pendingDeleteForm = form;
+                deleteName.textContent = form.dataset.menuName || 'ini';
+                deleteModal.classList.remove('hidden');
+            }
+
+            deleteForms.forEach(function (form) {
+                form.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    openDeleteModal(form);
+                });
+            });
+
+            [deleteOverlay, deleteClose, deleteCancel].forEach(function (element) {
+                if (!element) {
+                    return;
+                }
+
+                element.addEventListener('click', closeDeleteModal);
+            });
+
+            if (deleteSubmit) {
+                deleteSubmit.addEventListener('click', function () {
+                    if (!pendingDeleteForm) {
+                        closeDeleteModal();
+                        return;
+                    }
+
+                    pendingDeleteForm.submit();
+                });
+            }
 
             applyFilters();
         })();
