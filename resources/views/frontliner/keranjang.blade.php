@@ -291,7 +291,7 @@
                     payButton.textContent = 'Memproses...';
                 }
 
-                const response = await fetch('/frontliner/pembayaran/create', {
+                const response = await fetch('/kedai/pembayaran/create', {
                     method: 'POST',
                     headers: {
                         'Accept': 'application/json',

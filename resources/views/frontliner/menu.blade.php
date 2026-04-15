@@ -20,7 +20,7 @@
         <div class="p-6 pb-0">
             <div class="flex items-center justify-between mb-6">
                 <h1 class="text-3xl font-extrabold text-gray-800">Menu</h1>
-                <a href="/frontliner/pembayaran/struk" class="inline-flex items-center gap-2 rounded-xl border border-[#C8641E] text-[#C8641E] bg-white px-3 py-2 text-sm font-bold hover:bg-orange-50 transition">
+                <a href="/kedai/pembayaran/struk" class="inline-flex items-center gap-2 rounded-xl border border-[#C8641E] text-[#C8641E] bg-white px-3 py-2 text-sm font-bold hover:bg-orange-50 transition">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17h6M9 13h6m-9 8h12a2 2 0 002-2V5a2 2 0 00-2-2H6a2 2 0 00-2 2v14a2 2 0 002 2z"/>
                     </svg>

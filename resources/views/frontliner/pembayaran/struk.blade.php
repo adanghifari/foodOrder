@@ -82,7 +82,7 @@
                         @endphp
 
                         <a
-                            href="{{ $hasPrev ? '/frontliner/pembayaran/struk?invoice_index=' . ($currentIndex - 1) : '#' }}"
+                            href="{{ $hasPrev ? '/kedai/pembayaran/struk?invoice_index=' . ($currentIndex - 1) : '#' }}"
                             class="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-white/40 {{ $hasPrev ? 'hover:bg-white/20' : 'opacity-40 pointer-events-none' }} transition"
                             aria-label="Invoice sebelumnya"
                         >
@@ -90,7 +90,7 @@
                         </a>
 
                         <a
-                            href="{{ $hasNext ? '/frontliner/pembayaran/struk?invoice_index=' . ($currentIndex + 1) : '#' }}"
+                            href="{{ $hasNext ? '/kedai/pembayaran/struk?invoice_index=' . ($currentIndex + 1) : '#' }}"
                             class="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-white/40 {{ $hasNext ? 'hover:bg-white/20' : 'opacity-40 pointer-events-none' }} transition"
                             aria-label="Invoice berikutnya"
                         >

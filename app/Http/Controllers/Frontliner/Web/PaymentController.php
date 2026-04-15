@@ -157,7 +157,7 @@ class PaymentController extends Controller
         $request->session()->put('frontliner_receipt_table_id', (int) $validated['tableNumber']);
         $request->session()->put('frontliner_receipt_bound_at', now()->toDateTimeString());
 
-        $finishRedirectUrl = rtrim($request->getSchemeAndHttpHost(), '/') . '/frontliner/pembayaran/selesai';
+        $finishRedirectUrl = rtrim($request->getSchemeAndHttpHost(), '/') . '/kedai/pembayaran/selesai';
 
         $result = $this->paymentService->createTransaction((string) $order->_id, [
             'name' => (string) $validated['customerName'],
@@ -207,7 +207,7 @@ class PaymentController extends Controller
         }
 
         if ($paymentState === 'success') {
-            return redirect('/frontliner/pembayaran/struk');
+            return redirect('/kedai/pembayaran/struk');
         }
 
         return redirect('/menu?payment=' . $paymentState);

@@ -19,7 +19,7 @@ KedaiKlik menggunakan struktur domain-based agar logika bisnis lebih terorganisi
 
 Aplikasi menyediakan 3 jalur utama:
 - Web Backoffice: `/backoffice`
-- Web Frontliner: `/menu`, `/keranjang`, `/frontliner/pembayaran/*`
+- Web Frontliner: `/kedai`, `/menu`, `/keranjang`, `/kedai/pembayaran/*`
 - REST API v1: `/api/v1/*`
 
 ## ✨ Main Features
@@ -94,7 +94,7 @@ MIDTRANS_SERVER_KEY=SB-Mid-server-xxxx
 MIDTRANS_CLIENT_KEY=SB-Mid-client-xxxx
 MIDTRANS_MERCHANT_ID=Gxxxx
 MIDTRANS_CALLBACK_URL=http://127.0.0.1:8000/api/v1/payments/webhook
-MIDTRANS_FINISH_REDIRECT_URL=http://127.0.0.1:8000/frontliner/pembayaran/selesai
+MIDTRANS_FINISH_REDIRECT_URL=http://127.0.0.1:8000/kedai/pembayaran/selesai
 ```
 
 ### 5.5 Create Symbolic Link for Upload Files
@@ -122,7 +122,7 @@ php artisan serve
 ```
 
 Akses aplikasi:
-- Frontliner: `http://127.0.0.1:8000/frontliner`
+- Frontliner: `http://127.0.0.1:8000/kedai`
 - Backoffice Login: `http://127.0.0.1:8000/backoffice/login`
 - API base: `http://127.0.0.1:8000/api/v1`
 
@@ -157,7 +157,7 @@ MIDTRANS_FINISH_REDIRECT_URL=
 - `/backoffice/*` untuk panel admin
 - `/menu` untuk halaman menu customer
 - `/keranjang` untuk keranjang customer
-- `/frontliner/pembayaran/struk` untuk struk pembayaran
+- `/kedai/pembayaran/struk` untuk struk pembayaran
 
 ### API Routes (v1)
 - `/api/v1/auth/*`
