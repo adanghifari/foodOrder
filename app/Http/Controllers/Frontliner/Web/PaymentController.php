@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Validator;
 
 class PaymentController extends Controller
 {
+    private const SERVICE_FEE = 5000;
+
     public function __construct(
         private readonly PaymentService $paymentService,
         private readonly TableService $tableService
@@ -66,6 +68,29 @@ class PaymentController extends Controller
             ], 422);
         }
 
+        $quantityMap = $rawItems
+            ->groupBy(fn ($item) => (string) $item['menuId'])
+            ->map(fn ($group) => $group->sum(fn ($item) => (int) $item['qty']));
+
+        foreach ($quantityMap as $menuId => $requestedQty) {
+            $menu = $menuItems->get((string) $menuId);
+            $stock = (int) ($menu->stock ?? 0);
+
+            if ($stock <= 0) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => sprintf('Menu "%s" sedang habis dan tidak bisa dipesan.', (string) ($menu->name ?? 'Unknown')),
+                ], 422);
+            }
+
+            if ((int) $requestedQty > $stock) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => sprintf('Stok menu "%s" tidak mencukupi. Sisa stok: %d.', (string) ($menu->name ?? 'Unknown'), $stock),
+                ], 422);
+            }
+        }
+
         $embeddedItems = [];
         $subtotal = 0;
 
@@ -93,7 +118,7 @@ class PaymentController extends Controller
             ], 422);
         }
 
-        $serviceFee = 5000;
+        $serviceFee = self::SERVICE_FEE;
         $totalPrice = $subtotal + $serviceFee;
 
         $lastOrder = Order::orderBy('queue_number', 'desc')->first();
@@ -104,7 +129,7 @@ class PaymentController extends Controller
             'customer_name' => (string) $validated['customerName'],
             'customer_email' => (string) $validated['customerEmail'],
             'table_number' => (int) $validated['tableNumber'],
-            'status' => 'CONFIRMED',
+            'status' => 'PENDING_PAYMENT',
             'payment_status' => 'PENDING',
             'table_cleared_at' => null,
             'queue_number' => $queueNumber,

@@ -34,6 +34,23 @@ class CartService
             ];
         }
 
+        $stock = (int) ($menuItem->stock ?? 0);
+        if ($stock <= 0) {
+            return [
+                'ok' => false,
+                'status' => 422,
+                'message' => 'Menu item is out of stock',
+            ];
+        }
+
+        if ($quantity > $stock) {
+            return [
+                'ok' => false,
+                'status' => 422,
+                'message' => 'Requested quantity exceeds available stock',
+            ];
+        }
+
         $existing = CartItem::where('customer_id', $userId)
             ->where('menu_item_id', $menuItemId)
             ->first();
@@ -151,6 +168,24 @@ class CartService
             }
 
             $quantity = $cartItem->quantity;
+            $stock = (int) ($menu->stock ?? 0);
+
+            if ($stock <= 0) {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'message' => 'Menu "' . (string) $menu->name . '" is out of stock',
+                ];
+            }
+
+            if ($quantity > $stock) {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'message' => 'Requested quantity for "' . (string) $menu->name . '" exceeds available stock',
+                ];
+            }
+
             $subtotal = $menu->price * $quantity;
 
             $itemsResponse[] = [

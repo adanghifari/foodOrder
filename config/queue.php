@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'default' => env('QUEUE_CONNECTION', 'database'),
+    'default' => env('QUEUE_CONNECTION', 'sync'),
 
     /*
     |--------------------------------------------------------------------------
@@ -103,7 +103,7 @@ return [
     */
 
     'batching' => [
-        'database' => env('DB_CONNECTION', 'sqlite'),
+        'database' => env('DB_QUEUE_BATCHING_CONNECTION', env('DB_CONNECTION', 'mongodb')),
         'table' => 'job_batches',
     ],
 
@@ -121,8 +121,8 @@ return [
     */
 
     'failed' => [
-        'driver' => env('QUEUE_FAILED_DRIVER', 'database-uuids'),
-        'database' => env('DB_CONNECTION', 'sqlite'),
+        'driver' => env('QUEUE_FAILED_DRIVER', 'file'),
+        'database' => env('DB_FAILED_JOBS_CONNECTION', env('DB_CONNECTION', 'mongodb')),
         'table' => 'failed_jobs',
     ],
 

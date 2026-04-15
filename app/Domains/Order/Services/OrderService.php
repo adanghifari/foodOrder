@@ -7,6 +7,8 @@ use App\Models\Order;
 
 class OrderService
 {
+    private const INITIAL_UNPAID_ORDER_STATUS = 'PENDING_PAYMENT';
+
     public function createFromItems(string $userId, array $itemIds, int $tableNumber): array
     {
         $quantityMap = [];
@@ -38,6 +40,23 @@ class OrderService
 
         foreach ($menuItems as $item) {
             $qty = $quantityMap[(string) $item->_id];
+
+            if ((int) ($item->stock ?? 0) <= 0) {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'message' => 'Menu "' . (string) $item->name . '" sedang habis dan tidak bisa dipesan.',
+                ];
+            }
+
+            if ($qty > (int) ($item->stock ?? 0)) {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'message' => 'Stok menu "' . (string) $item->name . '" tidak mencukupi. Sisa stok: ' . (int) ($item->stock ?? 0) . '.',
+                ];
+            }
+
             $totalPrice += $item->price * $qty;
 
             for ($i = 0; $i < $qty; $i++) {
@@ -65,7 +84,7 @@ class OrderService
         return Order::create([
             'customer_id' => $userId,
             'table_number' => $tableNumber,
-            'status' => 'CONFIRMED',
+            'status' => self::INITIAL_UNPAID_ORDER_STATUS,
             'payment_status' => 'PENDING',
             'table_cleared_at' => null,
             'queue_number' => $queueNumber,

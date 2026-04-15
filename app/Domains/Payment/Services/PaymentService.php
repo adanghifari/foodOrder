@@ -8,6 +8,9 @@ use Illuminate\Support\Facades\Http;
 
 class PaymentService
 {
+    private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
+    private const FAILED_STATUSES = ['FAILED', 'CANCELED', 'EXPIRED'];
+
     public function listPayments()
     {
         return Order::orderBy('_id', 'desc')->get()->map(function (Order $order) {
@@ -192,12 +195,11 @@ class PaymentService
 
         $paymentStatus = $this->mapMidtransStatus($transactionStatus, $fraudStatus);
 
-        $order->update([
+        $this->applyPaymentUpdate($order, [
             'midtrans_order_id' => $midtransOrderId,
             'payment_status' => $paymentStatus,
             'payment_type' => $paymentType,
             'payment_payload' => $this->sanitizePaymentPayload($payload),
-            'paid_at' => $paymentStatus === 'PAID' ? now() : null,
         ]);
 
         return [
@@ -278,12 +280,11 @@ class PaymentService
 
         $paymentStatus = $this->mapMidtransStatus($transactionStatus, $fraudStatus);
 
-        $order->update([
+        $this->applyPaymentUpdate($order, [
             'midtrans_order_id' => $midtransOrderId,
             'payment_status' => $paymentStatus,
             'payment_type' => $paymentType,
             'payment_payload' => $this->sanitizePaymentPayload($payload),
-            'paid_at' => $paymentStatus === 'PAID' ? now() : null,
         ]);
 
         return [
@@ -309,6 +310,25 @@ class PaymentService
             'expire' => 'EXPIRED',
             default => strtoupper($transactionStatus),
         };
+    }
+
+    private function applyPaymentUpdate(Order $order, array $attributes): void
+    {
+        $paymentStatus = strtoupper((string) ($attributes['payment_status'] ?? $order->payment_status ?? 'PENDING'));
+        $currentStatus = strtoupper((string) ($order->status ?? ''));
+
+        if (in_array($paymentStatus, self::PAID_STATUSES, true)) {
+            $attributes['status'] = $currentStatus === '' || $currentStatus === 'PENDING_PAYMENT'
+                ? 'CONFIRMED'
+                : $order->status;
+
+            $attributes['paid_at'] = $order->paid_at ?? now();
+        } elseif (in_array($paymentStatus, self::FAILED_STATUSES, true)) {
+            $attributes['status'] = $currentStatus === '' ? 'PENDING_PAYMENT' : $order->status;
+            $attributes['paid_at'] = $order->paid_at;
+        }
+
+        $order->update($attributes);
     }
 
     private function sanitizePaymentPayload(array $payload): array

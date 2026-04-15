@@ -57,6 +57,10 @@
 
         <div class="flex-1 px-6 space-y-5 overflow-y-auto pb-32">
             @foreach($menus as $menu)
+            @php
+                $menuStock = (int) ($menu['stock'] ?? 0);
+                $isOutOfStock = $menuStock <= 0;
+            @endphp
             <div class="flex bg-white rounded-[24px] p-3 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-50 items-center">
                 <div class="w-28 h-28 flex-shrink-0">
                     @php
@@ -69,12 +73,19 @@
                 </div>
 
                 <div class="ml-4 flex-grow py-1">
-                    <h3 class="font-bold text-gray-800 text-lg leading-tight">{{ $menu['name'] }}</h3>
+                    <div class="flex items-start justify-between gap-3">
+                        <h3 class="font-bold text-gray-800 text-lg leading-tight">{{ $menu['name'] }}</h3>
+                        @if ($isOutOfStock)
+                            <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-red-700">Habis</span>
+                        @else
+                            <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">Stok {{ $menuStock }}</span>
+                        @endif
+                    </div>
                     <p class="text-[11px] text-gray-400 leading-snug mt-1 mb-2 line-clamp-2">{{ $menu['description'] }}</p>
                     <div class="flex justify-between items-center">
                         <span class="font-black text-gray-800 text-base">Rp {{ number_format($menu['price'], 0, ',', '.') }}</span>
 
-                        <div class="flex items-center gap-2" data-menu-name="{{ $menu['name'] }}">
+                        <div class="flex items-center gap-2" data-menu-name="{{ $menu['name'] }}" data-menu-stock="{{ $menuStock }}">
                             <button onclick="kurangiDariKeranjang(this)"
                                     data-nama="{{ $menu['name'] }}"
                                     class="minus-btn hidden bg-[#C8641E]/20 text-[#C8641E] w-9 h-9 rounded-xl flex items-center justify-center font-bold transition active:scale-95">
@@ -86,9 +97,11 @@
                                     data-id="{{ (string) $menu->_id }}"
                                     data-nama="{{ $menu['name'] }}"
                                     data-harga="{{ $menu['price'] }}"
+                                    data-stock="{{ $menuStock }}"
                                     data-img="{{ $menu['image_url'] }}"
                                     data-desc="{{ $menu['description'] }}"
-                                    class="bg-[#C8641E] text-white p-2.5 rounded-xl shadow-lg shadow-[#C8641E]/20 hover:scale-105 transition active:scale-95">
+                                    {{ $isOutOfStock ? 'disabled' : '' }}
+                                    class="{{ $isOutOfStock ? 'bg-slate-300 cursor-not-allowed shadow-none' : 'bg-[#C8641E] shadow-lg shadow-[#C8641E]/20 hover:scale-105' }} text-white p-2.5 rounded-xl transition active:scale-95">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                             </button>
                         </div>
@@ -157,13 +170,23 @@
         }
         
         function tambahKeKeranjang(button) {
+            if (button.disabled) {
+                return;
+            }
+
             const id = button.dataset.id;
             const nama = button.dataset.nama;
             const harga = button.dataset.harga;
+            const stock = Number(button.dataset.stock || 0);
             const imageUrl = button.dataset.img;
             const description = button.dataset.desc;
 
             const index = keranjang.findIndex(item => item.nama === nama);
+            const currentQty = index !== -1 ? Number(keranjang[index].qty || 0) : 0;
+
+            if (stock <= 0 || currentQty >= stock) {
+                return;
+            }
 
             if (index !== -1) {
                 keranjang[index].qty += 1;
@@ -172,6 +195,7 @@
                     id: id,
                     nama: nama,
                     harga: harga,
+                    stock: stock,
                     img: imageUrl,
                     desc: description || 'Deskripsi tidak tersedia',
                     qty: 1
