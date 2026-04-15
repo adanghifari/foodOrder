@@ -35,7 +35,7 @@ class PaymentService
         if ($finishRedirectUrl === '') {
             $appUrl = rtrim((string) config('app.url', ''), '/');
             if ($appUrl !== '') {
-                $finishRedirectUrl = $appUrl . '/frontliner/pembayaran/selesai';
+                $finishRedirectUrl = $appUrl . '/kedai/pembayaran/selesai';
             }
         }
 

@@ -25,6 +25,6 @@ class MidtransWebhookController extends Controller
 
     public function landing(Request $request)
     {
-        return redirect('/frontliner/pembayaran/selesai?' . http_build_query($request->query()));
+        return redirect('/kedai/pembayaran/selesai?' . http_build_query($request->query()));
     }
 }

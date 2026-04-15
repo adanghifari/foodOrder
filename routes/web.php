@@ -15,19 +15,18 @@ use App\Http\Controllers\Frontliner\Web\PaymentController as FrontlinerPaymentCo
 use App\Http\Controllers\Frontliner\Web\QrScanController as FrontlinerQrScanController;
 
 
-Route::redirect('/', '/frontliner');
+Route::redirect('/', '/kedai');
 
-Route::view('/frontliner', 'frontliner.welcome');
+Route::redirect('/frontliner', '/kedai');
+Route::view('/kedai', 'frontliner.welcome');
 
 Route::prefix('backoffice')->group(function () {
+    Route::view('/', 'backoffice.welcome');
     Route::get('/login', [BackofficeAuthController::class, 'showLogin']);
     Route::post('/login', [BackofficeAuthController::class, 'login'])->middleware('throttle:10,1');
     Route::post('/logout', [BackofficeAuthController::class, 'logout'])->middleware('backoffice.admin');
 
     Route::middleware('backoffice.admin')->group(function () {
-        Route::get('/', function () {
-            return redirect('/backoffice/dashboard');
-        });
         Route::get('/dashboard', [BackofficeDashboardController::class, 'index']);
         Route::get('/overview', [BackofficeOverviewController::class, 'indexPage']);
         Route::get('/daftar_menu', [BackofficeMenuController::class, 'indexPage']);
@@ -66,11 +65,11 @@ Route::get('/keranjang', function (Request $request) {
         'tableNumber' => $request->session()->get('table_id'),
     ]);
 });
-Route::post('/frontliner/pembayaran/create', [FrontlinerPaymentController::class, 'createFromCart'])
+Route::post('/kedai/pembayaran/create', [FrontlinerPaymentController::class, 'createFromCart'])
     ->middleware('throttle:20,1');
-Route::get('/frontliner/pembayaran/selesai', [FrontlinerPaymentController::class, 'finishRedirect'])
+Route::get('/kedai/pembayaran/selesai', [FrontlinerPaymentController::class, 'finishRedirect'])
     ->middleware('throttle:20,1');
-Route::get('/frontliner/pembayaran/struk', [FrontlinerPaymentController::class, 'receipt'])
+Route::get('/kedai/pembayaran/struk', [FrontlinerPaymentController::class, 'receipt'])
     ->middleware('throttle:30,1');
 
 
