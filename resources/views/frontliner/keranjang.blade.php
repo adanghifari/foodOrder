@@ -125,6 +125,23 @@
 
         function changeQty(index, delta) {
             let cart = JSON.parse(localStorage.getItem('kedaiKlikCart')) || [];
+            const item = cart[index];
+
+            if (!item) {
+                return;
+            }
+
+            const stock = Number(item.stock || 0);
+
+            if (delta > 0 && stock > 0 && Number(item.qty || 0) >= stock) {
+                showNotification({
+                    type: 'warning',
+                    title: 'Stok tidak cukup',
+                    message: `Stok untuk ${item.nama} tersisa ${stock}.`,
+                });
+                return;
+            }
+
             cart[index].qty += delta;
 
             if (cart[index].qty <= 0) {

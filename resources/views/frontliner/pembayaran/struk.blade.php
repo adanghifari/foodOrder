@@ -37,7 +37,7 @@
         $orderStatus = strtoupper((string) ($order->status ?? 'CONFIRMED'));
 
         $paymentLabel = match ($paymentStatus) {
-            'PAID', 'SUCCESS' => 'LUNAS',
+            'PAID', 'SUCCESS', 'SETTLEMENT' => 'LUNAS',
             'FAILED' => 'GAGAL',
             'CANCELED' => 'DIBATALKAN',
             'EXPIRED' => 'KEDALUWARSA',
@@ -45,6 +45,7 @@
         };
 
         $orderLabel = match ($orderStatus) {
+            'PENDING_PAYMENT' => 'Menunggu Pembayaran',
             'CONFIRMED' => 'Terkonfirmasi',
             'IN_QUEUE' => 'Dalam Antrean',
             'IN_PROGRESS' => 'Sedang Diproses',
@@ -52,11 +53,15 @@
             default => ucwords(strtolower(str_replace('_', ' ', $orderStatus))),
         };
 
-        $paymentClass = in_array($paymentStatus, ['PAID', 'SUCCESS'], true)
+        $paymentClass = in_array($paymentStatus, ['PAID', 'SUCCESS', 'SETTLEMENT'], true)
             ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
             : 'bg-amber-100 text-amber-700 border-amber-200';
 
         $displayOrderId = 'ORD-' . strtoupper(substr((string) $order->_id, -6));
+        $paidAtIso = optional($order->paid_at)->toIso8601String() ?? now()->toIso8601String();
+        $paidAtLabel = $order->paid_at
+            ? $order->paid_at->copy()->setTimezone(config('app.timezone'))->format('d M Y H:i')
+            : now()->setTimezone(config('app.timezone'))->format('d M Y H:i');
     @endphp
 
     <main class="w-full max-w-md bg-white min-h-screen shadow-2xl rounded-3xl overflow-hidden border border-gray-100">
@@ -116,7 +121,7 @@
                 </div>
                 <div class="flex items-center justify-between text-sm">
                     <span class="text-gray-500">Waktu Bayar</span>
-                    <span class="font-semibold text-gray-700">{{ optional($order->paid_at)->format('d M Y H:i') ?? now()->format('d M Y H:i') }}</span>
+                    <span class="font-semibold text-gray-700" data-local-datetime="{{ $paidAtIso }}">{{ $paidAtLabel }}</span>
                 </div>
             </div>
 
@@ -171,5 +176,27 @@
         </footer>
     </main>
     @endif
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const formatter = new Intl.DateTimeFormat('id-ID', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+
+            document.querySelectorAll('[data-local-datetime]').forEach((element) => {
+                const rawValue = element.getAttribute('data-local-datetime');
+                const parsed = rawValue ? new Date(rawValue) : null;
+
+                if (!parsed || Number.isNaN(parsed.getTime())) {
+                    return;
+                }
+
+                element.textContent = formatter.format(parsed);
+            });
+        });
+    </script>
 </body>
 </html>

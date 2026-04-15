@@ -11,6 +11,7 @@ use Illuminate\Support\Carbon;
 class OverviewController extends Controller
 {
     private const ACTIVE_ORDER_STATUSES = ['CONFIRMED', 'IN_QUEUE', 'IN_PROGRESS'];
+    private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
 
     public function indexPage()
     {
@@ -38,7 +39,7 @@ class OverviewController extends Controller
         $totalOrders = Order::count();
         $totalUsers = User::count();
 
-        $paidOrders = Order::whereIn('payment_status', ['PAID', 'SUCCESS'])->get(['total_price']);
+        $paidOrders = Order::whereIn('payment_status', self::PAID_STATUSES)->get(['total_price']);
         $paidOrdersCount = $paidOrders->count();
         $totalRevenue = (float) $paidOrders->sum('total_price');
         $averageOrderValue = $paidOrdersCount > 0 ? ($totalRevenue / $paidOrdersCount) : 0;
@@ -67,6 +68,7 @@ class OverviewController extends Controller
         }
 
         $occupiedTables = Order::whereIn('status', self::ACTIVE_ORDER_STATUSES)
+            ->whereIn('payment_status', self::PAID_STATUSES)
             ->whereIn('table_number', $knownTableIds)
             ->distinct('table_number')
             ->count('table_number');
@@ -134,7 +136,7 @@ class OverviewController extends Controller
 
             $map[$key]['orders']++;
 
-            if (in_array((string) $order->payment_status, ['PAID', 'SUCCESS'], true)) {
+            if (in_array((string) $order->payment_status, self::PAID_STATUSES, true)) {
                 $map[$key]['revenue'] += (float) ($order->total_price ?? 0);
             }
         }
