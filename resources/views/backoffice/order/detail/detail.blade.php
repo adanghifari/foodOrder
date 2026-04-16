@@ -7,6 +7,7 @@
 
         $detailStatusLabel = match ($detailStatus) {
             'PENDING_PAYMENT' => 'Menunggu Pembayaran',
+            'PAYMENT_FAILED' => 'Pembayaran Gagal',
             'CONFIRMED' => 'Terkonfirmasi',
             'IN_QUEUE' => 'Dalam Antrean',
             'IN_PROGRESS' => 'Sedang Diproses',
@@ -16,6 +17,7 @@
 
         $detailStatusClass = match ($detailStatus) {
             'PENDING_PAYMENT' => 'bg-slate-100 text-slate-700',
+            'PAYMENT_FAILED' => 'bg-rose-100 text-rose-700',
             'CONFIRMED' => 'bg-amber-100 text-amber-700',
             'IN_QUEUE' => 'bg-orange-100 text-orange-700',
             'IN_PROGRESS' => 'bg-blue-100 text-blue-700',

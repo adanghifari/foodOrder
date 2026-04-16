@@ -71,9 +71,14 @@ class TableController extends Controller
             })
             ->values();
 
+        $availableTables = $tableSnapshots
+            ->filter(fn (array $table) => empty($table['isOccupied']))
+            ->values();
+
         return view('backoffice.table.index', [
             'tables' => $tableSnapshots,
             'assignableOrders' => $assignableOrders,
+            'availableTables' => $availableTables,
             'tableStats' => [
                 'total' => $tableSnapshots->count(),
                 'occupied' => $tableSnapshots->where('isOccupied', true)->count(),

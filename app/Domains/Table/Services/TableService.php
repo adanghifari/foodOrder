@@ -22,6 +22,41 @@ class TableService
         return ! $this->occupyingOrdersQuery($tableId)->exists();
     }
 
+    public function canPlaceOrderForSession(
+        int $tableId,
+        ?string $customerName = null,
+        ?string $browserSessionId = null,
+        ?int $sessionTableId = null,
+        ?int $receiptTableId = null
+    ): bool {
+        if ($this->isTableAvailable($tableId)) {
+            return true;
+        }
+
+        if (($sessionTableId !== null && $sessionTableId === $tableId)
+            || ($receiptTableId !== null && $receiptTableId === $tableId)) {
+            return true;
+        }
+
+        $normalizedCustomerName = $this->normalizeCustomerName($customerName);
+        $normalizedBrowserSessionId = trim((string) $browserSessionId);
+
+        $occupyingOrders = $this->occupyingOrdersQuery($tableId)->get([
+            'customer_name',
+            'browser_session_id',
+        ]);
+
+        return $occupyingOrders->contains(function (Order $order) use ($normalizedCustomerName, $normalizedBrowserSessionId) {
+            $orderBrowserSessionId = trim((string) ($order->browser_session_id ?? ''));
+            if ($normalizedBrowserSessionId !== '' && $orderBrowserSessionId === $normalizedBrowserSessionId) {
+                return true;
+            }
+
+            return $normalizedCustomerName !== ''
+                && $this->normalizeCustomerName((string) ($order->customer_name ?? '')) === $normalizedCustomerName;
+        });
+    }
+
     public function occupyingOrdersQuery(int $tableId)
     {
         return Order::where('table_number', $tableId)
@@ -104,6 +139,11 @@ class TableService
     {
         $request->session()->put('table_id', $tableId);
         $request->session()->put('table_session_started_at', now()->toDateTimeString());
+    }
+
+    public function normalizeCustomerName(?string $name): string
+    {
+        return mb_strtolower(trim((string) $name));
     }
 
     private function clearSessionKeys(Request $request): void

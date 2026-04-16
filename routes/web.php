@@ -67,6 +67,10 @@ Route::get('/keranjang', function (Request $request) {
 });
 Route::post('/kedai/pembayaran/create', [FrontlinerPaymentController::class, 'createFromCart'])
     ->middleware('throttle:20,1');
+Route::get('/kedai/pembayaran/{id}/pilih-metode', [FrontlinerPaymentController::class, 'resumePendingPayment'])
+    ->middleware('throttle:20,1');
+Route::post('/kedai/pembayaran/{id}/batalkan', [FrontlinerPaymentController::class, 'cancelPendingPayment'])
+    ->middleware('throttle:20,1');
 Route::get('/kedai/pembayaran/selesai', [FrontlinerPaymentController::class, 'finishRedirect'])
     ->middleware('throttle:20,1');
 Route::get('/kedai/pembayaran/struk', [FrontlinerPaymentController::class, 'receipt'])
