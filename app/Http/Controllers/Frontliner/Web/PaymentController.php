@@ -234,15 +234,13 @@ class PaymentController extends Controller
         }
 
         $paymentStatus = strtoupper((string) ($order->payment_status ?? 'PENDING'));
-        $paymentType = trim((string) ($order->payment_type ?? ''));
-
-        if ($paymentStatus !== 'PENDING' || $paymentType !== '') {
+        if ($paymentStatus !== 'PENDING') {
             return redirect('/kedai/pembayaran/struk');
         }
 
-        $paymentUrl = trim((string) ($order->payment_url ?? ''));
-        if ($paymentUrl !== '') {
-            return redirect()->away($paymentUrl);
+        $existingMidtransOrderId = trim((string) ($order->midtrans_order_id ?? ''));
+        if ($existingMidtransOrderId !== '') {
+            $this->paymentService->cancelTransaction($existingMidtransOrderId, false);
         }
 
         $finishRedirectUrl = rtrim($request->getSchemeAndHttpHost(), '/') . '/kedai/pembayaran/selesai';
@@ -250,7 +248,7 @@ class PaymentController extends Controller
             'name' => (string) ($order->customer_name ?? 'Customer'),
             'email' => (string) ($order->customer_email ?? 'customer@example.com'),
             'phone' => null,
-        ], $finishRedirectUrl);
+        ], $finishRedirectUrl, true);
 
         if (!($result['ok'] ?? false) || empty($result['data']['redirect_url'])) {
             return redirect('/kedai/pembayaran/struk')->with('error', 'Link pembayaran belum bisa dibuka. Coba lagi sebentar.');

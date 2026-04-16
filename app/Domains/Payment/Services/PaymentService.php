@@ -25,7 +25,12 @@ class PaymentService
         });
     }
 
-    public function createTransaction(string $orderId, ?array $customerDetails = null, ?string $finishRedirectUrlOverride = null): array
+    public function createTransaction(
+        string $orderId,
+        ?array $customerDetails = null,
+        ?string $finishRedirectUrlOverride = null,
+        bool $forceNewTransaction = false
+    ): array
     {
         $serverKey = (string) config('services.midtrans.server_key');
         $isProduction = (bool) config('services.midtrans.is_production', false);
@@ -76,7 +81,9 @@ class PaymentService
         $customerEmail = (string) ($customerDetails['email'] ?? (($customer->email ?? null) ?: ($customer->username ?? 'customer@example.com')));
         $customerPhone = (string) ($customerDetails['phone'] ?? $customer->no_telp ?? '');
 
-        $midtransOrderId = $order->midtrans_order_id ?: ('ORDER-' . (string) $order->_id . '-' . now()->timestamp);
+        $midtransOrderId = $forceNewTransaction
+            ? ('ORDER-' . (string) $order->_id . '-' . now()->timestamp)
+            : ($order->midtrans_order_id ?: ('ORDER-' . (string) $order->_id . '-' . now()->timestamp));
 
         $payload = [
             'transaction_details' => [
@@ -134,7 +141,9 @@ class PaymentService
 
         $order->update([
             'midtrans_order_id' => $midtransOrderId,
+            'status' => 'PENDING_PAYMENT',
             'payment_status' => 'PENDING',
+            'payment_type' => null,
             'payment_url' => $snapData['redirect_url'] ?? null,
             'payment_payload' => $this->sanitizePaymentPayload($snapData),
         ]);
@@ -299,7 +308,7 @@ class PaymentService
         ];
     }
 
-    public function cancelTransaction(string $midtransOrderId): array
+    public function cancelTransaction(string $midtransOrderId, bool $syncLocal = true): array
     {
         $midtransOrderId = trim($midtransOrderId);
 
@@ -351,7 +360,7 @@ class PaymentService
             }
         }
 
-        if ($order) {
+        if ($order && $syncLocal) {
             $mergedPayload = array_merge(
                 is_array($order->payment_payload ?? null) ? $order->payment_payload : [],
                 $this->sanitizePaymentPayload($payload)
@@ -372,7 +381,7 @@ class PaymentService
             'data' => [
                 'order_id' => (string) ($order?->_id ?? ''),
                 'midtrans_order_id' => $midtransOrderId,
-                'payment_status' => 'CANCELED',
+                'payment_status' => $syncLocal ? 'CANCELED' : (string) ($order->payment_status ?? 'PENDING'),
                 'cancel_response' => $payload,
             ],
         ];
