@@ -52,14 +52,14 @@
                         <label for="table_number" class="block text-xs font-bold uppercase tracking-wide text-slate-600">Pindahkan ke Meja</label>
                         <select id="table_number" name="table_number" class="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]" required>
                             <option value="">-- Pilih meja --</option>
-                            @foreach (($tables ?? []) as $table)
+                            @foreach (($availableTables ?? []) as $table)
                                 @php
                                     $tableId = (int) ($table['tableId'] ?? 0);
                                     $selectedTable = (int) old('table_number');
                                     $isSelectedTable = $selectedTable > 0 && $selectedTable === $tableId;
                                 @endphp
                                 <option value="{{ $tableId }}" {{ $isSelectedTable ? 'selected' : '' }}>
-                                    Meja {{ $tableId }} {{ !empty($table['isOccupied']) ? '(Terisi)' : '(Tersedia)' }}
+                                    Meja {{ $tableId }} (Tersedia)
                                 </option>
                             @endforeach
                         </select>

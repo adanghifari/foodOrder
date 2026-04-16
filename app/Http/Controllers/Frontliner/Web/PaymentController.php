@@ -49,10 +49,21 @@ class PaymentController extends Controller
             ], 422);
         }
 
-        if (! $this->tableService->isTableAvailable((int) $validated['tableNumber'])) {
+        $tableNumber = (int) $validated['tableNumber'];
+        $browserSessionId = $request->hasSession() ? (string) $request->session()->getId() : null;
+        $sessionTableId = $request->hasSession() ? (int) $request->session()->get('table_id', 0) : null;
+        $receiptTableId = $request->hasSession() ? (int) $request->session()->get('frontliner_receipt_table_id', 0) : null;
+
+        if (! $this->tableService->canPlaceOrderForSession(
+            $tableNumber,
+            (string) $validated['customerName'],
+            $browserSessionId,
+            $sessionTableId,
+            $receiptTableId
+        )) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Meja masih terisi. Kosongkan meja terlebih dahulu sebelum menerima order baru.',
+                'message' => 'Meja masih terisi oleh session atau pemesan lain. Gunakan session yang sama atau nama pemesan yang sama untuk menambah order di meja ini.',
             ], 409);
         }
 
@@ -128,7 +139,8 @@ class PaymentController extends Controller
             'customer_id' => null,
             'customer_name' => (string) $validated['customerName'],
             'customer_email' => (string) $validated['customerEmail'],
-            'table_number' => (int) $validated['tableNumber'],
+            'browser_session_id' => $browserSessionId,
+            'table_number' => $tableNumber,
             'status' => 'PENDING_PAYMENT',
             'payment_status' => 'PENDING',
             'table_cleared_at' => null,
@@ -138,7 +150,7 @@ class PaymentController extends Controller
         ]);
 
         // Customer started a new order cycle on this table; refresh session anchor.
-        $request->session()->put('table_id', (int) $validated['tableNumber']);
+        $request->session()->put('table_id', $tableNumber);
         $request->session()->put('table_session_started_at', now()->toDateTimeString());
 
         $receiptOrderIds = collect($request->session()->get('frontliner_receipt_order_ids', []))
@@ -154,7 +166,7 @@ class PaymentController extends Controller
 
         $request->session()->put('frontliner_receipt_order_ids', $receiptOrderIds->all());
         $request->session()->put('frontliner_receipt_order_id', (string) $order->_id);
-        $request->session()->put('frontliner_receipt_table_id', (int) $validated['tableNumber']);
+        $request->session()->put('frontliner_receipt_table_id', $tableNumber);
         $request->session()->put('frontliner_receipt_bound_at', now()->toDateTimeString());
 
         $finishRedirectUrl = rtrim($request->getSchemeAndHttpHost(), '/') . '/kedai/pembayaran/selesai';
@@ -180,7 +192,7 @@ class PaymentController extends Controller
             'message' => 'Payment transaction created',
             'data' => [
                 ...($result['data'] ?? []),
-                'table_number' => (int) $validated['tableNumber'],
+                'table_number' => $tableNumber,
                 'subtotal' => $subtotal,
                 'service_fee' => $serviceFee,
                 'total_payment' => $totalPrice,
@@ -211,6 +223,66 @@ class PaymentController extends Controller
         }
 
         return redirect('/menu?payment=' . $paymentState);
+    }
+
+    public function resumePendingPayment(Request $request, string $id)
+    {
+        $order = Order::find($id);
+
+        if (! $order || ! $this->canAccessReceiptOrder($request, $order)) {
+            return redirect('/kedai/pembayaran/struk')->with('error', 'Order pembayaran tidak ditemukan untuk sesi ini.');
+        }
+
+        $paymentStatus = strtoupper((string) ($order->payment_status ?? 'PENDING'));
+        $paymentType = trim((string) ($order->payment_type ?? ''));
+
+        if ($paymentStatus !== 'PENDING' || $paymentType !== '') {
+            return redirect('/kedai/pembayaran/struk');
+        }
+
+        $paymentUrl = trim((string) ($order->payment_url ?? ''));
+        if ($paymentUrl !== '') {
+            return redirect()->away($paymentUrl);
+        }
+
+        $finishRedirectUrl = rtrim($request->getSchemeAndHttpHost(), '/') . '/kedai/pembayaran/selesai';
+        $result = $this->paymentService->createTransaction((string) $order->_id, [
+            'name' => (string) ($order->customer_name ?? 'Customer'),
+            'email' => (string) ($order->customer_email ?? 'customer@example.com'),
+            'phone' => null,
+        ], $finishRedirectUrl);
+
+        if (!($result['ok'] ?? false) || empty($result['data']['redirect_url'])) {
+            return redirect('/kedai/pembayaran/struk')->with('error', 'Link pembayaran belum bisa dibuka. Coba lagi sebentar.');
+        }
+
+        return redirect()->away((string) $result['data']['redirect_url']);
+    }
+
+    public function cancelPendingPayment(Request $request, string $id)
+    {
+        $order = Order::find($id);
+
+        if (! $order || ! $this->canAccessReceiptOrder($request, $order)) {
+            return redirect('/kedai/pembayaran/struk')->with('error', 'Order pembayaran tidak ditemukan untuk sesi ini.');
+        }
+
+        $paymentStatus = strtoupper((string) ($order->payment_status ?? 'PENDING'));
+        if ($paymentStatus !== 'PENDING') {
+            return redirect('/kedai/pembayaran/struk')->with('error', 'Pembayaran ini sudah tidak bisa dibatalkan.');
+        }
+
+        $midtransOrderId = trim((string) ($order->midtrans_order_id ?? ''));
+        if ($midtransOrderId === '') {
+            return redirect('/kedai/pembayaran/struk')->with('error', 'ID transaksi Midtrans tidak ditemukan.');
+        }
+
+        $result = $this->paymentService->cancelTransaction($midtransOrderId);
+        if (!($result['ok'] ?? false)) {
+            return redirect('/kedai/pembayaran/struk')->with('error', $result['message'] ?? 'Gagal membatalkan pembayaran.');
+        }
+
+        return redirect('/kedai/pembayaran/struk')->with('success', 'Pembayaran berhasil dibatalkan.');
     }
 
     public function receipt(Request $request)
@@ -323,5 +395,33 @@ class PaymentController extends Controller
             'invoiceCount' => 0,
             'invoiceIndex' => 0,
         ]);
+    }
+
+    private function canAccessReceiptOrder(Request $request, Order $order): bool
+    {
+        if (! $request->hasSession()) {
+            return false;
+        }
+
+        $sessionOrderIds = collect($request->session()->get('frontliner_receipt_order_ids', []))
+            ->map(fn ($id) => (string) $id)
+            ->filter(fn ($storedId) => $storedId !== '')
+            ->values();
+
+        $sessionOrderId = (string) $request->session()->get('frontliner_receipt_order_id', '');
+        if ($sessionOrderId !== '' && !$sessionOrderIds->contains($sessionOrderId)) {
+            $sessionOrderIds = $sessionOrderIds->push($sessionOrderId);
+        }
+
+        $sessionTableId = (int) $request->session()->get('table_id', 0);
+        $sessionReceiptTableId = (int) $request->session()->get('frontliner_receipt_table_id', 0);
+        $orderId = (string) $order->_id;
+        $orderTableNumber = (int) ($order->table_number ?? 0);
+
+        return $sessionOrderIds->contains($orderId)
+            && $sessionTableId > 0
+            && $sessionReceiptTableId > 0
+            && $orderTableNumber === $sessionTableId
+            && $orderTableNumber === $sessionReceiptTableId;
     }
 }

@@ -3,12 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>KedaiKlik - Struk Pembayaran</title>
     <link rel="icon" type="image/png" href="/images/KedaiKlikLogo.png">
     <link rel="apple-touch-icon" href="/images/KedaiKlikLogo.png">
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 flex justify-center p-4">
+    <x-notification-center />
     @if (empty($order))
         <main class="w-full max-w-md bg-white min-h-screen shadow-2xl rounded-3xl overflow-hidden border border-gray-100 flex flex-col">
             <header class="bg-[#C8641E] text-white px-6 py-6">
@@ -35,6 +37,36 @@
     @php
         $paymentStatus = strtoupper((string) ($order->payment_status ?? 'PENDING'));
         $orderStatus = strtoupper((string) ($order->status ?? 'CONFIRMED'));
+        $paymentPayload = is_array($order->payment_payload ?? null) ? $order->payment_payload : [];
+        $paymentTypeRaw = trim((string) ($order->payment_type ?? ''));
+        $paymentTypeLabel = match (strtolower($paymentTypeRaw)) {
+            'bank_transfer' => 'Bank Transfer',
+            'echannel' => 'Mandiri Bill',
+            'cstore' => 'Convenience Store',
+            'gopay' => 'GoPay',
+            'qris' => 'QRIS',
+            default => $paymentTypeRaw !== '' ? ucwords(str_replace('_', ' ', $paymentTypeRaw)) : '-',
+        };
+        $vaNumber = '-';
+
+        if (!empty($paymentPayload['va_numbers']) && is_array($paymentPayload['va_numbers'])) {
+            $firstVa = $paymentPayload['va_numbers'][0] ?? null;
+            if (is_array($firstVa) && !empty($firstVa['va_number'])) {
+                $bankLabel = !empty($firstVa['bank']) ? strtoupper((string) $firstVa['bank']) . ' ' : '';
+                $vaNumber = $bankLabel . (string) $firstVa['va_number'];
+            }
+        } elseif (!empty($paymentPayload['permata_va_number'])) {
+            $vaNumber = 'PERMATA ' . (string) $paymentPayload['permata_va_number'];
+        } elseif (!empty($paymentPayload['bill_key']) || !empty($paymentPayload['biller_code'])) {
+            $billerCode = (string) ($paymentPayload['biller_code'] ?? '-');
+            $billKey = (string) ($paymentPayload['bill_key'] ?? '-');
+            $vaNumber = trim($billerCode . ' / ' . $billKey, ' /');
+        } elseif (!empty($paymentPayload['payment_code'])) {
+            $vaNumber = (string) $paymentPayload['payment_code'];
+        }
+
+        $canResumePaymentMethod = $paymentStatus === 'PENDING' && $paymentTypeRaw === '';
+        $canCancelPayment = $paymentStatus === 'PENDING';
 
         $paymentLabel = match ($paymentStatus) {
             'PAID', 'SUCCESS', 'SETTLEMENT' => 'LUNAS',
@@ -46,6 +78,7 @@
 
         $orderLabel = match ($orderStatus) {
             'PENDING_PAYMENT' => 'Menunggu Pembayaran',
+            'PAYMENT_FAILED' => 'Pembayaran Gagal',
             'CONFIRMED' => 'Terkonfirmasi',
             'IN_QUEUE' => 'Dalam Antrean',
             'IN_PROGRESS' => 'Sedang Diproses',
@@ -58,10 +91,11 @@
             : 'bg-amber-100 text-amber-700 border-amber-200';
 
         $displayOrderId = 'ORD-' . strtoupper(substr((string) $order->_id, -6));
-        $paidAtIso = optional($order->paid_at)->toIso8601String() ?? now()->toIso8601String();
-        $paidAtLabel = $order->paid_at
+        $isPaidPayment = in_array($paymentStatus, ['PAID', 'SUCCESS', 'SETTLEMENT'], true);
+        $paidAtIso = $isPaidPayment ? optional($order->paid_at)->toIso8601String() : null;
+        $paidAtLabel = $isPaidPayment && $order->paid_at
             ? $order->paid_at->copy()->setTimezone(config('app.timezone'))->format('d M Y H:i')
-            : now()->setTimezone(config('app.timezone'))->format('d M Y H:i');
+            : '-';
     @endphp
 
     <main class="w-full max-w-md bg-white min-h-screen shadow-2xl rounded-3xl overflow-hidden border border-gray-100">
@@ -121,7 +155,15 @@
                 </div>
                 <div class="flex items-center justify-between text-sm">
                     <span class="text-gray-500">Waktu Bayar</span>
-                    <span class="font-semibold text-gray-700" data-local-datetime="{{ $paidAtIso }}">{{ $paidAtLabel }}</span>
+                    <span class="font-semibold text-gray-700" @if($paidAtIso) data-local-datetime="{{ $paidAtIso }}" @endif>{{ $paidAtLabel }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-3 text-sm">
+                    <span class="text-gray-500">Metode Bayar</span>
+                    <span class="font-semibold text-gray-700 text-right">{{ $paymentTypeLabel }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-3 text-sm">
+                    <span class="text-gray-500">Nomor VA</span>
+                    <span class="font-semibold text-gray-700 text-right">{{ $vaNumber !== '' ? $vaNumber : '-' }}</span>
                 </div>
             </div>
 
@@ -172,7 +214,22 @@
         </section>
 
         <footer class="px-6 pb-6 pt-2">
-            <a href="/menu" class="w-full inline-flex items-center justify-center rounded-2xl bg-[#C8641E] hover:bg-[#A85318] text-white font-bold px-5 py-3 transition">Kembali ke Menu</a>
+            <div class="space-y-3">
+                @if ($canResumePaymentMethod)
+                    <a href="/kedai/pembayaran/{{ urlencode((string) $order->_id) }}/pilih-metode" class="w-full inline-flex items-center justify-center rounded-2xl border border-[#C8641E] bg-orange-50 hover:bg-orange-100 text-[#C8641E] font-bold px-5 py-3 transition">
+                        Pilih Metode Pembayaran Lagi
+                    </a>
+                @endif
+                @if ($canCancelPayment)
+                    <form method="POST" action="/kedai/pembayaran/{{ urlencode((string) $order->_id) }}/batalkan">
+                        @csrf
+                        <button type="submit" class="w-full inline-flex items-center justify-center rounded-2xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 font-bold px-5 py-3 transition">
+                            Batalkan Pembayaran
+                        </button>
+                    </form>
+                @endif
+                <a href="/menu" class="w-full inline-flex items-center justify-center rounded-2xl bg-[#C8641E] hover:bg-[#A85318] text-white font-bold px-5 py-3 transition">Kembali ke Menu</a>
+            </div>
         </footer>
     </main>
     @endif

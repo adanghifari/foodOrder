@@ -299,6 +299,85 @@ class PaymentService
         ];
     }
 
+    public function cancelTransaction(string $midtransOrderId): array
+    {
+        $midtransOrderId = trim($midtransOrderId);
+
+        if ($midtransOrderId === '') {
+            return [
+                'ok' => false,
+                'status' => 422,
+                'message' => 'order_id is required',
+            ];
+        }
+
+        $serverKey = (string) config('services.midtrans.server_key');
+        $isProduction = (bool) config('services.midtrans.is_production', false);
+
+        if ($serverKey === '') {
+            return [
+                'ok' => false,
+                'status' => 500,
+                'message' => 'Midtrans server key is not configured',
+            ];
+        }
+
+        $cancelUrl = ($isProduction ? 'https://api.midtrans.com' : 'https://api.sandbox.midtrans.com')
+            . '/v2/' . urlencode($midtransOrderId) . '/cancel';
+
+        $response = Http::withBasicAuth($serverKey, '')
+            ->acceptJson()
+            ->post($cancelUrl);
+
+        if (!$response->successful()) {
+            return [
+                'ok' => false,
+                'status' => 502,
+                'message' => 'Failed to cancel Midtrans transaction',
+                'data' => $response->json() ?: ['raw' => $response->body()],
+            ];
+        }
+
+        $payload = (array) $response->json();
+        $order = Order::where('midtrans_order_id', $midtransOrderId)->first();
+
+        if (!$order && str_starts_with($midtransOrderId, 'ORDER-')) {
+            $parts = explode('-', $midtransOrderId);
+            if (count($parts) >= 3) {
+                $fallbackId = (string) ($parts[1] ?? '');
+                if ($fallbackId !== '') {
+                    $order = Order::find($fallbackId);
+                }
+            }
+        }
+
+        if ($order) {
+            $mergedPayload = array_merge(
+                is_array($order->payment_payload ?? null) ? $order->payment_payload : [],
+                $this->sanitizePaymentPayload($payload)
+            );
+
+            $this->applyPaymentUpdate($order, [
+                'midtrans_order_id' => $midtransOrderId,
+                'payment_status' => 'CANCELED',
+                'payment_type' => (string) ($payload['payment_type'] ?? $order->payment_type ?? ''),
+                'payment_payload' => $mergedPayload,
+            ]);
+        }
+
+        return [
+            'ok' => true,
+            'status' => 200,
+            'message' => 'Transaction canceled',
+            'data' => [
+                'order_id' => (string) ($order?->_id ?? ''),
+                'midtrans_order_id' => $midtransOrderId,
+                'payment_status' => 'CANCELED',
+                'cancel_response' => $payload,
+            ],
+        ];
+    }
+
     private function mapMidtransStatus(string $transactionStatus, string $fraudStatus): string
     {
         return match ($transactionStatus) {
@@ -324,7 +403,9 @@ class PaymentService
 
             $attributes['paid_at'] = $order->paid_at ?? now();
         } elseif (in_array($paymentStatus, self::FAILED_STATUSES, true)) {
-            $attributes['status'] = $currentStatus === '' ? 'PENDING_PAYMENT' : $order->status;
+            $attributes['status'] = in_array($currentStatus, ['', 'PENDING_PAYMENT', 'PAYMENT_FAILED'], true)
+                ? 'PAYMENT_FAILED'
+                : $order->status;
             $attributes['paid_at'] = $order->paid_at;
         }
 
