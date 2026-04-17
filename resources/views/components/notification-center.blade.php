@@ -183,11 +183,13 @@
             }
 
             let activeResolver = null;
+            let singleButtonMode = false;
 
             function closeConfirm(result) {
                 confirmOverlay.classList.add('hidden');
                 confirmOverlay.setAttribute('aria-hidden', 'true');
                 document.body.classList.remove('overflow-hidden');
+                singleButtonMode = false;
 
                 if (activeResolver) {
                     activeResolver(result);
@@ -198,6 +200,7 @@
             function confirm(options) {
                 const settings = options || {};
                 const tone = resolveTone(settings.type || 'warning');
+                singleButtonMode = Boolean(settings.singleButton);
 
                 confirmBadge.className = 'inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold uppercase tracking-[0.18em] ' + tone.badge;
                 confirmBadge.textContent = settings.badge || tone.label;
@@ -206,6 +209,7 @@
                 confirmSubmit.textContent = String(settings.confirmText || 'Lanjutkan');
                 confirmCancel.textContent = String(settings.cancelText || 'Batal');
                 confirmSubmit.className = 'inline-flex items-center rounded-xl px-4 py-2.5 text-sm font-bold text-white transition ' + tone.button;
+                confirmCancel.classList.toggle('hidden', singleButtonMode);
 
                 confirmOverlay.classList.remove('hidden');
                 confirmOverlay.setAttribute('aria-hidden', 'false');
@@ -226,12 +230,18 @@
 
             confirmOverlay.addEventListener('click', function (event) {
                 if (event.target === confirmOverlay) {
+                    if (singleButtonMode) {
+                        return;
+                    }
                     closeConfirm(false);
                 }
             });
 
             document.addEventListener('keydown', function (event) {
                 if (event.key === 'Escape' && !confirmOverlay.classList.contains('hidden')) {
+                    if (singleButtonMode) {
+                        return;
+                    }
                     closeConfirm(false);
                 }
             });

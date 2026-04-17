@@ -2,6 +2,7 @@
 
 namespace App\Domains\Payment\Services;
 
+use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
@@ -72,6 +73,15 @@ class PaymentService
             ];
         }
 
+        $reserveResult = $this->reserveStockForOrder($order);
+        if (!($reserveResult['ok'] ?? false)) {
+            return [
+                'ok' => false,
+                'status' => 409,
+                'message' => (string) ($reserveResult['message'] ?? 'Stok tidak mencukupi untuk memproses pembayaran'),
+            ];
+        }
+
         $customer = null;
         if (!empty($order->customer_id)) {
             $customer = User::find((string) $order->customer_id);
@@ -129,6 +139,10 @@ class PaymentService
         $response = $request->post($snapUrl, $payload);
 
         if (!$response->successful()) {
+            if (($reserveResult['reserved_now'] ?? false) === true) {
+                $this->restoreStockForOrder($order, true);
+            }
+
             return [
                 'ok' => false,
                 'status' => 502,
@@ -419,6 +433,106 @@ class PaymentService
         }
 
         $order->update($attributes);
+
+        // Reservation is released only on explicit cancel.
+        if ($paymentStatus === 'CANCELED') {
+            $this->restoreStockForOrder($order);
+        }
+    }
+
+    private function reserveStockForOrder(Order $order): array
+    {
+        if (!empty($order->stock_reserved_at)) {
+            return [
+                'ok' => true,
+                'reserved_now' => false,
+            ];
+        }
+
+        $quantities = $this->buildOrderItemQuantities($order);
+        if ($quantities === []) {
+            return [
+                'ok' => false,
+                'message' => 'Item order tidak valid untuk reservasi stok',
+            ];
+        }
+
+        $reserved = [];
+        foreach ($quantities as $menuId => $qty) {
+            $updated = MenuItem::where('_id', $menuId)
+                ->where('stock', '>=', $qty)
+                ->decrement('stock', $qty);
+
+            if ($updated !== 1) {
+                foreach ($reserved as $reservedMenuId => $reservedQty) {
+                    MenuItem::where('_id', $reservedMenuId)->increment('stock', $reservedQty);
+                }
+
+                $menuName = (string) optional(MenuItem::find($menuId))->name;
+                $menuLabel = $menuName !== '' ? $menuName : $menuId;
+
+                return [
+                    'ok' => false,
+                    'message' => 'Stok menu "' . $menuLabel . '" tidak mencukupi.',
+                ];
+            }
+
+            $reserved[$menuId] = $qty;
+        }
+
+        $order->update([
+            'stock_reserved_at' => now(),
+            'stock_restored_at' => null,
+        ]);
+
+        return [
+            'ok' => true,
+            'reserved_now' => true,
+        ];
+    }
+
+    private function restoreStockForOrder(Order $order, bool $force = false): void
+    {
+        if (empty($order->stock_reserved_at)) {
+            return;
+        }
+
+        if (!$force && !empty($order->stock_restored_at)) {
+            return;
+        }
+
+        $quantities = $this->buildOrderItemQuantities($order);
+        foreach ($quantities as $menuId => $qty) {
+            MenuItem::where('_id', $menuId)->increment('stock', $qty);
+        }
+
+        $order->update([
+            'stock_restored_at' => now(),
+        ]);
+    }
+
+    private function buildOrderItemQuantities(Order $order): array
+    {
+        $items = is_array($order->items ?? null) ? $order->items : [];
+        $quantities = [];
+
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $menuId = trim((string) ($item['menu_id'] ?? ''));
+            if ($menuId === '') {
+                continue;
+            }
+
+            if (!isset($quantities[$menuId])) {
+                $quantities[$menuId] = 0;
+            }
+            $quantities[$menuId]++;
+        }
+
+        return $quantities;
     }
 
     private function sanitizePaymentPayload(array $payload): array
