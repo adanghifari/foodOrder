@@ -174,12 +174,20 @@
             }
         }
 
-        function showNotificationAndRedirect(options, redirectUrl, delay) {
-            showNotification(options);
+        async function showTableRequiredPopup() {
+            if (window.KedaiKlikNotify && typeof window.KedaiKlikNotify.confirm === 'function') {
+                await window.KedaiKlikNotify.confirm({
+                    type: 'warning',
+                    badge: 'Perhatian',
+                    title: 'Nomor meja belum ada',
+                    message: 'Silahkan order dengan scan qr code pada meja terlebih dahulu',
+                    confirmText: 'Oke',
+                    singleButton: true,
+                });
+                return;
+            }
 
-            window.setTimeout(function () {
-                window.location.href = redirectUrl;
-            }, delay || 1400);
+            window.alert('Silahkan order dengan scan qr code pada meja terlebih dahulu');
         }
 
         function validateCustomerInfo() {
@@ -224,14 +232,7 @@
             }
 
             if (!tableNumber || tableNumber === '-') {
-                showNotificationAndRedirect(
-                    {
-                        type: 'warning',
-                        title: 'Nomor meja belum ada',
-                        message: 'Silakan scan QR meja terlebih dahulu sebelum lanjut pembayaran.',
-                    },
-                    '/menu'
-                );
+                await showTableRequiredPopup();
                 return;
             }
 

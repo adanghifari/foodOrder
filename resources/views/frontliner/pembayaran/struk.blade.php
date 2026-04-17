@@ -65,8 +65,11 @@
             $vaNumber = (string) $paymentPayload['payment_code'];
         }
 
-        $canResumePaymentMethod = $paymentStatus === 'PENDING' && $paymentTypeRaw === '';
+        $canResumePaymentMethod = $paymentStatus === 'PENDING';
         $canCancelPayment = $paymentStatus === 'PENDING';
+        $resumePaymentLabel = $paymentTypeRaw === ''
+            ? 'Pilih Metode Pembayaran'
+            : 'Ganti Metode Pembayaran';
 
         $paymentLabel = match ($paymentStatus) {
             'PAID', 'SUCCESS', 'SETTLEMENT' => 'LUNAS',
@@ -217,7 +220,7 @@
             <div class="space-y-3">
                 @if ($canResumePaymentMethod)
                     <a href="/kedai/pembayaran/{{ urlencode((string) $order->_id) }}/pilih-metode" class="w-full inline-flex items-center justify-center rounded-2xl border border-[#C8641E] bg-orange-50 hover:bg-orange-100 text-[#C8641E] font-bold px-5 py-3 transition">
-                        Pilih Metode Pembayaran Lagi
+                        {{ $resumePaymentLabel }}
                     </a>
                 @endif
                 @if ($canCancelPayment)
