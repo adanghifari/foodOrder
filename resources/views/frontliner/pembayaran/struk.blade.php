@@ -26,7 +26,7 @@
                     </svg>
                 </div>
                 <h2 class="text-lg font-extrabold text-gray-800">Struk Belum Tersedia</h2>
-                <p class="text-sm text-gray-500 mt-2 max-w-xs">{{ $emptyReceiptMessage ?? 'Belum ada struk aktif di browser ini.' }}</p>
+                <p class="text-sm text-gray-500 mt-2 max-w-xs">Belum ada struk aktif di browser ini.</p>
             </section>
 
             <footer class="px-6 pb-6">
@@ -238,6 +238,16 @@
     @endif
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            const emptyReceiptMessage = @json($emptyReceiptMessage ?? null);
+            if (typeof emptyReceiptMessage === 'string' && emptyReceiptMessage.trim() !== '' && window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
+                window.KedaiKlikNotify.show({
+                    type: 'warning',
+                    title: 'Sesi Struk',
+                    message: emptyReceiptMessage,
+                    duration: 4800,
+                });
+            }
+
             const formatter = new Intl.DateTimeFormat('id-ID', {
                 day: '2-digit',
                 month: 'short',

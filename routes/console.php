@@ -3,6 +3,8 @@
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schedule;
+use App\Domains\Table\Services\TableService;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -76,3 +78,18 @@ Artisan::command('mongo:ensure-menu-schema', function () {
         $this->error('Failed to apply Mongo schema validator: ' . $e->getMessage());
     }
 })->purpose('Create or update MongoDB schema validator for menu_item collection');
+
+Artisan::command('orders:auto-clear-delivered', function () {
+    $clearedCount = app(TableService::class)->autoClearExpiredDeliveredAssignments();
+
+    if ($clearedCount === 0) {
+        $this->info('No expired delivered orders to clear.');
+        return;
+    }
+
+    $this->info('Auto-cleared table assignment for ' . $clearedCount . ' delivered order(s).');
+})->purpose('Auto clear table assignment for delivered paid orders older than 150 minutes');
+
+Schedule::command('orders:auto-clear-delivered')
+    ->everyMinute()
+    ->withoutOverlapping();

@@ -121,6 +121,7 @@ class OrderService
         }
 
         $payload = ['status' => $status];
+
         if ($status === 'DELIVERED') {
             $payload['delivered_at'] = now();
             $payload['table_cleared_at'] = null;

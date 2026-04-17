@@ -285,7 +285,10 @@ class PaymentController extends Controller
 
     public function receipt(Request $request)
     {
-        $this->tableService->clearTableSessionIfInactive($request);
+        $sessionCleared = $this->tableService->clearTableSessionIfInactive($request);
+        if ($sessionCleared) {
+            return $this->emptyReceiptView('Sesi struk sudah berakhir. Silakan scan ulang QR meja jika ingin memesan lagi.');
+        }
 
         $sessionOrderId = (string) $request->session()->get('frontliner_receipt_order_id', '');
         $sessionOrderIds = collect($request->session()->get('frontliner_receipt_order_ids', []))
@@ -345,9 +348,9 @@ class PaymentController extends Controller
 
         $orderStatus = strtoupper((string) ($order->status ?? ''));
         $deliveredAt = $order->delivered_at ?? $order->updated_at;
-        if ($orderStatus === 'DELIVERED' && $deliveredAt && now()->gte($deliveredAt->copy()->addHours(2))) {
+        if ($orderStatus === 'DELIVERED' && $deliveredAt && now()->gte($deliveredAt->copy()->addMinutes(150))) {
             $this->tableService->clearTableSession($request);
-            return $this->emptyReceiptView('Sesi struk sudah berakhir. Silakan scan ulang QR meja jika ingin memesan lagi.');
+            return $this->emptyReceiptView('Sesi anda sudah berakhir. Silakan scan ulang QR meja jika ingin memesan lagi.');
         }
 
         $items = collect(is_array($order->items) ? $order->items : [])

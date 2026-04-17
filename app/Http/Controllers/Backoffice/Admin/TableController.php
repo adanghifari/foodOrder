@@ -19,6 +19,8 @@ class TableController extends Controller
 
     public function indexPage()
     {
+        $this->tableService->autoClearExpiredDeliveredAssignments();
+
         $knownTableIds = collect(config('tables.known_table_ids', []));
 
         if ($knownTableIds->isEmpty()) {

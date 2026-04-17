@@ -420,9 +420,10 @@ class PaymentService
         $currentStatus = strtoupper((string) ($order->status ?? ''));
 
         if (in_array($paymentStatus, self::PAID_STATUSES, true)) {
-            $attributes['status'] = $currentStatus === '' || $currentStatus === 'PENDING_PAYMENT'
+            $nextStatus = $currentStatus === '' || $currentStatus === 'PENDING_PAYMENT'
                 ? 'CONFIRMED'
                 : $order->status;
+            $attributes['status'] = $nextStatus;
 
             $attributes['paid_at'] = $order->paid_at ?? now();
         } elseif (in_array($paymentStatus, self::FAILED_STATUSES, true)) {
