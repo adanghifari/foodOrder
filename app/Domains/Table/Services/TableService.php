@@ -11,6 +11,8 @@ class TableService
 {
     private const ACTIVE_ORDER_STATUSES = ['CONFIRMED', 'IN_QUEUE', 'IN_PROGRESS'];
     private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
+    private const HOLD_PAYMENT_STATUSES = ['PENDING'];
+    private const HOLD_ORDER_STATUSES = ['PENDING_PAYMENT'];
     private const DELIVERED_GRACE_MINUTES = 150;
 
     public function isKnownTable(int $tableId): bool
@@ -56,13 +58,22 @@ class TableService
     public function occupyingOrdersQuery(int $tableId)
     {
         return Order::where('table_number', $tableId)
-            ->whereIn('payment_status', self::PAID_STATUSES)
             ->where(function ($query) {
-                $query->whereIn('status', self::ACTIVE_ORDER_STATUSES)
-                    ->orWhere(function ($deliveredQuery) {
-                        $deliveredQuery->where('status', 'DELIVERED')
-                            ->whereNull('table_cleared_at');
-                    });
+                $query->where(function ($paidFlowQuery) {
+                    $paidFlowQuery->whereIn('payment_status', self::PAID_STATUSES)
+                        ->where(function ($paidStatusQuery) {
+                            $paidStatusQuery->whereIn('status', self::ACTIVE_ORDER_STATUSES)
+                                ->orWhere(function ($deliveredQuery) {
+                                    $deliveredQuery->where('status', 'DELIVERED')
+                                        ->whereNull('table_cleared_at');
+                                });
+                        });
+                })->orWhere(function ($pendingFlowQuery) {
+                    // Keep table reserved as soon as payment is initiated.
+                    $pendingFlowQuery->whereIn('payment_status', self::HOLD_PAYMENT_STATUSES)
+                        ->whereIn('status', self::HOLD_ORDER_STATUSES)
+                        ->whereNull('table_cleared_at');
+                });
             });
     }
 
