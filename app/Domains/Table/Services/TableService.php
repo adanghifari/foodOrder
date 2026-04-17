@@ -33,11 +33,6 @@ class TableService
             return true;
         }
 
-        if (($sessionTableId !== null && $sessionTableId === $tableId)
-            || ($receiptTableId !== null && $receiptTableId === $tableId)) {
-            return true;
-        }
-
         $normalizedCustomerName = $this->normalizeCustomerName($customerName);
         $normalizedBrowserSessionId = trim((string) $browserSessionId);
 
@@ -143,7 +138,9 @@ class TableService
 
     public function normalizeCustomerName(?string $name): string
     {
-        return mb_strtolower(trim((string) $name));
+        $normalized = preg_replace('/\s+/u', ' ', trim((string) $name));
+
+        return mb_strtolower((string) ($normalized ?? ''));
     }
 
     private function clearSessionKeys(Request $request): void

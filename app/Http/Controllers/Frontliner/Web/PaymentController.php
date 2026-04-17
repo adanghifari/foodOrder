@@ -63,7 +63,7 @@ class PaymentController extends Controller
         )) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Meja masih terisi oleh session atau pemesan lain. Gunakan session yang sama atau nama pemesan yang sama untuk menambah order di meja ini.',
+                'message' => 'Meja masih terisi oleh session atau pemesan lain. Gunakan device/browser yang sama atau nama pemesan yang sama untuk menambah order di meja ini.',
             ], 409);
         }
 
