@@ -41,6 +41,7 @@ Route::prefix('backoffice')->group(function () {
         Route::get('/pembayaran', [BackofficePaymentController::class, 'indexPage']);
         Route::delete('/pembayaran/{id}', [BackofficePaymentController::class, 'delete']);
         Route::get('/pengguna', [BackofficeUserController::class, 'indexPage']);
+        Route::delete('/pengguna/{id}', [BackofficeUserController::class, 'deletePage']);
         Route::get('/kelola_meja', [BackofficeTableController::class, 'indexPage']);
         Route::get('/daftar_meja', [BackofficeTableController::class, 'indexPage']);
         Route::patch('/kelola_meja/assign', [BackofficeTableController::class, 'assignPage']);

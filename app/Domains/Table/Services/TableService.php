@@ -11,6 +11,7 @@ class TableService
 {
     private const ACTIVE_ORDER_STATUSES = ['CONFIRMED', 'IN_QUEUE', 'IN_PROGRESS'];
     private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
+    private const DELIVERED_GRACE_MINUTES = 150;
 
     public function isKnownTable(int $tableId): bool
     {
@@ -65,6 +66,37 @@ class TableService
             });
     }
 
+    public function autoClearExpiredDeliveredAssignments(?int $graceMinutes = null): int
+    {
+        $effectiveGraceMinutes = max(1, (int) ($graceMinutes ?? self::DELIVERED_GRACE_MINUTES));
+        $cutoff = now()->subMinutes($effectiveGraceMinutes);
+
+        $expiredDeliveredOrders = Order::where('status', 'DELIVERED')
+            ->whereIn('payment_status', self::PAID_STATUSES)
+            ->whereNull('table_cleared_at')
+            ->where(function ($query) use ($cutoff) {
+                $query->where('delivered_at', '<=', $cutoff)
+                    ->orWhere(function ($fallbackQuery) use ($cutoff) {
+                        $fallbackQuery->whereNull('delivered_at')
+                            ->where('updated_at', '<=', $cutoff);
+                    });
+            })
+            ->get();
+
+        if ($expiredDeliveredOrders->isEmpty()) {
+            return 0;
+        }
+
+        $now = now();
+        foreach ($expiredDeliveredOrders as $order) {
+            $order->update([
+                'table_cleared_at' => $order->table_cleared_at ?? $now,
+            ]);
+        }
+
+        return $expiredDeliveredOrders->count();
+    }
+
     public function clearTableSessionIfInactive(Request $request): bool
     {
         if (!$request->hasSession()) {
@@ -108,7 +140,7 @@ class TableService
         $deliveredAt = $latestDeliveredOrderSinceSession->delivered_at
             ?? $latestDeliveredOrderSinceSession->updated_at;
 
-        if (!$deliveredAt || now()->lt($deliveredAt->copy()->addHours(2))) {
+        if (!$deliveredAt || now()->lt($deliveredAt->copy()->addMinutes(self::DELIVERED_GRACE_MINUTES))) {
             return false;
         }
 
