@@ -12,6 +12,8 @@ class TableController extends Controller
 {
     private const ACTIVE_ORDER_STATUSES = ['CONFIRMED', 'IN_QUEUE', 'IN_PROGRESS'];
     private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
+    private const HOLD_ORDER_STATUSES = ['PENDING_PAYMENT'];
+    private const HOLD_PAYMENT_STATUSES = ['PENDING'];
 
     public function __construct(private readonly TableService $tableService)
     {
@@ -31,13 +33,21 @@ class TableController extends Controller
         }
 
         $occupyingOrders = Order::with('customer')
-            ->whereIn('payment_status', self::PAID_STATUSES)
             ->where(function ($query) {
-                $query->whereIn('status', self::ACTIVE_ORDER_STATUSES)
-                    ->orWhere(function ($deliveredQuery) {
-                        $deliveredQuery->where('status', 'DELIVERED')
-                            ->whereNull('table_cleared_at');
-                    });
+                $query->where(function ($paidFlowQuery) {
+                    $paidFlowQuery->whereIn('payment_status', self::PAID_STATUSES)
+                        ->where(function ($paidStatusQuery) {
+                            $paidStatusQuery->whereIn('status', self::ACTIVE_ORDER_STATUSES)
+                                ->orWhere(function ($deliveredQuery) {
+                                    $deliveredQuery->where('status', 'DELIVERED')
+                                        ->whereNull('table_cleared_at');
+                                });
+                        });
+                })->orWhere(function ($pendingFlowQuery) {
+                    $pendingFlowQuery->whereIn('payment_status', self::HOLD_PAYMENT_STATUSES)
+                        ->whereIn('status', self::HOLD_ORDER_STATUSES)
+                        ->whereNull('table_cleared_at');
+                });
             })
             ->orderBy('queue_number', 'asc')
             ->orderBy('_id', 'desc')
@@ -123,13 +133,21 @@ class TableController extends Controller
 
         if ($sourceTable !== $targetTable) {
             $targetHasActiveOrders = Order::where('table_number', $targetTable)
-                ->whereIn('payment_status', self::PAID_STATUSES)
                 ->where(function ($query) {
-                    $query->whereIn('status', self::ACTIVE_ORDER_STATUSES)
-                        ->orWhere(function ($deliveredQuery) {
-                            $deliveredQuery->where('status', 'DELIVERED')
-                                ->whereNull('table_cleared_at');
-                        });
+                    $query->where(function ($paidFlowQuery) {
+                        $paidFlowQuery->whereIn('payment_status', self::PAID_STATUSES)
+                            ->where(function ($paidStatusQuery) {
+                                $paidStatusQuery->whereIn('status', self::ACTIVE_ORDER_STATUSES)
+                                    ->orWhere(function ($deliveredQuery) {
+                                        $deliveredQuery->where('status', 'DELIVERED')
+                                            ->whereNull('table_cleared_at');
+                                    });
+                            });
+                    })->orWhere(function ($pendingFlowQuery) {
+                        $pendingFlowQuery->whereIn('payment_status', self::HOLD_PAYMENT_STATUSES)
+                            ->whereIn('status', self::HOLD_ORDER_STATUSES)
+                            ->whereNull('table_cleared_at');
+                    });
                 })
                 ->where('_id', '!=', $order->_id)
                 ->exists();
@@ -156,13 +174,21 @@ class TableController extends Controller
         }
 
         $occupyingOrders = Order::where('table_number', $tableId)
-            ->whereIn('payment_status', self::PAID_STATUSES)
             ->where(function ($query) {
-                $query->whereIn('status', self::ACTIVE_ORDER_STATUSES)
-                    ->orWhere(function ($deliveredQuery) {
-                        $deliveredQuery->where('status', 'DELIVERED')
-                            ->whereNull('table_cleared_at');
-                    });
+                $query->where(function ($paidFlowQuery) {
+                    $paidFlowQuery->whereIn('payment_status', self::PAID_STATUSES)
+                        ->where(function ($paidStatusQuery) {
+                            $paidStatusQuery->whereIn('status', self::ACTIVE_ORDER_STATUSES)
+                                ->orWhere(function ($deliveredQuery) {
+                                    $deliveredQuery->where('status', 'DELIVERED')
+                                        ->whereNull('table_cleared_at');
+                                });
+                        });
+                })->orWhere(function ($pendingFlowQuery) {
+                    $pendingFlowQuery->whereIn('payment_status', self::HOLD_PAYMENT_STATUSES)
+                        ->whereIn('status', self::HOLD_ORDER_STATUSES)
+                        ->whereNull('table_cleared_at');
+                });
             })
             ->get();
 

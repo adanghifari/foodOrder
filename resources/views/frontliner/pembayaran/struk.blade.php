@@ -242,7 +242,7 @@
             if (typeof emptyReceiptMessage === 'string' && emptyReceiptMessage.trim() !== '' && window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
                 window.KedaiKlikNotify.show({
                     type: 'warning',
-                    title: 'Sesi Struk',
+                    title: 'Notifikasi Struk',
                     message: emptyReceiptMessage,
                     duration: 4800,
                 });

@@ -12,6 +12,8 @@ class OverviewController extends Controller
 {
     private const ACTIVE_ORDER_STATUSES = ['CONFIRMED', 'IN_QUEUE', 'IN_PROGRESS'];
     private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
+    private const HOLD_ORDER_STATUSES = ['PENDING_PAYMENT'];
+    private const HOLD_PAYMENT_STATUSES = ['PENDING'];
 
     public function indexPage()
     {
@@ -67,8 +69,16 @@ class OverviewController extends Controller
             );
         }
 
-        $occupiedTables = Order::whereIn('status', self::ACTIVE_ORDER_STATUSES)
-            ->whereIn('payment_status', self::PAID_STATUSES)
+        $occupiedTables = Order::where(function ($query) {
+                $query->where(function ($paidFlowQuery) {
+                    $paidFlowQuery->whereIn('payment_status', self::PAID_STATUSES)
+                        ->whereIn('status', self::ACTIVE_ORDER_STATUSES);
+                })->orWhere(function ($pendingFlowQuery) {
+                    $pendingFlowQuery->whereIn('payment_status', self::HOLD_PAYMENT_STATUSES)
+                        ->whereIn('status', self::HOLD_ORDER_STATUSES)
+                        ->whereNull('table_cleared_at');
+                });
+            })
             ->whereIn('table_number', $knownTableIds)
             ->distinct('table_number')
             ->count('table_number');
