@@ -5,6 +5,7 @@ namespace App\Domains\Payment\Services;
 use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\User;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
 class PaymentService
@@ -345,20 +346,31 @@ class PaymentService
             ];
         }
 
-        $cancelUrl = ($isProduction ? 'https://api.midtrans.com' : 'https://api.sandbox.midtrans.com')
-            . '/v2/' . urlencode($midtransOrderId) . '/cancel';
-
-        $response = Http::withBasicAuth($serverKey, '')
-            ->acceptJson()
-            ->post($cancelUrl);
+        $response = $this->postMidtransTransactionAction($serverKey, $isProduction, $midtransOrderId, 'cancel');
+        $midtransAction = 'cancel';
+        $cancelError = null;
 
         if (!$response->successful()) {
-            return [
-                'ok' => false,
-                'status' => 502,
-                'message' => 'Failed to cancel Midtrans transaction',
-                'data' => $response->json() ?: ['raw' => $response->body()],
-            ];
+            $cancelError = $response->json() ?: ['raw' => $response->body()];
+
+            // Some pending payment channels can no longer be canceled directly
+            // once a method is chosen. For those cases, expire as a fallback.
+            $expireResponse = $this->postMidtransTransactionAction($serverKey, $isProduction, $midtransOrderId, 'expire');
+
+            if (!$expireResponse->successful()) {
+                return [
+                    'ok' => false,
+                    'status' => 502,
+                    'message' => 'Failed to cancel Midtrans transaction',
+                    'data' => [
+                        'cancel' => $cancelError,
+                        'expire' => $expireResponse->json() ?: ['raw' => $expireResponse->body()],
+                    ],
+                ];
+            }
+
+            $response = $expireResponse;
+            $midtransAction = 'expire';
         }
 
         $payload = (array) $response->json();
@@ -395,10 +407,26 @@ class PaymentService
             'data' => [
                 'order_id' => (string) ($order?->_id ?? ''),
                 'midtrans_order_id' => $midtransOrderId,
-                'payment_status' => $syncLocal ? 'CANCELED' : (string) ($order->payment_status ?? 'PENDING'),
+                'payment_status' => $syncLocal ? 'CANCELED' : (string) ($order?->payment_status ?? 'PENDING'),
+                'midtrans_action' => $midtransAction,
                 'cancel_response' => $payload,
+                'cancel_error' => $cancelError,
             ],
         ];
+    }
+
+    private function postMidtransTransactionAction(
+        string $serverKey,
+        bool $isProduction,
+        string $midtransOrderId,
+        string $action
+    ): Response {
+        $actionUrl = ($isProduction ? 'https://api.midtrans.com' : 'https://api.sandbox.midtrans.com')
+            . '/v2/' . urlencode($midtransOrderId) . '/' . $action;
+
+        return Http::withBasicAuth($serverKey, '')
+            ->acceptJson()
+            ->post($actionUrl);
     }
 
     private function mapMidtransStatus(string $transactionStatus, string $fraudStatus): string
