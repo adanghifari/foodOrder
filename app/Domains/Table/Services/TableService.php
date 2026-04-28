@@ -166,7 +166,8 @@ class TableService
     public function clearTableSession(Request $request): bool
     {
         if (!$request->hasSession()) {
-            return false;
+            // Keep endpoint idempotent for stateless API clients.
+            return true;
         }
 
         $this->clearSessionKeys($request);

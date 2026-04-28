@@ -41,11 +41,10 @@ Route::group(['prefix' => 'v1/cart', 'middleware' => ['auth:api', 'role:CUSTOMER
     Route::post('/', [CustomerCartController::class, 'add']);
     Route::get('/', [CustomerCartController::class, 'get']);
     Route::delete('/', [CustomerCartController::class, 'remove']);
-    Route::post('/checkout', [CustomerCartController::class, 'checkout'])->middleware('web');
+    Route::post('/checkout', [CustomerCartController::class, 'checkout']);
 });
 
-Route::post('v1/table-session/clear', [FrontlinerTableController::class, 'clearTableSession'])
-    ->middleware('web');
+Route::post('v1/table-session/clear', [FrontlinerTableController::class, 'clearTableSession']);
 
 Route::get('v1/tables/{tableId}/availability', [FrontlinerTableController::class, 'checkTableAvailability'])
     ->whereNumber('tableId');
