@@ -95,7 +95,7 @@ class CartController extends Controller
 	public function checkout(Request $request)
 	{
 		$validator = Validator::make($request->all(), [
-			'tableNumber' => 'nullable|integer|min:1',
+			'tableNumber' => 'required|integer|min:1',
 		]);
 
 		if ($validator->fails()) {
@@ -107,10 +107,9 @@ class CartController extends Controller
 		}
 
 		$user = $request->user();
-		$sessionTableId = $request->hasSession() ? $request->session()->get('table_id') : null;
-		$tableNumber = $request->input('tableNumber', $sessionTableId);
+		$tableNumber = (int) $request->input('tableNumber');
 
-		$result = $this->cartService->checkout($user, $tableNumber ? (int) $tableNumber : null);
+		$result = $this->cartService->checkout($user, $tableNumber);
 		if (!$result['ok']) {
 			return response()->json([
 				'status' => 'error',
