@@ -38,12 +38,29 @@
                     ];
                 @endphp
 
+                @php
+                    $activeCategory = strtolower(trim((string) ($activeCategory ?? 'all')));
+                    if ($activeCategory === '') {
+                        $activeCategory = 'all';
+                    }
+                @endphp
                 @foreach($tabs as $tab)
-                    <a href="/{{ $tab['url'] }}" 
-                       class="whitespace-nowrap px-6 py-2.5 rounded-xl font-bold transition-all duration-300 shadow-sm border
-                       {{ ($tab['url'] === 'menu' ? request()->is('menu') || request()->is('menu/semua') : request()->is($tab['url'])) ? 'bg-[#C8641E] text-white border-[#C8641E]' : 'bg-white text-gray-500 border-gray-100' }}">
-                       {{ $tab['name'] }}
-                    </a>
+                    @php
+                        $tabCategory = match ($tab['url']) {
+                            'menu/makanan-utama' => 'makanan utama',
+                            'menu/cemilan' => 'cemilan',
+                            'menu/minuman' => 'minuman',
+                            default => 'all',
+                        };
+                        $isActiveTab = $tabCategory === $activeCategory;
+                    @endphp
+                    <button
+                        type="button"
+                        data-tab-category="{{ $tabCategory }}"
+                        class="menu-tab whitespace-nowrap px-6 py-2.5 rounded-xl font-bold transition-all duration-300 shadow-sm border {{ $isActiveTab ? 'bg-[#C8641E] text-white border-[#C8641E]' : 'bg-white text-gray-500 border-gray-100' }}"
+                    >
+                        {{ $tab['name'] }}
+                    </button>
                 @endforeach
             </div>
 
@@ -61,7 +78,8 @@
                 $menuStock = (int) ($menu['stock'] ?? 0);
                 $isOutOfStock = $menuStock <= 0;
             @endphp
-            <div class="flex bg-white rounded-[24px] p-3 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-50 items-center">
+            <div class="menu-card flex bg-white rounded-[24px] p-3 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-50 items-center"
+                 data-menu-category="{{ strtolower(trim((string) ($menu['category'] ?? ''))) }}">
                 <div class="w-28 h-28 flex-shrink-0">
                     @php
                         $rawImageUrl = $menu['image_url'] ?? '';
@@ -132,6 +150,7 @@
 
     <script>
         let keranjang = JSON.parse(localStorage.getItem('kedaiKlikCart')) || [];
+        let activeCategory = @json($activeCategory ?? 'all');
 
         function getQtyByName(nama) {
             const item = keranjang.find((cartItem) => cartItem.nama === nama);
@@ -226,7 +245,46 @@
             syncItemQtyControls();
         }
 
+        function normalizeCategory(value) {
+            return (value || '').toString().trim().toLowerCase();
+        }
+
+        function syncCategoryTabs() {
+            const normalizedActiveCategory = normalizeCategory(activeCategory) || 'all';
+            document.querySelectorAll('.menu-tab').forEach((tab) => {
+                const tabCategory = normalizeCategory(tab.dataset.tabCategory || 'all');
+                const isActive = tabCategory === normalizedActiveCategory;
+
+                tab.classList.toggle('bg-[#C8641E]', isActive);
+                tab.classList.toggle('text-white', isActive);
+                tab.classList.toggle('border-[#C8641E]', isActive);
+                tab.classList.toggle('bg-white', !isActive);
+                tab.classList.toggle('text-gray-500', !isActive);
+                tab.classList.toggle('border-gray-100', !isActive);
+            });
+        }
+
+        function filterMenuByCategory() {
+            const normalizedActiveCategory = normalizeCategory(activeCategory) || 'all';
+            document.querySelectorAll('.menu-card').forEach((card) => {
+                const category = normalizeCategory(card.dataset.menuCategory);
+                const isVisible = normalizedActiveCategory === 'all' || category === normalizedActiveCategory;
+                card.classList.toggle('hidden', !isVisible);
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
+            activeCategory = normalizeCategory(activeCategory) || 'all';
+            document.querySelectorAll('.menu-tab').forEach((tab) => {
+                tab.addEventListener('click', () => {
+                    activeCategory = normalizeCategory(tab.dataset.tabCategory) || 'all';
+                    syncCategoryTabs();
+                    filterMenuByCategory();
+                });
+            });
+
+            syncCategoryTabs();
+            filterMenuByCategory();
             updateBadge();
             syncItemQtyControls();
         });
