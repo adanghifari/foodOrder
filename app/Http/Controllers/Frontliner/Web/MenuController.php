@@ -18,15 +18,12 @@ class MenuController extends Controller
 
 	public function semua(Request $request)
 	{
-		$this->tableService->clearTableSessionIfInactive($request);
-
-		$menus = $this->menuService->listAll();
-		return view('frontliner.menu', ['menus' => $menus]);
+		return $this->renderWithActiveCategory($request, 'all');
 	}
 
 	public function makananUtama(Request $request)
 	{
-		return $this->renderCategory($request, 'makanan utama');
+		return $this->renderWithActiveCategory($request, 'makanan utama');
 	}
 
 	public function hidangan(Request $request)
@@ -36,21 +33,25 @@ class MenuController extends Controller
 
 	public function cemilan(Request $request)
 	{
-		return $this->renderCategory($request, 'cemilan');
+		return $this->renderWithActiveCategory($request, 'cemilan');
 	}
 
 	public function minuman(Request $request)
 	{
-		return $this->renderCategory($request, 'minuman');
+		return $this->renderWithActiveCategory($request, 'minuman');
 	}
 
-	private function renderCategory(Request $request, string $category)
+	private function renderWithActiveCategory(Request $request, string $activeCategory)
 	{
 		// If all orders for the current session table are no longer active
 		// (e.g. moved to DELIVERED), clear stale table context from session.
 		$this->tableService->clearTableSessionIfInactive($request);
 
-		$menus = $this->menuService->filterByCategory($category);
-		return view('frontliner.menu', ['menus' => $menus]);
+		$menus = $this->menuService->listAll();
+
+		return view('frontliner.menu', [
+			'menus' => $menus,
+			'activeCategory' => $activeCategory,
+		]);
 	}
 }
