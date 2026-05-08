@@ -165,12 +165,12 @@
 
     </div>
 
-    <div id="detail-menu-modal" class="fixed inset-0 z-[120] hidden">
-        <div class="absolute inset-0 bg-black/45" onclick="tutupDetailMenu()"></div>
-        <div class="relative z-[121] min-h-screen w-full flex items-end sm:items-center justify-center p-3 sm:p-5">
+    <div id="detail-menu-modal" class="fixed inset-0 z-[120] hidden" role="dialog" aria-modal="true" aria-labelledby="detail-menu-title">
+        <div class="absolute inset-0 bg-slate-950/45 backdrop-blur-sm" onclick="tutupDetailMenu()"></div>
+        <div class="relative z-[121] min-h-screen w-full flex items-center justify-center p-3 sm:p-5">
             <div class="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
                 <div class="p-4 border-b border-slate-200 flex items-center justify-between">
-                    <h3 class="text-base font-extrabold text-slate-800">Detail Menu</h3>
+                    <h3 id="detail-menu-title" class="text-base font-extrabold text-slate-800">Detail Menu</h3>
                     <button type="button" onclick="tutupDetailMenu()" class="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-slate-300 text-slate-600">✕</button>
                 </div>
                 <div class="p-4 space-y-3">
@@ -383,6 +383,12 @@
             filterMenuByCategory();
             updateBadge();
             syncItemQtyControls();
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    tutupDetailMenu();
+                }
+            });
         });
     </script>
 </body>
