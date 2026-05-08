@@ -30,7 +30,7 @@
             'FAILED', 'DENY' => 'Gagal',
             'CANCELED', 'CANCEL' => 'Dibatalkan',
             'EXPIRED', 'EXPIRE' => 'Kedaluwarsa',
-            default => 'Menunggu',
+            default => 'Menunggu Pembayaran',
         };
 
         $detailPaymentClass = match ($detailPaymentLabel) {
@@ -53,15 +53,16 @@
         }
     @endphp
 
-    <div class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"></div>
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+    <div data-modal-root class="bo-modal-root fixed inset-0 z-[70]">
+        <div data-modal-overlay class="bo-modal-backdrop fixed inset-0 bg-black/40 backdrop-blur-sm"></div>
+        <div class="bo-modal-wrap fixed inset-0 flex items-center justify-center p-4">
+        <div class="bo-modal-panel w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
             <div class="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-3">
                 <div>
                     <h3 class="text-lg font-extrabold text-[var(--rich-black)]">Detail Pesanan</h3>
                     <p class="text-sm font-semibold text-slate-500">{{ $detailDisplayId }}</p>
                 </div>
-                <a href="/backoffice/daftar_pesanan" class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold px-3 py-1.5 transition">Tutup</a>
+                <button type="button" data-modal-close class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold px-3 py-1.5 transition">Tutup</button>
             </div>
 
             <div class="p-5 space-y-4 max-h-[72vh] overflow-y-auto">
@@ -149,5 +150,6 @@
                 </section>
             </div>
         </div>
+    </div>
     </div>
 @endif

@@ -83,13 +83,35 @@ class OrderController extends Controller
 		]);
 
 		if ($validator->fails()) {
+			if ($request->expectsJson() || $request->ajax()) {
+				return response()->json([
+					'status' => 'error',
+					'message' => 'Validasi status tidak sesuai.',
+					'errors' => $validator->errors(),
+				], 422);
+			}
+
 			return redirect()->back()->withErrors($validator)->withInput();
 		}
 
 		$updated = $this->orderService->updateStatus((string) $id, (string) $request->input('status'));
 
 		if (!$updated) {
+			if ($request->expectsJson() || $request->ajax()) {
+				return response()->json([
+					'status' => 'error',
+					'message' => 'Order tidak ditemukan.',
+				], 404);
+			}
+
 			return redirect()->back()->with('error', 'Order tidak ditemukan.');
+		}
+
+		if ($request->expectsJson() || $request->ajax()) {
+			return response()->json([
+				'status' => 'success',
+				'message' => 'Status pesanan berhasil diperbarui.',
+			]);
 		}
 
 		return redirect()->back()->with('success', 'Status order berhasil diperbarui.');

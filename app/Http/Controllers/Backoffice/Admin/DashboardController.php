@@ -8,9 +8,16 @@ use App\Models\Order;
 
 class DashboardController extends Controller
 {
+    private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
+
     public function index()
     {
-        $orders = Order::orderBy('_id', 'desc')->limit(8)->get();
+        $orders = Order::orderBy('_id', 'desc')
+            ->whereNull('order_deleted_at')
+            ->where('status', 'CONFIRMED')
+            ->whereIn('payment_status', self::PAID_STATUSES)
+            ->limit(12)
+            ->get();
 
         $activeOrders = $orders->map(function (Order $order) {
             $itemRows = collect($this->normalizeOrderItems($order->items))
@@ -24,13 +31,27 @@ class DashboardController extends Controller
                 ->values()
                 ->toArray();
 
+            $customerName = trim((string) ($order->customer_name ?? ''));
+
             return [
                 'id' => (string) $order->_id,
                 'display_id' => 'ORD-' . strtoupper(substr((string) $order->_id, -6)),
                 'status' => (string) ($order->status ?? 'UNKNOWN'),
+                'customer_name' => $customerName !== '' ? $customerName : '-',
+                'customer_email' => trim((string) ($order->customer_email ?? '')) ?: '-',
+                'queue_number' => (int) ($order->queue_number ?? 0),
+                'table_number' => (int) ($order->table_number ?? 0),
+                'total_price' => (float) ($order->total_price ?? 0),
+                'item_count' => $this->countOrderItems($this->normalizeOrderItems($order->items)),
                 'items' => $itemRows,
             ];
         });
+
+        $detailOrderId = (string) request()->query('detail', '');
+        $selectedOrder = null;
+        if ($detailOrderId !== '') {
+            $selectedOrder = $activeOrders->firstWhere('id', $detailOrderId);
+        }
 
         $newPaidOrdersCount = Order::whereIn('payment_status', ['PAID', 'SUCCESS'])
             ->where('status', 'CONFIRMED')
@@ -42,7 +63,7 @@ class DashboardController extends Controller
 
         if ($activeOrders->isNotEmpty()) {
             $recentActivities = $activeOrders->take(3)->map(function (array $order) {
-                return 'Pesanan ' . $order['display_id'] . ' berstatus ' . $this->humanizeStatus($order['status']);
+                return 'Pesanan ' . $order['display_id'] . ' (' . $order['customer_name'] . ') menunggu diproses dengan ' . (int) $order['item_count'] . ' item.';
             });
         }
 
@@ -54,6 +75,7 @@ class DashboardController extends Controller
 
         return view('backoffice.dashboard.index', [
             'activeOrders' => $activeOrders,
+            'selectedOrder' => $selectedOrder,
             'notifications' => [
                 'new_paid_orders' => $newPaidOrdersCount,
                 'out_of_stock_menus' => $outOfStockMenusCount,
@@ -75,13 +97,33 @@ class DashboardController extends Controller
         return [];
     }
 
+    private function countOrderItems(array $items): int
+    {
+        return collect($items)->sum(function ($item) {
+            if (is_array($item)) {
+                if (isset($item['quantity']) && is_numeric($item['quantity'])) {
+                    return max(1, (int) $item['quantity']);
+                }
+
+                return 1;
+            }
+
+            if (is_object($item) && isset($item->quantity) && is_numeric($item->quantity)) {
+                return max(1, (int) $item->quantity);
+            }
+
+            return 1;
+        });
+    }
+
     private function humanizeStatus(string $status): string
     {
         return match ($status) {
-            'CONFIRMED' => 'Pending',
-            'IN_QUEUE' => 'Dalam Antrian',
-            'IN_PROGRESS' => 'Diproses',
-            'DELIVERED' => 'Siap Diantar',
+            'PAYMENT_FAILED' => 'Pembayaran Gagal',
+            'CONFIRMED' => 'Terkonfirmasi',
+            'IN_QUEUE' => 'Dalam Antrean',
+            'IN_PROGRESS' => 'Sedang Diproses',
+            'DELIVERED' => 'Disajikan',
             default => ucfirst(strtolower(str_replace('_', ' ', $status))),
         };
     }

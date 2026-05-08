@@ -2,11 +2,16 @@
 
 namespace App\Domains\Payment\Services;
 
+use App\Mail\FrontlinerReceiptMail;
 use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\User;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 
 class PaymentService
 {
@@ -444,6 +449,8 @@ class PaymentService
 
     private function applyPaymentUpdate(Order $order, array $attributes): void
     {
+        $previousPaymentStatus = strtoupper((string) ($order->payment_status ?? 'PENDING'));
+        $wasPaid = in_array($previousPaymentStatus, self::PAID_STATUSES, true);
         $paymentStatus = strtoupper((string) ($attributes['payment_status'] ?? $order->payment_status ?? 'PENDING'));
         $currentStatus = strtoupper((string) ($order->status ?? ''));
 
@@ -462,10 +469,15 @@ class PaymentService
         }
 
         $order->update($attributes);
+        $order->refresh();
 
         // Reservation is released only on explicit cancel.
         if ($paymentStatus === 'CANCELED') {
             $this->restoreStockForOrder($order);
+        }
+
+        if (!$wasPaid && in_array($paymentStatus, self::PAID_STATUSES, true)) {
+            $this->sendReceiptEmailIfEligible($order);
         }
     }
 
@@ -596,4 +608,131 @@ class PaymentService
 
         return $sanitized;
     }
+
+    private function sendReceiptEmailIfEligible(Order $order): void
+    {
+        $customerEmail = trim((string) ($order->customer_email ?? ''));
+        if ($customerEmail === '' || !filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+
+        if (!empty($order->receipt_email_sent_at)) {
+            return;
+        }
+
+        try {
+            $displayOrderId = 'ORD-' . strtoupper(substr((string) $order->_id, -6));
+            $receiptLink = URL::temporarySignedRoute(
+                'frontliner.receipt.email-link',
+                now()->addHours(10),
+                ['id' => (string) $order->_id]
+            );
+
+            $pdfBinary = $this->renderReceiptPdf($order, $displayOrderId);
+
+            Mail::to($customerEmail)->send(
+                new FrontlinerReceiptMail($order, $receiptLink, $displayOrderId, $pdfBinary)
+            );
+
+            $order->update([
+                'receipt_email_sent_at' => now(),
+                'receipt_email_error' => null,
+            ]);
+        } catch (\Throwable $exception) {
+            Log::error('Failed to send frontliner receipt email', [
+                'order_id' => (string) $order->_id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            $order->update([
+                'receipt_email_error' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    private function renderReceiptPdf(Order $order, string $displayOrderId): string
+    {
+        $items = collect(is_array($order->items) ? $order->items : [])
+            ->groupBy(fn ($item) => (string) ($item['name'] ?? '-'))
+            ->map(function ($group, $name) {
+                $qty = $group->count();
+                $unitPrice = (float) ($group->first()['price'] ?? 0);
+                return [
+                    'name' => $name,
+                    'qty' => $qty,
+                    'unit_price' => $unitPrice,
+                    'line_total' => $unitPrice * $qty,
+                ];
+            })
+            ->values();
+
+        $subtotal = (float) $items->sum('line_total');
+        $total = (float) ($order->total_price ?? 0);
+        $serviceFee = max(0, $total - $subtotal);
+        $paymentStatus = strtoupper((string) ($order->payment_status ?? 'PENDING'));
+        $orderStatus = strtoupper((string) ($order->status ?? 'CONFIRMED'));
+        $paymentPayload = is_array($order->payment_payload ?? null) ? $order->payment_payload : [];
+        $paymentTypeRaw = trim((string) ($order->payment_type ?? ''));
+        $paymentTypeLabel = match (strtolower($paymentTypeRaw)) {
+            'bank_transfer' => 'Bank Transfer',
+            'echannel' => 'Mandiri Bill',
+            'cstore' => 'Convenience Store',
+            'gopay' => 'GoPay',
+            'qris' => 'QRIS',
+            default => $paymentTypeRaw !== '' ? ucwords(str_replace('_', ' ', $paymentTypeRaw)) : '-',
+        };
+        $paymentLabel = match ($paymentStatus) {
+            'PAID', 'SUCCESS', 'SETTLEMENT' => 'LUNAS',
+            'FAILED' => 'GAGAL',
+            'CANCELED' => 'DIBATALKAN',
+            'EXPIRED' => 'KEDALUWARSA',
+            default => 'MENUNGGU',
+        };
+        $orderLabel = match ($orderStatus) {
+            'PENDING_PAYMENT' => 'Menunggu Pembayaran',
+            'PAYMENT_FAILED' => 'Pembayaran Gagal',
+            'CONFIRMED' => 'Terkonfirmasi',
+            'IN_QUEUE' => 'Dalam Antrean',
+            'IN_PROGRESS' => 'Sedang Diproses',
+            'DELIVERED' => 'Disajikan',
+            default => ucwords(strtolower(str_replace('_', ' ', $orderStatus))),
+        };
+        $vaNumber = '-';
+        if (!empty($paymentPayload['va_numbers']) && is_array($paymentPayload['va_numbers'])) {
+            $firstVa = $paymentPayload['va_numbers'][0] ?? null;
+            if (is_array($firstVa) && !empty($firstVa['va_number'])) {
+                $bankLabel = !empty($firstVa['bank']) ? strtoupper((string) $firstVa['bank']) . ' ' : '';
+                $vaNumber = $bankLabel . (string) $firstVa['va_number'];
+            }
+        } elseif (!empty($paymentPayload['permata_va_number'])) {
+            $vaNumber = 'PERMATA ' . (string) $paymentPayload['permata_va_number'];
+        } elseif (!empty($paymentPayload['bill_key']) || !empty($paymentPayload['biller_code'])) {
+            $billerCode = (string) ($paymentPayload['biller_code'] ?? '-');
+            $billKey = (string) ($paymentPayload['bill_key'] ?? '-');
+            $vaNumber = trim($billerCode . ' / ' . $billKey, ' /');
+        } elseif (!empty($paymentPayload['payment_code'])) {
+            $vaNumber = (string) $paymentPayload['payment_code'];
+        }
+
+        $paidAtLabel = $order->paid_at
+            ? $order->paid_at->copy()->setTimezone(config('app.timezone'))->format('d M Y, H.i')
+            : '-';
+
+        return (string) Pdf::loadView('frontliner.pembayaran.struk-pdf', [
+            'order' => $order,
+            'items' => $items,
+            'subtotal' => $subtotal,
+            'serviceFee' => $serviceFee,
+            'total' => $total,
+            'displayOrderId' => $displayOrderId,
+            'paymentTypeLabel' => $paymentTypeLabel,
+            'vaNumber' => $vaNumber,
+            'paymentLabel' => $paymentLabel,
+            'orderLabel' => $orderLabel,
+            'paidAtLabel' => $paidAtLabel,
+            'invoiceCount' => 1,
+            'invoiceIndex' => 0,
+        ])->setPaper('a4', 'portrait')->output();
+    }
+
 }

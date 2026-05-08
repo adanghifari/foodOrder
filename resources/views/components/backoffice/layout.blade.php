@@ -109,6 +109,26 @@
                 justify-content: center;
             }
         }
+
+        .bo-modal-root .bo-modal-backdrop {
+            opacity: 0;
+            transition: opacity 180ms ease;
+        }
+
+        .bo-modal-root .bo-modal-panel {
+            opacity: 0;
+            transform: translateY(10px) scale(0.985);
+            transition: opacity 180ms ease, transform 220ms ease;
+        }
+
+        .bo-modal-root.is-open .bo-modal-backdrop {
+            opacity: 1;
+        }
+
+        .bo-modal-root.is-open .bo-modal-panel {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
     </style>
 </head>
 <body class="bg-white text-slate-900">
@@ -290,6 +310,94 @@
                 }
             });
         }
+
+        (function initBackofficeModalAjax() {
+            function openModal(modalRoot, pushUrl) {
+                if (!modalRoot) return;
+                document.body.appendChild(modalRoot);
+                document.body.style.overflow = 'hidden';
+                requestAnimationFrame(function () {
+                    modalRoot.classList.add('is-open');
+                });
+
+                if (pushUrl) {
+                    window.history.pushState({ modalOpen: true }, '', pushUrl);
+                }
+            }
+
+            function closeModal(modalRoot, replaceUrl) {
+                if (!modalRoot) return;
+                modalRoot.classList.remove('is-open');
+                window.setTimeout(function () {
+                    modalRoot.remove();
+                    if (!document.querySelector('[data-modal-root]')) {
+                        document.body.style.overflow = '';
+                    }
+                }, 220);
+
+                if (replaceUrl) {
+                    window.history.replaceState({}, '', replaceUrl);
+                }
+            }
+
+            function currentModalRoot() {
+                return document.querySelector('[data-modal-root]');
+            }
+
+            document.addEventListener('click', function (event) {
+                const openLink = event.target.closest('a[data-modal-link]');
+                if (openLink) {
+                    event.preventDefault();
+                    const href = openLink.getAttribute('href');
+                    if (!href) return;
+
+                    fetch(href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                        .then(function (response) { return response.text(); })
+                        .then(function (html) {
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(html, 'text/html');
+                            const nextModal = doc.querySelector('[data-modal-root]');
+                            if (!nextModal) {
+                                window.location.href = href;
+                                return;
+                            }
+
+                            const existing = currentModalRoot();
+                            if (existing) existing.remove();
+
+                            openModal(nextModal, href);
+                        })
+                        .catch(function () {
+                            window.location.href = href;
+                        });
+
+                    return;
+                }
+
+                const closeTrigger = event.target.closest('[data-modal-close], [data-modal-overlay]');
+                if (closeTrigger) {
+                    event.preventDefault();
+                    const modal = closeTrigger.closest('[data-modal-root]');
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('detail');
+                    url.searchParams.delete('edit');
+                    url.searchParams.delete('create');
+                    closeModal(modal, url.pathname + (url.search ? url.search : ''));
+                }
+            });
+
+            window.addEventListener('popstate', function () {
+                const modal = currentModalRoot();
+                if (modal && !new URL(window.location.href).searchParams.has('detail')) {
+                    closeModal(modal, null);
+                }
+            });
+
+            const initialModal = currentModalRoot();
+            if (initialModal) {
+                openModal(initialModal, null);
+            }
+        })();
 
         hydrateSidebarState();
         updateSidebarToggleIcon();

@@ -11,11 +11,11 @@
     'bodyMaxHeightClass' => 'max-h-[44vh]',
 ])
 
-<section class="{{ $zIndex }} fixed top-0 left-0 w-screen h-screen">
-    <a href="{{ $closeHref }}" class="fixed top-0 left-0 w-screen h-screen {{ $overlayClass }}" aria-label="Tutup"></a>
+<section data-modal-root class="bo-modal-root {{ $zIndex }} fixed top-0 left-0 w-screen h-screen">
+    <button type="button" data-modal-overlay class="bo-modal-backdrop fixed top-0 left-0 w-screen h-screen {{ $overlayClass }}" aria-label="Tutup"></button>
 
     <div class="relative z-[121] w-screen h-screen flex items-center justify-center p-4 md:p-5">
-        <article class="w-full {{ $maxWidth }} rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+        <article class="bo-modal-panel w-full {{ $maxWidth }} rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
             <div class="flex items-center justify-between px-4 py-3.5 border-b border-slate-200">
                 <div>
                     <h2 class="text-lg md:text-xl font-extrabold text-[var(--rich-black)]">{{ $title }}</h2>
@@ -23,7 +23,7 @@
                         <p class="text-sm text-slate-500">{{ $subtitle }}</p>
                     @endif
                 </div>
-                <a href="{{ $closeHref }}" class="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-600 font-bold transition" aria-label="Tutup">✕</a>
+                <button type="button" data-modal-close class="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-600 font-bold transition" aria-label="Tutup">✕</button>
             </div>
 
             @if ($imageUrl)

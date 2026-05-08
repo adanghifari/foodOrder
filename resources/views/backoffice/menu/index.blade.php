@@ -68,7 +68,7 @@
                                 @method('DELETE')
                                 <button type="submit" class="inline-flex items-center rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold px-3.5 py-2 transition">Hapus Menu</button>
                             </form>
-                            <a href="/backoffice/daftar_menu?detail={{ urlencode((string) $menu->_id) }}" class="ml-auto inline-flex items-center rounded-xl border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-sm font-bold px-5 py-2.5 transition">See Detail</a>
+                            <a href="/backoffice/daftar_menu?detail={{ urlencode((string) $menu->_id) }}" data-modal-link class="ml-auto inline-flex items-center rounded-xl border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-sm font-bold px-5 py-2.5 transition">Lihat Detail</a>
                         </div>
                     </div>
                 </article>
