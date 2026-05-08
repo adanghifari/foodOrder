@@ -92,6 +92,7 @@
         $paymentClass = in_array($paymentStatus, ['PAID', 'SUCCESS', 'SETTLEMENT'], true)
             ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
             : 'bg-amber-100 text-amber-700 border-amber-200';
+        $canDownloadReceiptPdf = in_array($paymentStatus, ['PAID', 'SUCCESS', 'SETTLEMENT'], true);
 
         $displayOrderId = 'ORD-' . strtoupper(substr((string) $order->_id, -6));
         $isPaidPayment = in_array($paymentStatus, ['PAID', 'SUCCESS', 'SETTLEMENT'], true);
@@ -235,6 +236,11 @@
                         </button>
                     </form>
                 @endif
+                @if ($canDownloadReceiptPdf)
+                    <a href="/kedai/pembayaran/struk/download?invoice_index={{ (int) ($invoiceIndex ?? 0) }}" class="w-full inline-flex items-center justify-center rounded-2xl border border-[#1D4ED8] bg-blue-50 hover:bg-blue-100 text-[#1D4ED8] font-bold px-5 py-3 transition">
+                        Download PDF
+                    </a>
+                @endif
                 <a href="/menu" class="w-full inline-flex items-center justify-center rounded-2xl bg-[#C8641E] hover:bg-[#A85318] text-white font-bold px-5 py-3 transition">Kembali ke Menu</a>
             </div>
         </footer>
@@ -243,6 +249,27 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const emptyReceiptMessage = @json($emptyReceiptMessage ?? null);
+            const flashError = @json(session('error'));
+            const flashSuccess = @json(session('success'));
+
+            if (typeof flashError === 'string' && flashError.trim() !== '' && window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
+                window.KedaiKlikNotify.show({
+                    type: 'warning',
+                    title: 'Notifikasi Struk',
+                    message: flashError,
+                    duration: 4800,
+                });
+            }
+
+            if (typeof flashSuccess === 'string' && flashSuccess.trim() !== '' && window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
+                window.KedaiKlikNotify.show({
+                    type: 'success',
+                    title: 'Notifikasi Struk',
+                    message: flashSuccess,
+                    duration: 4200,
+                });
+            }
+
             if (typeof emptyReceiptMessage === 'string' && emptyReceiptMessage.trim() !== '' && window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
                 window.KedaiKlikNotify.show({
                     type: 'warning',

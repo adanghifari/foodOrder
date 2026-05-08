@@ -179,7 +179,7 @@
                         <p id="detail-menu-name" class="text-lg font-extrabold text-slate-800"></p>
                         <p id="detail-menu-category" class="text-xs font-bold uppercase tracking-wide text-slate-500"></p>
                     </div>
-                    <p id="detail-menu-description" class="text-sm text-slate-600 leading-relaxed whitespace-pre-line"></p>
+                    <p id="detail-menu-description" class="text-sm text-slate-600 leading-relaxed whitespace-pre-line break-words [overflow-wrap:anywhere]"></p>
                     <div class="grid grid-cols-2 gap-2">
                         <div class="rounded-lg bg-slate-50 border border-slate-200 p-2">
                             <p class="text-[10px] uppercase font-bold text-slate-500">Harga</p>
