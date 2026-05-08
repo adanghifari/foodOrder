@@ -68,7 +68,7 @@
                 <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-gray-400">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                 </span>
-                <input type="text" class="w-full bg-gray-100 border-none rounded-2xl py-4 pl-12 pr-4 outline-none focus:ring-2 focus:ring-[#C8641E]/50 placeholder-gray-400 font-medium" placeholder="Cari menu...">
+                <input id="menu-search" type="text" class="w-full bg-gray-100 border-none rounded-2xl py-4 pl-12 pr-4 outline-none focus:ring-2 focus:ring-[#C8641E]/50 placeholder-gray-400 font-medium" placeholder="Cari menu...">
             </div>
         </div>
 
@@ -82,7 +82,8 @@
                 $descriptionEncoded = base64_encode($descriptionRaw);
             @endphp
             <div class="menu-card flex bg-white rounded-[24px] p-3 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-50 items-center"
-                 data-menu-category="{{ strtolower(trim((string) ($menu['category'] ?? ''))) }}">
+                 data-menu-category="{{ strtolower(trim((string) ($menu['category'] ?? ''))) }}"
+                 data-menu-search-name="{{ strtolower(trim((string) ($menu['name'] ?? ''))) }}">
                 <div class="w-28 h-28 flex-shrink-0 relative">
                     @php
                         $rawImageUrl = $menu['image_url'] ?? '';
@@ -360,11 +361,17 @@
             });
         }
 
-        function filterMenuByCategory() {
+        function applyFilters() {
             const normalizedActiveCategory = normalizeCategory(activeCategory) || 'all';
+            const searchInput = document.getElementById('menu-search');
+            const keyword = normalizeCategory(searchInput ? searchInput.value : '');
+
             document.querySelectorAll('.menu-card').forEach((card) => {
                 const category = normalizeCategory(card.dataset.menuCategory);
-                const isVisible = normalizedActiveCategory === 'all' || category === normalizedActiveCategory;
+                const name = normalizeCategory(card.dataset.menuSearchName);
+                const byCategory = normalizedActiveCategory === 'all' || category === normalizedActiveCategory;
+                const bySearch = keyword === '' || name.includes(keyword);
+                const isVisible = byCategory && bySearch;
                 card.classList.toggle('hidden', !isVisible);
             });
         }
@@ -375,12 +382,17 @@
                 tab.addEventListener('click', () => {
                     activeCategory = normalizeCategory(tab.dataset.tabCategory) || 'all';
                     syncCategoryTabs();
-                    filterMenuByCategory();
+                    applyFilters();
                 });
             });
 
+            const searchInput = document.getElementById('menu-search');
+            if (searchInput) {
+                searchInput.addEventListener('input', applyFilters);
+            }
+
             syncCategoryTabs();
-            filterMenuByCategory();
+            applyFilters();
             updateBadge();
             syncItemQtyControls();
 
