@@ -184,20 +184,61 @@
             }
         }
 
+        function saveCustomerDraft() {
+            const emailInput = document.getElementById('email-input');
+            const nameInput = document.getElementById('customer-name-input');
+
+            localStorage.setItem('kedaiKlikCheckoutDraft', JSON.stringify({
+                email: (emailInput?.value || '').trim(),
+                customerName: (nameInput?.value || '').trim(),
+            }));
+        }
+
+        function hydrateCustomerDraft() {
+            const emailInput = document.getElementById('email-input');
+            const nameInput = document.getElementById('customer-name-input');
+            const rawDraft = localStorage.getItem('kedaiKlikCheckoutDraft');
+            if (!rawDraft) {
+                return;
+            }
+
+            try {
+                const draft = JSON.parse(rawDraft);
+                if (emailInput && emailInput.value.trim() === '' && typeof draft?.email === 'string') {
+                    emailInput.value = draft.email;
+                }
+                if (nameInput && nameInput.value.trim() === '' && typeof draft?.customerName === 'string') {
+                    nameInput.value = draft.customerName;
+                }
+            } catch (error) {
+                // Ignore invalid draft payload.
+            }
+        }
+
         async function showTableRequiredPopup() {
             if (window.KedaiKlikNotify && typeof window.KedaiKlikNotify.confirm === 'function') {
-                await window.KedaiKlikNotify.confirm({
+                const shouldScan = await window.KedaiKlikNotify.confirm({
                     type: 'warning',
                     badge: 'Perhatian',
                     title: 'Nomor meja belum ada',
                     message: 'Silahkan order dengan scan qr code pada meja terlebih dahulu',
-                    confirmText: 'Oke',
-                    singleButton: true,
+                    confirmText: 'Scan di sini',
+                    cancelText: 'Nanti',
                 });
+
+                if (shouldScan) {
+                    saveCustomerDraft();
+                    window.location.href = '/kedai/scan?return_to=' + encodeURIComponent('/keranjang');
+                }
+
                 return;
             }
 
-            window.alert('Silahkan order dengan scan qr code pada meja terlebih dahulu');
+            const shouldScan = window.confirm('Silahkan order dengan scan qr code pada meja terlebih dahulu.\n\nPilih OK untuk scan sekarang.');
+            if (shouldScan) {
+                saveCustomerDraft();
+                window.location.href = '/kedai/scan?return_to=' + encodeURIComponent('/keranjang');
+            }
         }
 
         function validateCustomerInfo() {
@@ -364,7 +405,20 @@
         }
 
         // Jalankan saat halaman dimuat
-        document.addEventListener('DOMContentLoaded', renderCart);
+        document.addEventListener('DOMContentLoaded', function () {
+            hydrateCustomerDraft();
+
+            const emailInput = document.getElementById('email-input');
+            const nameInput = document.getElementById('customer-name-input');
+            if (emailInput) {
+                emailInput.addEventListener('input', saveCustomerDraft);
+            }
+            if (nameInput) {
+                nameInput.addEventListener('input', saveCustomerDraft);
+            }
+
+            renderCart();
+        });
     </script>
 
     <style>

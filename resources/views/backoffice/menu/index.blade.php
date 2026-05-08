@@ -29,7 +29,7 @@
                     </select>
 
                     <div class="mt-3 sticky top-24 z-20">
-                        <a href="/backoffice/daftar_menu?create=1" class="w-full inline-flex items-center justify-center rounded-2xl bg-[var(--alloy-orange)] hover:bg-[var(--philippine-bronze)] text-white text-base font-extrabold px-6 py-3.5 transition shadow-xl">Tambah Menu</a>
+                        <a href="/backoffice/daftar_menu?create=1" data-modal-link class="w-full inline-flex items-center justify-center rounded-2xl bg-[var(--alloy-orange)] hover:bg-[var(--philippine-bronze)] text-white text-base font-extrabold px-6 py-3.5 transition shadow-xl">Tambah Menu</a>
                     </div>
                 </div>
             </div>
@@ -46,6 +46,7 @@
                 @endphp
                 <article
                     class="menu-card rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+                    data-menu-id="{{ (string) $menu->_id }}"
                     data-name="{{ strtolower($menu->name) }}"
                     data-category="{{ strtolower($menu->category ?? '') }}"
                     data-price="{{ (float) ($menu->price ?? 0) }}"
@@ -62,7 +63,7 @@
                         </div>
                         <p class="text-sm font-semibold text-[var(--philippine-bronze)]">Rp {{ number_format((float) $menu->price, 0, ',', '.') }}</p>
                         <div class="flex items-center gap-2">
-                            <a href="/backoffice/daftar_menu?edit={{ urlencode((string) $menu->_id) }}" class="inline-flex items-center rounded-lg bg-[var(--rajah)] hover:brightness-95 text-[var(--philippine-bronze)] text-sm font-bold px-3.5 py-2 transition">Edit Menu</a>
+                            <a href="/backoffice/daftar_menu?edit={{ urlencode((string) $menu->_id) }}" data-modal-link class="inline-flex items-center rounded-lg bg-[var(--rajah)] hover:brightness-95 text-[var(--philippine-bronze)] text-sm font-bold px-3.5 py-2 transition">Edit Menu</a>
                             <form action="/backoffice/daftar_menu/{{ urlencode((string) $menu->_id) }}" method="POST" class="menu-delete-form" data-menu-name="{{ $menu->name }}">
                                 @csrf
                                 @method('DELETE')
@@ -141,10 +142,7 @@
                 return;
             }
 
-            const cards = Array.from(grid.querySelectorAll('.menu-card'));
-            if (cards.length === 0) {
-                return;
-            }
+            let cards = Array.from(grid.querySelectorAll('.menu-card'));
 
             const baseOrder = new Map(cards.map((card, index) => [card, index]));
             let activeCategory = 'all';
@@ -185,6 +183,143 @@
                 }
 
                 return list;
+            }
+
+            function escapeHtml(text) {
+                return String(text || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            function formatNumber(value) {
+                return Number(value || 0).toLocaleString('id-ID');
+            }
+
+            function stockClassName(stock) {
+                if (stock <= 0) return 'bg-red-100 text-red-700';
+                if (stock <= 10) return 'bg-amber-100 text-amber-700';
+                return 'bg-emerald-100 text-emerald-700';
+            }
+
+            function imageSource(url) {
+                const value = String(url || '').trim();
+                return value !== '' ? value : 'https://placehold.co/900x600/f3f4f6/64748b?text=No+Image';
+            }
+
+            function buildMenuCard(item) {
+                const id = String(item.id || '');
+                const name = String(item.name || '-');
+                const category = String(item.category || '-');
+                const price = Number(item.price || 0);
+                const stock = Number(item.stock || 0);
+                const imageUrl = imageSource(item.imageUrl);
+                const stockClass = stockClassName(stock);
+
+                const card = document.createElement('article');
+                card.className = 'menu-card rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden';
+                card.dataset.menuId = id;
+                card.dataset.name = name.toLowerCase();
+                card.dataset.category = category.toLowerCase();
+                card.dataset.price = String(price);
+                card.dataset.stock = String(stock);
+
+                card.innerHTML = `
+                    <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(name)}" class="h-44 w-full object-cover">
+                    <div class="p-4 space-y-3">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 class="text-base font-extrabold text-[var(--rich-black)]">${escapeHtml(name)}</h3>
+                                <p class="text-xs font-semibold text-slate-500">${escapeHtml(category)}</p>
+                            </div>
+                            <span class="text-xs font-bold px-2.5 py-1 rounded-full ${stockClass}">Stok ${stock}</span>
+                        </div>
+                        <p class="text-sm font-semibold text-[var(--philippine-bronze)]">Rp ${formatNumber(price)}</p>
+                        <div class="flex items-center gap-2">
+                            <a href="/backoffice/daftar_menu?edit=${encodeURIComponent(id)}" data-modal-link class="inline-flex items-center rounded-lg bg-[var(--rajah)] hover:brightness-95 text-[var(--philippine-bronze)] text-sm font-bold px-3.5 py-2 transition">Edit Menu</a>
+                            <form action="/backoffice/daftar_menu/${encodeURIComponent(id)}" method="POST" class="menu-delete-form" data-menu-name="${escapeHtml(name)}">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="inline-flex items-center rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold px-3.5 py-2 transition">Hapus Menu</button>
+                            </form>
+                            <a href="/backoffice/daftar_menu?detail=${encodeURIComponent(id)}" data-modal-link class="ml-auto inline-flex items-center rounded-xl border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-sm font-bold px-5 py-2.5 transition">Lihat Detail</a>
+                        </div>
+                    </div>
+                `;
+
+                const deleteForm = card.querySelector('.menu-delete-form');
+                if (deleteForm) {
+                    deleteForm.addEventListener('submit', function (event) {
+                        event.preventDefault();
+                        openDeleteModal(deleteForm);
+                    });
+                }
+
+                return card;
+            }
+
+            function closeAnyMenuModal() {
+                document.querySelectorAll('[data-modal-root]').forEach(function (modal) {
+                    modal.classList.add('hidden');
+                });
+
+                const url = new URL(window.location.href);
+                url.searchParams.delete('create');
+                url.searchParams.delete('edit');
+                window.history.replaceState({}, '', url.pathname + url.search);
+            }
+
+            async function submitMenuFormAjax(form) {
+                const formData = new FormData(form);
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                    },
+                    body: formData,
+                });
+
+                const payload = await response.json().catch(function () {
+                    return null;
+                });
+
+                if (!response.ok || !payload) {
+                    throw new Error((payload && payload.message) || 'Gagal menyimpan menu.');
+                }
+
+                return payload;
+            }
+
+            function upsertMenuCard(item) {
+                const menuId = String(item.id || '');
+                if (menuId === '') {
+                    return;
+                }
+
+                const existing = cards.find(function (card) {
+                    return String(card.dataset.menuId || '') === menuId;
+                });
+
+                const freshCard = buildMenuCard(item);
+
+                if (existing) {
+                    grid.replaceChild(freshCard, existing);
+                    const index = cards.indexOf(existing);
+                    if (index !== -1) {
+                        cards[index] = freshCard;
+                    }
+                    baseOrder.set(freshCard, baseOrder.get(existing) ?? cards.length);
+                    baseOrder.delete(existing);
+                } else {
+                    cards.push(freshCard);
+                    baseOrder.set(freshCard, baseOrder.size);
+                    grid.appendChild(freshCard);
+                }
+
+                applyFilters();
             }
 
             function applyFilters() {
@@ -286,6 +421,39 @@
                     pendingDeleteForm.submit();
                 });
             }
+
+            ['create-menu-form', 'edit-menu-form'].forEach(function (formId) {
+                const form = document.getElementById(formId);
+                if (!form) {
+                    return;
+                }
+
+                form.addEventListener('submit', async function (event) {
+                    event.preventDefault();
+
+                    try {
+                        const payload = await submitMenuFormAjax(form);
+                        upsertMenuCard(payload.data || {});
+                        closeAnyMenuModal();
+
+                        if (window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
+                            window.KedaiKlikNotify.show({
+                                type: 'success',
+                                title: 'Berhasil',
+                                message: payload.message || 'Menu berhasil disimpan.',
+                            });
+                        }
+                    } catch (error) {
+                        if (window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
+                            window.KedaiKlikNotify.show({
+                                type: 'error',
+                                title: 'Gagal',
+                                message: error.message || 'Terjadi kesalahan saat menyimpan menu.',
+                            });
+                        }
+                    }
+                });
+            });
 
             applyFilters();
         })();

@@ -62,6 +62,7 @@ Route::get('/menu/minuman', [FrontlinerMenuController::class, 'minuman']);
 Route::get('/menu/{tableId}', [FrontlinerQrScanController::class, 'accessFromMenuRoute'])
     ->whereNumber('tableId');
 Route::get('/scan', [FrontlinerQrScanController::class, 'accessFromQueryParam']);
+Route::view('/kedai/scan', 'frontliner.scan');
 Route::get('/keranjang', function (Request $request) {
     return view('frontliner.keranjang', [
         'tableNumber' => $request->session()->get('table_id'),
