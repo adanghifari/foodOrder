@@ -7,6 +7,7 @@ use App\Domains\Table\Services\TableService;
 use App\Http\Controllers\Controller;
 use App\Models\MenuItem;
 use App\Models\Order;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -285,103 +286,112 @@ class PaymentController extends Controller
 
     public function receipt(Request $request)
     {
-        $sessionCleared = $this->tableService->clearTableSessionIfInactive($request);
-        if ($sessionCleared) {
-            return $this->emptyReceiptView('Sesi struk sudah berakhir. Silakan scan ulang QR meja jika ingin memesan lagi.');
+        $receiptData = $this->resolveReceiptData($request);
+        if (!$receiptData['ok']) {
+            return $this->emptyReceiptView($receiptData['message']);
         }
-
-        $sessionOrderId = (string) $request->session()->get('frontliner_receipt_order_id', '');
-        $sessionOrderIds = collect($request->session()->get('frontliner_receipt_order_ids', []))
-            ->map(fn ($id) => (string) $id)
-            ->filter(fn ($id) => $id !== '')
-            ->values();
-
-        if ($sessionOrderIds->isEmpty() && $sessionOrderId !== '') {
-            $sessionOrderIds = collect([$sessionOrderId]);
-        }
-
-        $sessionTableId = (int) $request->session()->get('table_id', 0);
-        $sessionReceiptTableId = (int) $request->session()->get('frontliner_receipt_table_id', 0);
-
-        if ($sessionOrderIds->isEmpty() || $sessionTableId <= 0 || $sessionReceiptTableId <= 0) {
-            return $this->emptyReceiptView();
-        }
-
-        $ordersById = Order::whereIn('_id', $sessionOrderIds->all())
-            ->get()
-            ->keyBy(fn ($order) => (string) $order->_id);
-
-        $validOrderIds = $sessionOrderIds->filter(function ($id) use ($ordersById, $sessionTableId, $sessionReceiptTableId) {
-            $order = $ordersById->get($id);
-            if (!$order) {
-                return false;
-            }
-
-            $tableNumber = (int) ($order->table_number ?? 0);
-
-            return $tableNumber === $sessionTableId && $tableNumber === $sessionReceiptTableId;
-        })->values();
-
-        if ($validOrderIds->isEmpty()) {
-            return $this->emptyReceiptView();
-        }
-
-        // Keep session in sync with only valid orders for current table context.
-        $request->session()->put('frontliner_receipt_order_ids', $validOrderIds->all());
-
-        $index = (int) $request->query('invoice_index', 0);
-        if ($index < 0) {
-            $index = 0;
-        }
-        if ($index > $validOrderIds->count() - 1) {
-            $index = $validOrderIds->count() - 1;
-        }
-
-        $selectedOrderId = (string) $validOrderIds->get($index);
-        $order = $ordersById->get($selectedOrderId);
-
-        if (!$order) {
-            return $this->emptyReceiptView();
-        }
-
-        $request->session()->put('frontliner_receipt_order_id', $selectedOrderId);
-
-        $orderStatus = strtoupper((string) ($order->status ?? ''));
-        $deliveredAt = $order->delivered_at ?? $order->updated_at;
-        if ($orderStatus === 'DELIVERED' && $deliveredAt && now()->gte($deliveredAt->copy()->addMinutes(150))) {
-            $this->tableService->clearTableSession($request);
-            return $this->emptyReceiptView('Sesi anda sudah berakhir. Silakan scan ulang QR meja jika ingin memesan lagi.');
-        }
-
-        $items = collect(is_array($order->items) ? $order->items : [])
-            ->groupBy(fn ($item) => (string) ($item['name'] ?? '-'))
-            ->map(function ($group, $name) {
-                $qty = $group->count();
-                $unitPrice = (float) ($group->first()['price'] ?? 0);
-
-                return [
-                    'name' => $name,
-                    'qty' => $qty,
-                    'unit_price' => $unitPrice,
-                    'line_total' => $unitPrice * $qty,
-                ];
-            })
-            ->values();
-
-        $subtotal = (float) $items->sum('line_total');
-        $total = (float) ($order->total_price ?? 0);
-        $serviceFee = max(0, $total - $subtotal);
 
         return view('frontliner.pembayaran.struk', [
+            'order' => $receiptData['order'],
+            'items' => $receiptData['items'],
+            'subtotal' => $receiptData['subtotal'],
+            'serviceFee' => $receiptData['serviceFee'],
+            'total' => $receiptData['total'],
+            'emptyReceiptMessage' => null,
+            'invoiceCount' => $receiptData['invoiceCount'],
+            'invoiceIndex' => $receiptData['invoiceIndex'],
+        ]);
+    }
+
+    public function downloadReceiptPdf(Request $request)
+    {
+        $receiptData = $this->resolveReceiptData($request);
+        if (!$receiptData['ok']) {
+            return redirect('/kedai/pembayaran/struk')->with('error', $receiptData['message'] ?? 'Struk tidak tersedia.');
+        }
+
+        $order = $receiptData['order'];
+        $items = $receiptData['items'];
+        $subtotal = $receiptData['subtotal'];
+        $serviceFee = $receiptData['serviceFee'];
+        $total = $receiptData['total'];
+
+        $paymentStatus = strtoupper((string) ($order->payment_status ?? 'PENDING'));
+        if (!in_array($paymentStatus, ['PAID', 'SUCCESS', 'SETTLEMENT'], true)) {
+            return redirect('/kedai/pembayaran/struk?invoice_index=' . (int) ($receiptData['invoiceIndex'] ?? 0))
+                ->with('error', 'Struk PDF hanya bisa diunduh setelah pembayaran lunas.');
+        }
+
+        $orderStatus = strtoupper((string) ($order->status ?? 'CONFIRMED'));
+        $paymentPayload = is_array($order->payment_payload ?? null) ? $order->payment_payload : [];
+        $paymentTypeRaw = trim((string) ($order->payment_type ?? ''));
+        $paymentTypeLabel = match (strtolower($paymentTypeRaw)) {
+            'bank_transfer' => 'Bank Transfer',
+            'echannel' => 'Mandiri Bill',
+            'cstore' => 'Convenience Store',
+            'gopay' => 'GoPay',
+            'qris' => 'QRIS',
+            default => $paymentTypeRaw !== '' ? ucwords(str_replace('_', ' ', $paymentTypeRaw)) : '-',
+        };
+
+        $vaNumber = '-';
+        if (!empty($paymentPayload['va_numbers']) && is_array($paymentPayload['va_numbers'])) {
+            $firstVa = $paymentPayload['va_numbers'][0] ?? null;
+            if (is_array($firstVa) && !empty($firstVa['va_number'])) {
+                $bankLabel = !empty($firstVa['bank']) ? strtoupper((string) $firstVa['bank']) . ' ' : '';
+                $vaNumber = $bankLabel . (string) $firstVa['va_number'];
+            }
+        } elseif (!empty($paymentPayload['permata_va_number'])) {
+            $vaNumber = 'PERMATA ' . (string) $paymentPayload['permata_va_number'];
+        } elseif (!empty($paymentPayload['bill_key']) || !empty($paymentPayload['biller_code'])) {
+            $billerCode = (string) ($paymentPayload['biller_code'] ?? '-');
+            $billKey = (string) ($paymentPayload['bill_key'] ?? '-');
+            $vaNumber = trim($billerCode . ' / ' . $billKey, ' /');
+        } elseif (!empty($paymentPayload['payment_code'])) {
+            $vaNumber = (string) $paymentPayload['payment_code'];
+        }
+
+        $paymentLabel = match ($paymentStatus) {
+            'PAID', 'SUCCESS', 'SETTLEMENT' => 'LUNAS',
+            'FAILED' => 'GAGAL',
+            'CANCELED' => 'DIBATALKAN',
+            'EXPIRED' => 'KEDALUWARSA',
+            default => 'MENUNGGU',
+        };
+
+        $orderLabel = match ($orderStatus) {
+            'PENDING_PAYMENT' => 'Menunggu Pembayaran',
+            'PAYMENT_FAILED' => 'Pembayaran Gagal',
+            'CONFIRMED' => 'Terkonfirmasi',
+            'IN_QUEUE' => 'Dalam Antrean',
+            'IN_PROGRESS' => 'Sedang Diproses',
+            'DELIVERED' => 'Disajikan',
+            default => ucwords(strtolower(str_replace('_', ' ', $orderStatus))),
+        };
+
+        $displayOrderId = 'ORD-' . strtoupper(substr((string) $order->_id, -6));
+        $paidAtLabel = $order->paid_at
+            ? $order->paid_at->copy()->setTimezone(config('app.timezone'))->format('d M Y, H.i')
+            : '-';
+
+        $pdf = Pdf::loadView('frontliner.pembayaran.struk-pdf', [
             'order' => $order,
             'items' => $items,
             'subtotal' => $subtotal,
             'serviceFee' => $serviceFee,
             'total' => $total,
-            'emptyReceiptMessage' => null,
-            'invoiceCount' => $validOrderIds->count(),
-            'invoiceIndex' => $index,
-        ]);
+            'displayOrderId' => $displayOrderId,
+            'paymentTypeLabel' => $paymentTypeLabel,
+            'vaNumber' => $vaNumber,
+            'paymentLabel' => $paymentLabel,
+            'orderLabel' => $orderLabel,
+            'paidAtLabel' => $paidAtLabel,
+            'invoiceCount' => $receiptData['invoiceCount'],
+            'invoiceIndex' => $receiptData['invoiceIndex'],
+        ])->setPaper('a4', 'portrait');
+
+        $filename = 'struk-' . $displayOrderId . '-' . now()->format('Ymd-His') . '.pdf';
+        return $pdf->download($filename);
     }
 
     private function emptyReceiptView(?string $message = null)
@@ -424,5 +434,108 @@ class PaymentController extends Controller
             && $sessionReceiptTableId > 0
             && $orderTableNumber === $sessionTableId
             && $orderTableNumber === $sessionReceiptTableId;
+    }
+
+    private function resolveReceiptData(Request $request): array
+    {
+        $sessionCleared = $this->tableService->clearTableSessionIfInactive($request);
+        if ($sessionCleared) {
+            return [
+                'ok' => false,
+                'message' => 'Sesi struk sudah berakhir. Silakan scan ulang QR meja jika ingin memesan lagi.',
+            ];
+        }
+
+        $sessionOrderId = (string) $request->session()->get('frontliner_receipt_order_id', '');
+        $sessionOrderIds = collect($request->session()->get('frontliner_receipt_order_ids', []))
+            ->map(fn ($id) => (string) $id)
+            ->filter(fn ($id) => $id !== '')
+            ->values();
+
+        if ($sessionOrderIds->isEmpty() && $sessionOrderId !== '') {
+            $sessionOrderIds = collect([$sessionOrderId]);
+        }
+
+        $sessionTableId = (int) $request->session()->get('table_id', 0);
+        $sessionReceiptTableId = (int) $request->session()->get('frontliner_receipt_table_id', 0);
+        if ($sessionOrderIds->isEmpty() || $sessionTableId <= 0 || $sessionReceiptTableId <= 0) {
+            return ['ok' => false, 'message' => null];
+        }
+
+        $ordersById = Order::whereIn('_id', $sessionOrderIds->all())
+            ->get()
+            ->keyBy(fn ($order) => (string) $order->_id);
+
+        $validOrderIds = $sessionOrderIds->filter(function ($id) use ($ordersById, $sessionTableId, $sessionReceiptTableId) {
+            $order = $ordersById->get($id);
+            if (!$order) {
+                return false;
+            }
+
+            $tableNumber = (int) ($order->table_number ?? 0);
+            return $tableNumber === $sessionTableId && $tableNumber === $sessionReceiptTableId;
+        })->values();
+
+        if ($validOrderIds->isEmpty()) {
+            return ['ok' => false, 'message' => null];
+        }
+
+        $request->session()->put('frontliner_receipt_order_ids', $validOrderIds->all());
+
+        $index = (int) $request->query('invoice_index', 0);
+        if ($index < 0) {
+            $index = 0;
+        }
+        if ($index > $validOrderIds->count() - 1) {
+            $index = $validOrderIds->count() - 1;
+        }
+
+        $selectedOrderId = (string) $validOrderIds->get($index);
+        $order = $ordersById->get($selectedOrderId);
+        if (!$order) {
+            return ['ok' => false, 'message' => null];
+        }
+
+        $request->session()->put('frontliner_receipt_order_id', $selectedOrderId);
+
+        $orderStatus = strtoupper((string) ($order->status ?? ''));
+        $deliveredAt = $order->delivered_at ?? $order->updated_at;
+        if ($orderStatus === 'DELIVERED' && $deliveredAt && now()->gte($deliveredAt->copy()->addMinutes(150))) {
+            $this->tableService->clearTableSession($request);
+            return [
+                'ok' => false,
+                'message' => 'Sesi anda sudah berakhir. Silakan scan ulang QR meja jika ingin memesan lagi.',
+            ];
+        }
+
+        $items = collect(is_array($order->items) ? $order->items : [])
+            ->groupBy(fn ($item) => (string) ($item['name'] ?? '-'))
+            ->map(function ($group, $name) {
+                $qty = $group->count();
+                $unitPrice = (float) ($group->first()['price'] ?? 0);
+
+                return [
+                    'name' => $name,
+                    'qty' => $qty,
+                    'unit_price' => $unitPrice,
+                    'line_total' => $unitPrice * $qty,
+                ];
+            })
+            ->values();
+
+        $subtotal = (float) $items->sum('line_total');
+        $total = (float) ($order->total_price ?? 0);
+        $serviceFee = max(0, $total - $subtotal);
+
+        return [
+            'ok' => true,
+            'order' => $order,
+            'items' => $items,
+            'subtotal' => $subtotal,
+            'serviceFee' => $serviceFee,
+            'total' => $total,
+            'invoiceCount' => $validOrderIds->count(),
+            'invoiceIndex' => $index,
+        ];
     }
 }

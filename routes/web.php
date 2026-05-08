@@ -77,6 +77,8 @@ Route::get('/kedai/pembayaran/selesai', [FrontlinerPaymentController::class, 'fi
     ->middleware('throttle:20,1');
 Route::get('/kedai/pembayaran/struk', [FrontlinerPaymentController::class, 'receipt'])
     ->middleware('throttle:30,1');
+Route::get('/kedai/pembayaran/struk/download', [FrontlinerPaymentController::class, 'downloadReceiptPdf'])
+    ->middleware('throttle:20,1');
 
 
 # buat debugging ngecek tableId di session pake dibawah ini ya ges, 
