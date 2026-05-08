@@ -111,9 +111,9 @@
                     <div class="flex items-start justify-between gap-3">
                         <h3 class="font-bold text-gray-800 text-lg leading-tight break-words">{{ $menu['name'] }}</h3>
                         @if ($isOutOfStock)
-                            <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-red-700">Habis</span>
+                            <span class="inline-flex shrink-0 items-center rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-red-700 whitespace-nowrap">Stok Habis</span>
                         @else
-                            <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">Stok {{ $menuStock }}</span>
+                            <span class="inline-flex shrink-0 items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700 whitespace-nowrap">Stok {{ $menuStock }}</span>
                         @endif
                     </div>
                     <p class="text-[11px] text-gray-400 leading-snug mt-1 mb-2">{{ \Illuminate\Support\Str::limit((string) ($menu['description'] ?? ''), 25, '...') }}</p>
