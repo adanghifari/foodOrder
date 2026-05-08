@@ -4,6 +4,7 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schedule;
+use App\Domains\Payment\Services\PaymentService;
 use App\Domains\Table\Services\TableService;
 
 Artisan::command('inspire', function () {
@@ -90,6 +91,21 @@ Artisan::command('orders:auto-clear-delivered', function () {
     $this->info('Auto-cleared table assignment for ' . $clearedCount . ' delivered order(s).');
 })->purpose('Auto clear table assignment for delivered paid orders older than 150 minutes');
 
+Artisan::command('orders:auto-release-pending-stock', function () {
+    $releasedCount = app(PaymentService::class)->releaseExpiredPendingReservations(20);
+
+    if ($releasedCount === 0) {
+        $this->info('No expired pending stock reservations to release.');
+        return;
+    }
+
+    $this->info('Auto-released stock reservation for ' . $releasedCount . ' pending order(s).');
+})->purpose('Auto release stock for pending payments older than 20 minutes');
+
 Schedule::command('orders:auto-clear-delivered')
     ->everyMinute()
+    ->withoutOverlapping();
+
+Schedule::command('orders:auto-release-pending-stock')
+    ->everyFiveMinutes()
     ->withoutOverlapping();

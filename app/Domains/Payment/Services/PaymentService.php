@@ -17,6 +17,7 @@ class PaymentService
 {
     private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
     private const FAILED_STATUSES = ['FAILED', 'CANCELED', 'EXPIRED'];
+    private const HOLD_STATUSES = ['PENDING_PAYMENT', 'PAYMENT_FAILED'];
 
     public function listPayments()
     {
@@ -420,6 +421,32 @@ class PaymentService
         ];
     }
 
+    public function releaseExpiredPendingReservations(int $minutes = 20): int
+    {
+        $effectiveMinutes = max(1, $minutes);
+        $cutoff = now()->subMinutes($effectiveMinutes);
+
+        $orders = Order::whereIn('status', self::HOLD_STATUSES)
+            ->where('payment_status', 'PENDING')
+            ->whereNotNull('stock_reserved_at')
+            ->whereNull('stock_restored_at')
+            ->where(function ($query) use ($cutoff) {
+                $query->where('updated_at', '<=', $cutoff)
+                    ->orWhere('created_at', '<=', $cutoff);
+            })
+            ->get();
+
+        if ($orders->isEmpty()) {
+            return 0;
+        }
+
+        foreach ($orders as $order) {
+            $this->restoreStockForOrder($order, true);
+        }
+
+        return $orders->count();
+    }
+
     private function postMidtransTransactionAction(
         string $serverKey,
         bool $isProduction,
@@ -471,8 +498,8 @@ class PaymentService
         $order->update($attributes);
         $order->refresh();
 
-        // Reservation is released only on explicit cancel.
-        if ($paymentStatus === 'CANCELED') {
+        // Release stock for all terminal non-paid statuses.
+        if (in_array($paymentStatus, self::FAILED_STATUSES, true)) {
             $this->restoreStockForOrder($order);
         }
 
