@@ -110,7 +110,7 @@
             </div>
             <div class="flex-grow">
                 <h3 class="font-bold text-gray-800">${item.nama}</h3>
-                <p class="text-[10px] text-gray-400 leading-tight mb-2">${item.desc || 'Deskripsi tidak tersedia'}</p>
+                <p class="text-[10px] text-gray-400 leading-tight mb-2">${truncateDescription(item.desc || 'Deskripsi tidak tersedia')}</p>
                 <div class="flex justify-between items-center">
                     <span class="font-bold text-gray-800">
                         Rp ${((item.harga || 0) * item.qty).toLocaleString('id-ID')}
@@ -161,6 +161,11 @@
     // Pastikan menggunakan item.harga agar tidak muncul NaN
     const subtotal = cart.reduce((sum, item) => sum + ((item.harga || 0) * item.qty), 0);
     updateTotals(subtotal);
+}
+
+       function truncateDescription(text) {
+    const source = String(text || '');
+    return source.length > 25 ? source.slice(0, 25) + '...' : source;
 }
 
         function updateTotals(subtotal) {
