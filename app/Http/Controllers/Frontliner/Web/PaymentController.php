@@ -58,13 +58,14 @@ class PaymentController extends Controller
         if (! $this->tableService->canPlaceOrderForSession(
             $tableNumber,
             (string) $validated['customerName'],
+            (string) $validated['customerEmail'],
             $browserSessionId,
             $sessionTableId,
             $receiptTableId
         )) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Meja masih terisi oleh session atau pemesan lain. Gunakan device/browser yang sama atau nama pemesan yang sama untuk menambah order di meja ini.',
+                'message' => 'Meja masih terisi oleh session atau pemesan lain. Gunakan device/browser yang sama atau nama dan email pemesan yang sama untuk menambah order di meja ini.',
             ], 409);
         }
 

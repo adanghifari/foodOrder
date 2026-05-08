@@ -28,6 +28,7 @@ class TableService
     public function canPlaceOrderForSession(
         int $tableId,
         ?string $customerName = null,
+        ?string $customerEmail = null,
         ?string $browserSessionId = null,
         ?int $sessionTableId = null,
         ?int $receiptTableId = null
@@ -37,21 +38,27 @@ class TableService
         }
 
         $normalizedCustomerName = $this->normalizeCustomerName($customerName);
+        $normalizedCustomerEmail = $this->normalizeCustomerEmail($customerEmail);
         $normalizedBrowserSessionId = trim((string) $browserSessionId);
 
         $occupyingOrders = $this->occupyingOrdersQuery($tableId)->get([
             'customer_name',
+            'customer_email',
             'browser_session_id',
         ]);
 
-        return $occupyingOrders->contains(function (Order $order) use ($normalizedCustomerName, $normalizedBrowserSessionId) {
+        return $occupyingOrders->contains(function (Order $order) use ($normalizedCustomerName, $normalizedCustomerEmail, $normalizedBrowserSessionId) {
             $orderBrowserSessionId = trim((string) ($order->browser_session_id ?? ''));
             if ($normalizedBrowserSessionId !== '' && $orderBrowserSessionId === $normalizedBrowserSessionId) {
                 return true;
             }
 
-            return $normalizedCustomerName !== ''
-                && $this->normalizeCustomerName((string) ($order->customer_name ?? '')) === $normalizedCustomerName;
+            if ($normalizedCustomerName === '' || $normalizedCustomerEmail === '') {
+                return false;
+            }
+
+            return $this->normalizeCustomerName((string) ($order->customer_name ?? '')) === $normalizedCustomerName
+                && $this->normalizeCustomerEmail((string) ($order->customer_email ?? '')) === $normalizedCustomerEmail;
         });
     }
 
@@ -185,6 +192,11 @@ class TableService
         $normalized = preg_replace('/\s+/u', ' ', trim((string) $name));
 
         return mb_strtolower((string) ($normalized ?? ''));
+    }
+
+    public function normalizeCustomerEmail(?string $email): string
+    {
+        return mb_strtolower(trim((string) $email));
     }
 
     private function clearSessionKeys(Request $request): void
