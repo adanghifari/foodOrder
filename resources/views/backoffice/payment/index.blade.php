@@ -21,7 +21,7 @@
                     <p class="mt-1 text-xl font-extrabold text-emerald-800">{{ (int) ($summary['paid'] ?? 0) }}</p>
                 </div>
                 <div class="rounded-xl border border-amber-200 bg-amber-50 p-3.5">
-                    <p class="text-[11px] font-bold uppercase tracking-wide text-amber-700">Menunggu</p>
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-amber-700">Menunggu Pembayaran</p>
                     <p class="mt-1 text-xl font-extrabold text-amber-800">{{ (int) ($summary['pending'] ?? 0) }}</p>
                 </div>
                 <div class="rounded-xl border border-rose-200 bg-rose-50 p-3.5">
@@ -37,7 +37,7 @@
                     <div class="flex flex-wrap gap-2">
                         <button type="button" class="payment-status-tab inline-flex items-center rounded-xl border border-[#6A2B09] bg-[#6A2B09] text-[#FCB861] text-xs font-bold px-3 py-2 transition" data-status="all">Semua</button>
                         <button type="button" class="payment-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="paid">Lunas</button>
-                        <button type="button" class="payment-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="pending">Menunggu</button>
+                        <button type="button" class="payment-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="pending">Menunggu Pembayaran</button>
                         <button type="button" class="payment-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="failed">Gagal</button>
                     </div>
                 </div>
@@ -81,7 +81,7 @@
                                 $paymentStatusLabel = match ($statusFamily) {
                                     'paid' => 'Lunas',
                                     'failed' => 'Gagal',
-                                    default => 'Menunggu',
+                                    default => 'Menunggu Pembayaran',
                                 };
                                 $paymentBadgeClass = match ($statusFamily) {
                                     'paid' => 'bg-emerald-100 text-emerald-700',
@@ -98,7 +98,7 @@
                                 <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format((float) ($payment['totalPrice'] ?? 0), 0, ',', '.') }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex items-center gap-2">
-                                        <a href="/backoffice/pembayaran?detail={{ urlencode((string) ($payment['orderId'] ?? '')) }}" class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
+                                        <a href="/backoffice/pembayaran?detail={{ urlencode((string) ($payment['orderId'] ?? '')) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
                                         <form
                                             method="POST"
                                             action="/backoffice/pembayaran/{{ urlencode((string) ($payment['orderId'] ?? '')) }}"
@@ -171,7 +171,7 @@
                                     $paymentStatusLabel = match ($statusFamily) {
                                         'paid' => 'Lunas',
                                         'failed' => 'Gagal',
-                                        default => 'Menunggu',
+                                        default => 'Menunggu Pembayaran',
                                     };
                                     $paymentBadgeClass = match ($statusFamily) {
                                         'paid' => 'bg-emerald-100 text-emerald-700',
@@ -188,7 +188,7 @@
                                     <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format((float) ($payment['totalPrice'] ?? 0), 0, ',', '.') }}</td>
                                     <td class="px-4 py-3">
                                         <div class="flex items-center gap-2">
-                                            <a href="/backoffice/pembayaran?detail={{ urlencode((string) ($payment['orderId'] ?? '')) }}" class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
+                                            <a href="/backoffice/pembayaran?detail={{ urlencode((string) ($payment['orderId'] ?? '')) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
                                             <form
                                                 method="POST"
                                                 action="/backoffice/pembayaran/{{ urlencode((string) ($payment['orderId'] ?? '')) }}"

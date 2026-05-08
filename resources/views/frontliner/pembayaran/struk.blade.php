@@ -78,6 +78,12 @@
             'EXPIRED' => 'KEDALUWARSA',
             default => 'MENUNGGU',
         };
+        $paymentSubtitle = match ($paymentStatus) {
+            'PAID', 'SUCCESS', 'SETTLEMENT' => 'Terima kasih, pembayaran kamu sudah kami terima.',
+            'PENDING' => 'Menunggu Pembayaran.',
+            'FAILED', 'CANCELED' => 'Pembayaran gagal.',
+            default => 'Status pembayaran sedang diperbarui.',
+        };
 
         $orderLabel = match ($orderStatus) {
             'PENDING_PAYMENT' => 'Menunggu Pembayaran',
@@ -92,7 +98,7 @@
         $paymentClass = in_array($paymentStatus, ['PAID', 'SUCCESS', 'SETTLEMENT'], true)
             ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
             : 'bg-amber-100 text-amber-700 border-amber-200';
-        $canDownloadReceiptPdf = in_array($paymentStatus, ['PAID', 'SUCCESS', 'SETTLEMENT'], true);
+        $canDownloadReceiptPdf = in_array($paymentStatus, ['PAID', 'SUCCESS', 'SETTLEMENT'], true) && (($allowDownloadPdf ?? true) === true);
 
         $displayOrderId = 'ORD-' . strtoupper(substr((string) $order->_id, -6));
         $isPaidPayment = in_array($paymentStatus, ['PAID', 'SUCCESS', 'SETTLEMENT'], true);
@@ -108,7 +114,7 @@
                 <div>
                     <p class="text-xs font-semibold uppercase tracking-wide text-orange-100">KedaiKlik</p>
                     <h1 class="text-2xl font-extrabold">Struk Pembelian</h1>
-                    <p class="text-sm text-orange-100 mt-1">Terima kasih, pembayaran kamu sudah kami terima.</p>
+                    <p class="text-sm text-orange-100 mt-1">{{ $paymentSubtitle }}</p>
                 </div>
                 @if (($invoiceCount ?? 0) > 1)
                     <div class="flex items-center gap-2">
@@ -146,29 +152,45 @@
         <section class="px-6 py-5 space-y-4 md:grid md:grid-cols-12 md:gap-6 md:space-y-0">
             <div class="space-y-4 md:col-span-5">
                 <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4 space-y-2">
-                <div class="flex items-center justify-between text-sm">
-                    <span class="text-gray-500">Order ID</span>
-                    <span class="font-extrabold text-gray-800">{{ $displayOrderId }}</span>
+                <div class="flex items-start gap-2 text-sm">
+                    <span class="text-gray-500 w-28 sm:w-32 shrink-0">Order ID</span>
+                    <span class="text-gray-500 shrink-0">:</span>
+                    <span class="font-extrabold text-gray-800 text-left break-words">{{ $displayOrderId }}</span>
                 </div>
-                <div class="flex items-center justify-between text-sm">
-                    <span class="text-gray-500">Midtrans ID</span>
-                    <span class="font-semibold text-gray-700 text-right">{{ $order->midtrans_order_id ?? '-' }}</span>
+                <div class="flex items-start gap-2 text-sm">
+                    <span class="text-gray-500 w-28 sm:w-32 shrink-0">Nama Pemesan</span>
+                    <span class="text-gray-500 shrink-0">:</span>
+                    <span class="font-semibold text-gray-700 text-left break-words">{{ (string) ($order->customer_name ?? '-') !== '' ? (string) ($order->customer_name ?? '-') : '-' }}</span>
                 </div>
-                <div class="flex items-center justify-between text-sm">
-                    <span class="text-gray-500">Meja</span>
-                    <span class="font-bold text-gray-800">{{ (int) ($order->table_number ?? 0) }}</span>
+                <div class="flex items-start gap-2 text-sm">
+                    <span class="text-gray-500 w-28 sm:w-32 shrink-0">Email Pemesan</span>
+                    <span class="text-gray-500 shrink-0">:</span>
+                    <span class="font-semibold text-gray-700 text-left break-all">{{ (string) ($order->customer_email ?? '-') !== '' ? (string) ($order->customer_email ?? '-') : '-' }}</span>
                 </div>
-                <div class="flex items-center justify-between text-sm">
-                    <span class="text-gray-500">Waktu Bayar</span>
-                    <span class="font-semibold text-gray-700" @if($paidAtIso) data-local-datetime="{{ $paidAtIso }}" @endif>{{ $paidAtLabel }}</span>
+                <div class="flex items-start gap-2 text-sm">
+                    <span class="text-gray-500 w-28 sm:w-32 shrink-0">Midtrans ID</span>
+                    <span class="text-gray-500 shrink-0">:</span>
+                    <span class="font-semibold text-gray-700 text-left break-all">{{ $order->midtrans_order_id ?? '-' }}</span>
                 </div>
-                <div class="flex items-center justify-between gap-3 text-sm">
-                    <span class="text-gray-500">Metode Bayar</span>
-                    <span class="font-semibold text-gray-700 text-right">{{ $paymentTypeLabel }}</span>
+                <div class="flex items-start gap-2 text-sm">
+                    <span class="text-gray-500 w-28 sm:w-32 shrink-0">Meja</span>
+                    <span class="text-gray-500 shrink-0">:</span>
+                    <span class="font-bold text-gray-800 text-left">{{ (int) ($order->table_number ?? 0) }}</span>
                 </div>
-                <div class="flex items-center justify-between gap-3 text-sm">
-                    <span class="text-gray-500">Nomor VA</span>
-                    <span class="font-semibold text-gray-700 text-right">{{ $vaNumber !== '' ? $vaNumber : '-' }}</span>
+                <div class="flex items-start gap-2 text-sm">
+                    <span class="text-gray-500 w-28 sm:w-32 shrink-0">Waktu Bayar</span>
+                    <span class="text-gray-500 shrink-0">:</span>
+                    <span class="font-semibold text-gray-700 text-left" @if($paidAtIso) data-local-datetime="{{ $paidAtIso }}" @endif>{{ $paidAtLabel }}</span>
+                </div>
+                <div class="flex items-start gap-2 text-sm">
+                    <span class="text-gray-500 w-28 sm:w-32 shrink-0">Metode Bayar</span>
+                    <span class="text-gray-500 shrink-0">:</span>
+                    <span class="font-semibold text-gray-700 text-left break-words">{{ $paymentTypeLabel }}</span>
+                </div>
+                <div class="flex items-start gap-2 text-sm">
+                    <span class="text-gray-500 w-28 sm:w-32 shrink-0">Nomor VA</span>
+                    <span class="text-gray-500 shrink-0">:</span>
+                    <span class="font-semibold text-gray-700 text-left break-all">{{ $vaNumber !== '' ? $vaNumber : '-' }}</span>
                 </div>
                 </div>
 
@@ -241,7 +263,9 @@
                         Download PDF
                     </a>
                 @endif
-                <a href="/menu" class="w-full inline-flex items-center justify-center rounded-2xl bg-[#C8641E] hover:bg-[#A85318] text-white font-bold px-5 py-3 transition">Kembali ke Menu</a>
+                @if (($showBackToMenu ?? true) === true)
+                    <a href="/menu" class="w-full inline-flex items-center justify-center rounded-2xl bg-[#C8641E] hover:bg-[#A85318] text-white font-bold px-5 py-3 transition">Kembali ke Menu</a>
+                @endif
             </div>
         </footer>
     </main>
@@ -297,6 +321,7 @@
 
                 element.textContent = formatter.format(parsed);
             });
+
         });
     </script>
 </body>

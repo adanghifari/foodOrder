@@ -77,6 +77,9 @@ Route::get('/kedai/pembayaran/selesai', [FrontlinerPaymentController::class, 'fi
     ->middleware('throttle:20,1');
 Route::get('/kedai/pembayaran/struk', [FrontlinerPaymentController::class, 'receipt'])
     ->middleware('throttle:30,1');
+Route::get('/kedai/pembayaran/struk/email-link/{id}', [FrontlinerPaymentController::class, 'receiptFromEmailLink'])
+    ->name('frontliner.receipt.email-link')
+    ->middleware(['signed', 'throttle:30,1']);
 Route::get('/kedai/pembayaran/struk/download', [FrontlinerPaymentController::class, 'downloadReceiptPdf'])
     ->middleware('throttle:20,1');
 

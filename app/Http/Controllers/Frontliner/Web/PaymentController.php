@@ -300,6 +300,35 @@ class PaymentController extends Controller
             'emptyReceiptMessage' => null,
             'invoiceCount' => $receiptData['invoiceCount'],
             'invoiceIndex' => $receiptData['invoiceIndex'],
+            'allowDownloadPdf' => true,
+        ]);
+    }
+
+    public function receiptFromEmailLink(Request $request, string $id)
+    {
+        $order = Order::find($id);
+        if (!$order) {
+            abort(404);
+        }
+
+        $paymentStatus = strtoupper((string) ($order->payment_status ?? 'PENDING'));
+        if (!in_array($paymentStatus, ['PAID', 'SUCCESS', 'SETTLEMENT'], true)) {
+            return $this->emptyReceiptView('Link struk tidak tersedia untuk pembayaran yang belum lunas.');
+        }
+
+        $payload = $this->buildReceiptPayloadFromOrder($order);
+
+        return view('frontliner.pembayaran.struk', [
+            'order' => $order,
+            'items' => $payload['items'],
+            'subtotal' => $payload['subtotal'],
+            'serviceFee' => $payload['serviceFee'],
+            'total' => $payload['total'],
+            'emptyReceiptMessage' => null,
+            'invoiceCount' => 1,
+            'invoiceIndex' => 0,
+            'allowDownloadPdf' => false,
+            'showBackToMenu' => false,
         ]);
     }
 
@@ -405,6 +434,7 @@ class PaymentController extends Controller
             'emptyReceiptMessage' => $message ?? 'Belum ada struk aktif di browser ini.',
             'invoiceCount' => 0,
             'invoiceIndex' => 0,
+            'allowDownloadPdf' => false,
         ]);
     }
 
@@ -508,6 +538,22 @@ class PaymentController extends Controller
             ];
         }
 
+        $receiptPayload = $this->buildReceiptPayloadFromOrder($order);
+
+        return [
+            'ok' => true,
+            'order' => $order,
+            'items' => $receiptPayload['items'],
+            'subtotal' => $receiptPayload['subtotal'],
+            'serviceFee' => $receiptPayload['serviceFee'],
+            'total' => $receiptPayload['total'],
+            'invoiceCount' => $validOrderIds->count(),
+            'invoiceIndex' => $index,
+        ];
+    }
+
+    private function buildReceiptPayloadFromOrder(Order $order): array
+    {
         $items = collect(is_array($order->items) ? $order->items : [])
             ->groupBy(fn ($item) => (string) ($item['name'] ?? '-'))
             ->map(function ($group, $name) {
@@ -528,14 +574,10 @@ class PaymentController extends Controller
         $serviceFee = max(0, $total - $subtotal);
 
         return [
-            'ok' => true,
-            'order' => $order,
             'items' => $items,
             'subtotal' => $subtotal,
             'serviceFee' => $serviceFee,
             'total' => $total,
-            'invoiceCount' => $validOrderIds->count(),
-            'invoiceIndex' => $index,
         ];
     }
 }

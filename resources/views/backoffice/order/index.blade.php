@@ -21,11 +21,11 @@
                     <p class="mt-1 text-xl font-extrabold text-amber-800">{{ (int) ($summary['waiting'] ?? 0) }}</p>
                 </div>
                 <div class="rounded-xl border border-blue-200 bg-blue-50 p-3.5">
-                    <p class="text-[11px] font-bold uppercase tracking-wide text-blue-700">Diproses</p>
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-blue-700">Sedang Diproses</p>
                     <p class="mt-1 text-xl font-extrabold text-blue-800">{{ (int) ($summary['processing'] ?? 0) }}</p>
                 </div>
                 <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3.5">
-                    <p class="text-[11px] font-bold uppercase tracking-wide text-emerald-700">Selesai</p>
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-emerald-700">Disajikan</p>
                     <p class="mt-1 text-xl font-extrabold text-emerald-800">{{ (int) ($summary['delivered'] ?? 0) }}</p>
                 </div>
             </div>
@@ -107,11 +107,11 @@
                                 <td class="px-4 py-3 text-sm text-slate-700">{{ $customerEmail !== '' ? $customerEmail : '-' }}</td>
                                 <td class="px-4 py-3 text-sm font-bold text-slate-700">#{{ $queueNumber }}</td>
                                 <td class="px-4 py-3 text-sm text-slate-700">{{ $tableNumber > 0 ? $tableNumber : '-' }}</td>
-                                <td class="px-4 py-3"><span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $statusClass }}">{{ $statusLabel }}</span></td>
+                                <td class="px-4 py-3"><span data-order-status-badge class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $statusClass }}">{{ $statusLabel }}</span></td>
                                 <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format($totalPrice, 0, ',', '.') }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex items-center gap-2">
-                                        <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2">
+                                        <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2" data-order-status-form>
                                             @csrf
                                             @method('PATCH')
                                             <select name="status" class="min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
@@ -130,7 +130,7 @@
                                             </select>
                                             <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>
                                         </form>
-                                        <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
+                                        <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
                                     </div>
                                 </td>
                             </tr>
@@ -203,11 +203,11 @@
                                     <td class="px-4 py-3 text-sm text-slate-700">{{ $customerEmail !== '' ? $customerEmail : '-' }}</td>
                                     <td class="px-4 py-3 text-sm font-bold text-slate-700">#{{ $queueNumber }}</td>
                                     <td class="px-4 py-3 text-sm text-slate-700">{{ $tableNumber > 0 ? $tableNumber : '-' }}</td>
-                                    <td class="px-4 py-3"><span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $statusClass }}">{{ $statusLabel }}</span></td>
+                                <td class="px-4 py-3"><span data-order-status-badge class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $statusClass }}">{{ $statusLabel }}</span></td>
                                     <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format($totalPrice, 0, ',', '.') }}</td>
                                     <td class="px-4 py-3">
                                         <div class="flex items-center gap-2">
-                                            <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2">
+                                            <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2" data-order-status-form>
                                                 @csrf
                                                 @method('PATCH')
                                                 <select name="status" class="min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
@@ -226,7 +226,7 @@
                                                 </select>
                                                 <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>
                                             </form>
-                                            <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
+                                            <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
                                         </div>
                                     </td>
                                 </tr>
@@ -388,6 +388,96 @@
                     historyIcon.textContent = isHidden ? '−' : '+';
                 });
             }
+
+            const statusMeta = {
+                CONFIRMED: { label: 'Terkonfirmasi', className: 'bg-amber-100 text-amber-700' },
+                IN_QUEUE: { label: 'Dalam Antrean', className: 'bg-orange-100 text-orange-700' },
+                IN_PROGRESS: { label: 'Sedang Diproses', className: 'bg-blue-100 text-blue-700' },
+                DELIVERED: { label: 'Disajikan', className: 'bg-emerald-100 text-emerald-700' },
+            };
+            const statusBadgeBaseClass = 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold';
+
+            document.addEventListener('submit', async function (event) {
+                const form = event.target instanceof HTMLFormElement ? event.target : null;
+                if (!form || !form.matches('[data-order-status-form]')) {
+                    return;
+                }
+
+                event.preventDefault();
+
+                const submitButton = form.querySelector('button[type="submit"]');
+                const statusSelect = form.querySelector('select[name="status"]');
+                const statusValue = statusSelect ? String(statusSelect.value || '').toUpperCase() : '';
+                const row = form.closest('.order-row');
+                const statusBadge = row ? row.querySelector('[data-order-status-badge]') : null;
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+                if (!statusSelect || !statusValue) {
+                    return;
+                }
+
+                form.dataset.loading = '1';
+                if (submitButton) {
+                    submitButton.disabled = true;
+                    submitButton.classList.add('opacity-60', 'cursor-not-allowed');
+                }
+
+                try {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'X-CSRF-TOKEN': csrfToken,
+                            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                        },
+                        body: new URLSearchParams({
+                            _token: csrfToken,
+                            _method: 'PATCH',
+                            status: statusValue,
+                        }),
+                    });
+
+                    const payload = await response.json().catch(function () { return {}; });
+                    if (!response.ok) {
+                        throw new Error(payload.message || 'Gagal memperbarui status.');
+                    }
+
+                    if (row) {
+                        row.dataset.status = String(statusValue).toLowerCase();
+                    }
+
+                    if (statusBadge) {
+                        const nextMeta = statusMeta[statusValue] || { label: statusValue, className: 'bg-slate-100 text-slate-700' };
+                        statusBadge.className = statusBadgeBaseClass + ' ' + nextMeta.className;
+                        statusBadge.textContent = nextMeta.label;
+                    }
+
+                    if (window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
+                        window.KedaiKlikNotify.show({
+                            type: 'success',
+                            title: 'Status diperbarui',
+                            message: payload.message || 'Status pesanan berhasil diperbarui.',
+                        });
+                    }
+
+                    applyFilters();
+                } catch (error) {
+                    if (window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
+                        window.KedaiKlikNotify.show({
+                            type: 'error',
+                            title: 'Gagal memperbarui',
+                            message: error.message || 'Terjadi kesalahan saat memperbarui status.',
+                        });
+                    }
+                } finally {
+                    delete form.dataset.loading;
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                        submitButton.classList.remove('opacity-60', 'cursor-not-allowed');
+                    }
+                }
+            });
 
             applyFilters();
         })();

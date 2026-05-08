@@ -43,11 +43,20 @@
     </style>
 </head>
 <body>
+    @php
+        $paymentStatusRaw = strtoupper((string) ($order->payment_status ?? 'PENDING'));
+        $paymentSubtitle = match ($paymentStatusRaw) {
+            'PAID', 'SUCCESS', 'SETTLEMENT' => 'Terima kasih, pembayaran kamu sudah kami terima.',
+            'PENDING' => 'Menunggu Pembayaran.',
+            'FAILED', 'CANCELED' => 'Pembayaran gagal.',
+            default => 'Status pembayaran sedang diperbarui.',
+        };
+    @endphp
     <main class="page">
         <header class="header">
             <div class="brand">KEDAIKLIK</div>
             <div class="title">Struk Pembelian</div>
-            <div class="subtitle">Terima kasih, pembayaran kamu sudah kami terima.</div>
+            <div class="subtitle">{{ $paymentSubtitle }}</div>
             @if (($invoiceCount ?? 0) > 1)
                 <div class="invoice">Invoice {{ (int) (($invoiceIndex ?? 0) + 1) }} dari {{ (int) ($invoiceCount ?? 0) }}</div>
             @endif
@@ -57,6 +66,8 @@
             <div class="card">
                 <table class="row">
                     <tr><td class="label">Order ID</td><td class="value">{{ $displayOrderId }}</td></tr>
+                    <tr><td class="label">Nama Pemesan</td><td class="value">{{ (string) ($order->customer_name ?? '-') !== '' ? (string) ($order->customer_name ?? '-') : '-' }}</td></tr>
+                    <tr><td class="label">Email Pemesan</td><td class="value">{{ (string) ($order->customer_email ?? '-') !== '' ? (string) ($order->customer_email ?? '-') : '-' }}</td></tr>
                     <tr><td class="label">Midtrans ID</td><td class="value">{{ $order->midtrans_order_id ?? '-' }}</td></tr>
                     <tr><td class="label">Meja</td><td class="value">{{ (int) ($order->table_number ?? 0) }}</td></tr>
                     <tr><td class="label">Waktu Bayar</td><td class="value">{{ $paidAtLabel }}</td></tr>

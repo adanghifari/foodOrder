@@ -3,43 +3,49 @@
         <div class="xl:col-span-8 space-y-5">
             <article id="overview-panel" class="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 md:p-6">
                 <div class="flex items-center justify-between gap-3 mb-4">
-                    <h2 class="text-lg md:text-xl font-extrabold text-[var(--rich-black)]">Pesanan Aktif</h2>
+                    <h2 class="text-lg md:text-xl font-extrabold text-[var(--rich-black)]">Pesanan Belum Diproses</h2>
+                    <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                        {{ count($activeOrders ?? []) }} Pesanan
+                    </span>
                 </div>
 
                 <div class="space-y-3">
                     @forelse ($activeOrders as $order)
                         <div class="rounded-xl border border-slate-200 hover:border-[var(--alloy-orange)] hover:shadow-md transition p-4">
-                            <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div class="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-slate-100">
                                 <div>
                                     <p class="text-xs font-semibold text-slate-500">Order ID</p>
                                     <p class="text-sm font-extrabold text-[var(--rich-black)]">{{ $order['display_id'] }}</p>
+                                    <p class="text-sm font-semibold text-slate-700 mt-1">{{ $order['customer_name'] ?? '-' }}</p>
+                                    <p class="text-xs text-slate-500 mt-1">{{ (int) ($order['item_count'] ?? 0) }} item</p>
                                 </div>
                                 @php
                                     $status = strtoupper($order['status']);
                                     $statusMap = [
-                                        'CONFIRMED' => ['Pending', 'bg-amber-100 text-amber-700'],
-                                        'IN_QUEUE' => ['Antrian', 'bg-orange-100 text-orange-700'],
-                                        'IN_PROGRESS' => ['Diproses', 'bg-blue-100 text-blue-700'],
-                                        'DELIVERED' => ['Siap', 'bg-emerald-100 text-emerald-700'],
+                                        'CONFIRMED' => ['Terkonfirmasi', 'bg-amber-100 text-amber-700'],
                                     ];
                                     $statusMeta = $statusMap[$status] ?? [ucwords(strtolower(str_replace('_', ' ', $status))), 'bg-slate-100 text-slate-700'];
                                 @endphp
                                 <span class="text-xs font-bold px-2.5 py-1 rounded-full {{ $statusMeta[1] }}">{{ $statusMeta[0] }}</span>
                             </div>
 
-                            <ul class="mt-3 space-y-1 text-sm text-slate-700">
-                                @forelse ($order['items'] as $item)
-                                    <li>{{ $item['name'] }} ({{ $item['quantity'] }})</li>
-                                @empty
-                                    <li>Tidak ada item pada pesanan ini</li>
-                                @endforelse
-                            </ul>
-
-                            <a href="/backoffice/daftar_pesanan" class="mt-4 inline-flex items-center rounded-lg bg-[var(--alloy-orange)] hover:bg-[var(--philippine-bronze)] text-white text-sm font-bold px-3.5 py-2 transition">Kelola Pesanan</a>
+                            <div class="mt-3 flex flex-wrap items-center gap-2">
+                                <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode((string) ($order['id'] ?? '')) }}/status">
+                                    @csrf
+                                    @method('PATCH')
+                                    <input type="hidden" name="status" value="IN_QUEUE">
+                                    <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] hover:bg-[var(--philippine-bronze)] text-white text-sm font-bold px-3.5 py-2 transition">
+                                        Masukkan Antrean
+                                    </button>
+                                </form>
+                                <a href="/backoffice/dashboard?detail={{ urlencode((string) ($order['id'] ?? '')) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-sm font-bold px-3.5 py-2 transition">
+                                    Lihat Detail
+                                </a>
+                            </div>
                         </div>
                     @empty
                         <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
-                            Belum ada pesanan aktif.
+                            Tidak ada pesanan terkonfirmasi yang menunggu diproses.
                         </div>
                     @endforelse
                 </div>
@@ -74,4 +80,92 @@
             </article>
         </div>
     </section>
+
+    @if (!empty($selectedOrder))
+        <div data-modal-root class="bo-modal-root fixed inset-0 z-[70]">
+            <div data-modal-overlay class="bo-modal-backdrop fixed inset-0 bg-black/40 backdrop-blur-sm"></div>
+            <div class="bo-modal-wrap fixed inset-0 flex items-center justify-center p-4">
+                <div class="bo-modal-panel w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+                <div class="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-3">
+                    <div>
+                        <h3 class="text-lg font-extrabold text-[var(--rich-black)]">Detail Pesanan</h3>
+                        <p class="text-sm font-semibold text-slate-500">{{ $selectedOrder['display_id'] ?? '-' }}</p>
+                    </div>
+                    <button type="button" data-modal-close class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold px-3 py-1.5 transition">Tutup</button>
+                </div>
+
+                <div class="p-5 space-y-4 max-h-[72vh] overflow-y-auto">
+                    <section class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full min-w-[640px] text-left">
+                                <thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                                    <tr>
+                                        <th class="px-4 py-3 font-bold">Informasi</th>
+                                        <th class="px-4 py-3 font-bold">Nilai</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200 text-sm">
+                                    <tr>
+                                        <td class="px-4 py-3 font-semibold text-slate-600">Nama Pemesan</td>
+                                        <td class="px-4 py-3 text-slate-800">{{ $selectedOrder['customer_name'] ?? '-' }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 font-semibold text-slate-600">Email</td>
+                                        <td class="px-4 py-3 text-slate-800">{{ $selectedOrder['customer_email'] ?? '-' }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 font-semibold text-slate-600">Nomor Antrian</td>
+                                        <td class="px-4 py-3 text-slate-800">#{{ (int) ($selectedOrder['queue_number'] ?? 0) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 font-semibold text-slate-600">Nomor Meja</td>
+                                        <td class="px-4 py-3 text-slate-800">{{ (int) ($selectedOrder['table_number'] ?? 0) }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 font-semibold text-slate-600">Status Pesanan</td>
+                                        <td class="px-4 py-3"><span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold bg-amber-100 text-amber-700">Terkonfirmasi</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 font-semibold text-slate-600">Total Pesanan</td>
+                                        <td class="px-4 py-3 text-[var(--philippine-bronze)] font-extrabold">Rp {{ number_format((float) ($selectedOrder['total_price'] ?? 0), 0, ',', '.') }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <section class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                        <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
+                            <h4 class="text-sm font-extrabold text-slate-700">Rincian Menu</h4>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full min-w-[640px] text-left">
+                                <thead class="bg-white border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                                    <tr>
+                                        <th class="px-4 py-3 font-bold">No</th>
+                                        <th class="px-4 py-3 font-bold">Nama Menu</th>
+                                        <th class="px-4 py-3 font-bold">Qty</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200 text-sm text-slate-700">
+                                    @forelse (($selectedOrder['items'] ?? []) as $index => $item)
+                                        <tr>
+                                            <td class="px-4 py-3 font-semibold text-slate-500">{{ $index + 1 }}</td>
+                                            <td class="px-4 py-3 font-semibold text-slate-800">{{ $item['name'] ?? '-' }}</td>
+                                            <td class="px-4 py-3">{{ (int) ($item['quantity'] ?? 0) }}</td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="3" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">Tidak ada item.</td>
+                                        </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+        </div>
+    @endif
 </x-backoffice.layout>

@@ -23,6 +23,8 @@ class Order extends Model
         'payment_url',
         'payment_payload',
         'paid_at',
+        'receipt_email_sent_at',
+        'receipt_email_error',
         'stock_reserved_at',
         'stock_restored_at',
         'delivered_at',
