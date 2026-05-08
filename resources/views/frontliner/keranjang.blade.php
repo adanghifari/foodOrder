@@ -9,9 +9,9 @@
     <link rel="apple-touch-icon" href="/images/KedaiKlikLogo.png">
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 flex justify-center">
+<body class="bg-gray-100 lg:bg-[radial-gradient(circle_at_top,_#fff7ed,_#f1f5f9_55%)] flex justify-center sm:p-4 lg:p-6 overflow-x-hidden">
 
-    <div class="w-full max-w-md bg-white min-h-screen shadow-2xl relative flex flex-col p-6">
+    <div class="w-full max-w-md sm:max-w-2xl md:max-w-4xl lg:max-w-5xl bg-white min-h-screen sm:min-h-[calc(100vh-2rem)] lg:min-h-[calc(100vh-3rem)] shadow-2xl relative flex flex-col sm:rounded-3xl sm:overflow-hidden p-6 lg:p-8">
         
         <div class="flex items-center mb-8">
             <a href="/menu" class="p-2 -ml-2">
@@ -22,51 +22,56 @@
             <h1 class="flex-grow text-center text-2xl font-bold text-gray-800 mr-8">Pesanan saya</h1>
         </div>
 
-        <div id="cart-items-container" class="space-y-6 mb-8 overflow-y-auto max-h-[40vh] no-scrollbar">
-            </div>
+        <div class="md:grid md:grid-cols-12 md:gap-8 flex-1">
+            <section class="md:col-span-7">
+                <div id="cart-items-container" class="space-y-6 mb-8 overflow-y-auto max-h-[42vh] sm:max-h-[48vh] md:max-h-[56vh] no-scrollbar"></div>
+            </section>
 
-        <div class="space-y-4 mb-8">
-            <div>
-                <label class="block text-gray-700 font-bold mb-2">Nomor Meja</label>
-                <input id="table-number-input" type="text" value="{{ $tableNumber ?? '-' }}" readonly class="w-full bg-gray-100 border border-gray-200 rounded-xl py-3 px-4 text-gray-600 outline-none cursor-not-allowed">
-            </div>
-            <div>
-                <label class="block text-gray-700 font-bold mb-2">Email</label>
-                <input id="email-input" type="email" placeholder="Email" class="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 outline-none focus:ring-2 focus:ring-[#C8641E]/30 transition">
-                <p id="email-error" class="text-red-500 text-xs mt-1 hidden">Email wajib diisi dengan format yang valid.</p>
-            </div>
-            <div>
-                <label class="block text-gray-700 font-bold mb-2">Nama Pemesan</label>
-                <input id="customer-name-input" type="text" placeholder="Nama Pemesan" class="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 outline-none focus:ring-2 focus:ring-[#C8641E]/30 transition">
-                <p id="customer-name-error" class="text-red-500 text-xs mt-1 hidden">Nama pemesan wajib diisi.</p>
-            </div>
-        </div>
+            <aside class="md:col-span-5 md:sticky md:top-6 lg:top-8 h-fit">
+                <div class="space-y-4 mb-8">
+                    <div>
+                        <label class="block text-gray-700 font-bold mb-2">Nomor Meja</label>
+                        <input id="table-number-input" type="text" value="{{ $tableNumber ?? '-' }}" readonly class="w-full bg-gray-100 border border-gray-200 rounded-xl py-3 px-4 text-gray-600 outline-none cursor-not-allowed">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-bold mb-2">Email</label>
+                        <input id="email-input" type="email" placeholder="Email" class="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 outline-none focus:ring-2 focus:ring-[#C8641E]/30 transition">
+                        <p id="email-error" class="text-red-500 text-xs mt-1 hidden">Email wajib diisi dengan format yang valid.</p>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-bold mb-2">Nama Pemesan</label>
+                        <input id="customer-name-input" type="text" placeholder="Nama Pemesan" class="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 outline-none focus:ring-2 focus:ring-[#C8641E]/30 transition">
+                        <p id="customer-name-error" class="text-red-500 text-xs mt-1 hidden">Nama pemesan wajib diisi.</p>
+                    </div>
+                </div>
 
-        <div class="mb-10">
-            <h2 class="font-bold text-gray-800 mb-3 text-lg">Detail Pembayaran</h2>
-            <div class="space-y-2">
-                <div class="flex justify-between text-gray-600">
-                    <span>Subtotal</span>
-                    <span id="subtotal" class="font-bold">Rp 0</span>
+                <div class="mb-10">
+                    <h2 class="font-bold text-gray-800 mb-3 text-lg">Detail Pembayaran</h2>
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-gray-600">
+                            <span>Subtotal</span>
+                            <span id="subtotal" class="font-bold">Rp 0</span>
+                        </div>
+                        <div class="flex justify-between text-gray-600">
+                            <span>Biaya Layanan</span>
+                            <span id="service-fee" class="font-bold">Rp 5.000</span>
+                        </div>
+                        <div class="flex justify-between text-gray-800 text-lg border-t border-gray-100 pt-2 mt-2">
+                            <span class="font-bold">Total Pembayaran</span>
+                            <span id="total-payment" class="font-bold text-[#C8641E]">Rp 0</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="flex justify-between text-gray-600">
-                    <span>Biaya Layanan</span>
-                    <span id="service-fee" class="font-bold">Rp 5.000</span>
-                </div>
-                <div class="flex justify-between text-gray-800 text-lg border-t border-gray-100 pt-2 mt-2">
-                    <span class="font-bold">Total Pembayaran</span>
-                    <span id="total-payment" class="font-bold text-[#C8641E]">Rp 0</span>
-                </div>
-            </div>
-        </div>
 
-        <div class="flex gap-4 mt-auto pb-4">
-            <a href="/menu" class="flex-1 text-center py-4 rounded-xl border-2 border-[#C8641E] text-[#C8641E] font-bold hover:bg-orange-50 transition">
-                Tambah Item
-            </a>
-            <button id="bayar-button" onclick="prosesBayar()" class="flex-1 py-4 rounded-xl bg-[#C8641E] text-white font-bold shadow-lg hover:bg-[#A85318] transition">
-                Bayar
-            </button>
+                <div class="flex gap-4 mt-auto pb-4">
+                    <a href="/menu" class="flex-1 text-center py-4 rounded-xl border-2 border-[#C8641E] text-[#C8641E] font-bold hover:bg-orange-50 transition">
+                        Tambah Item
+                    </a>
+                    <button id="bayar-button" onclick="prosesBayar()" class="flex-1 py-4 rounded-xl bg-[#C8641E] text-white font-bold shadow-lg hover:bg-[#A85318] transition">
+                        Bayar
+                    </button>
+                </div>
+            </aside>
         </div>
 
     </div>

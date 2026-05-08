@@ -6,6 +6,64 @@
 				<span class="text-xs font-semibold text-slate-500">Update otomatis</span>
 			</div>
 
+			<form id="overview-filter-form" method="GET" action="/backoffice/overview" class="mb-4 grid grid-cols-1 md:grid-cols-12 gap-3">
+				@if ($errors->any())
+					<div class="md:col-span-12 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+						{{ $errors->first() }}
+					</div>
+				@endif
+				<div class="md:col-span-3">
+					<label for="overview-mode" class="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">Mode Filter</label>
+					<select id="overview-mode" name="mode" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#6A2B09]/25">
+						<option value="none" {{ data_get($filters ?? [], 'mode', 'none') === 'none' ? 'selected' : '' }}>None</option>
+						<option value="day" {{ data_get($filters ?? [], 'mode', 'none') === 'day' ? 'selected' : '' }}>Spesifik Hari</option>
+						<option value="month" {{ data_get($filters ?? [], 'mode', 'none') === 'month' ? 'selected' : '' }}>Spesifik Bulan</option>
+						<option value="year" {{ data_get($filters ?? [], 'mode', 'none') === 'year' ? 'selected' : '' }}>Spesifik Tahun</option>
+					</select>
+				</div>
+				<div id="overview-day-col" class="md:col-span-3">
+					<label for="overview-tanggal" class="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">Tanggal</label>
+					<select id="overview-tanggal" name="tanggal" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#6A2B09]/25">
+						<option value="">Pilih Tanggal</option>
+						@for ($day = 1; $day <= 31; $day++)
+							<option value="{{ $day }}" {{ (string) $day === (string) data_get($filters ?? [], 'tanggal', '') ? 'selected' : '' }}>{{ $day }}</option>
+						@endfor
+					</select>
+				</div>
+				<div id="overview-month-col" class="md:col-span-3">
+					<label for="overview-bulan" class="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">Bulan</label>
+					<select id="overview-bulan" name="bulan" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#6A2B09]/25">
+						<option value="">Pilih Bulan</option>
+						@foreach ([1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus', 9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'] as $monthNumber => $monthName)
+							<option value="{{ $monthNumber }}" {{ (string) $monthNumber === (string) data_get($filters ?? [], 'bulan', '') ? 'selected' : '' }}>{{ $monthName }}</option>
+						@endforeach
+					</select>
+				</div>
+				<div id="overview-year-col" class="md:col-span-3">
+					<label for="overview-tahun" class="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">Tahun</label>
+					<select id="overview-tahun" name="tahun" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#6A2B09]/25">
+						<option value="">Pilih Tahun</option>
+						@for ($year = (int) now()->year; $year >= ((int) now()->year - 6); $year--)
+							<option value="{{ $year }}" {{ (string) $year === (string) data_get($filters ?? [], 'tahun', '') ? 'selected' : '' }}>{{ $year }}</option>
+						@endfor
+					</select>
+				</div>
+				<div class="md:col-span-12 flex items-end gap-2">
+					<button id="overview-apply-filter" type="submit" class="inline-flex items-center justify-center rounded-xl bg-[var(--alloy-orange)] hover:bg-[var(--philippine-bronze)] text-white text-sm font-bold px-4 py-2.5 transition">
+						Terapkan Filter
+					</button>
+					<a href="/backoffice/overview/export-pdf?{{ http_build_query(request()->query()) }}" class="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm font-bold px-4 py-2.5 transition">
+						Export PDF
+					</a>
+					<a href="/backoffice/overview" class="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold px-4 py-2.5 transition">
+						Reset
+					</a>
+				</div>
+				<p class="md:col-span-12 text-xs text-slate-500">
+					Pilih mode filter yang dibutuhkan.
+				</p>
+			</form>
+
 			<div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
 				<div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
 					<p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Total Menu</p>
@@ -36,7 +94,7 @@
 
 		<section class="grid grid-cols-1 xl:grid-cols-12 gap-5">
 			<article class="xl:col-span-7 rounded-2xl border border-slate-200 bg-white shadow-sm p-5 md:p-6">
-				<h3 class="text-base font-extrabold text-[var(--rich-black)]">Tren 7 Hari</h3>
+				<h3 class="text-base font-extrabold text-[var(--rich-black)]">{{ data_get($overview, 'meta.trendLabel', 'Tren 7 Hari') }}</h3>
 				<div class="mt-4 grid grid-cols-1 gap-4">
 					<div class="rounded-xl border border-slate-200 p-3">
 						<p class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Jumlah Order</p>
@@ -56,7 +114,7 @@
 				</article>
 
 				<article class="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 md:p-6">
-					<h3 class="text-base font-extrabold text-[var(--rich-black)]">Top Menu 30 Hari</h3>
+					<h3 class="text-base font-extrabold text-[var(--rich-black)]">Top Menu (Sesuai Filter)</h3>
 					<div class="mt-3 space-y-2">
 						@forelse (data_get($overview, 'topMenus30Days', []) as $menu)
 							<div class="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
@@ -93,6 +151,79 @@
 	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 	<script>
 		(function () {
+			const modeField = document.getElementById('overview-mode');
+			const filterForm = document.getElementById('overview-filter-form');
+			const dayCol = document.getElementById('overview-day-col');
+			const monthCol = document.getElementById('overview-month-col');
+			const yearCol = document.getElementById('overview-year-col');
+			const dayInput = document.getElementById('overview-tanggal');
+			const monthInput = document.getElementById('overview-bulan');
+			const yearInput = document.getElementById('overview-tahun');
+
+			function syncFilterMode() {
+				if (!modeField) {
+					return;
+				}
+
+				const mode = modeField.value || 'none';
+				const isNone = mode === 'none';
+				const isDay = mode === 'day';
+				const isMonth = mode === 'month';
+				const isYear = mode === 'year';
+
+				if (dayCol) dayCol.classList.toggle('hidden', !isDay || isNone);
+				if (monthCol) monthCol.classList.toggle('hidden', isYear || isNone);
+				if (yearCol) yearCol.classList.toggle('hidden', isNone);
+
+				if (dayInput) dayInput.disabled = !isDay || isNone;
+				if (monthInput) monthInput.disabled = isYear || isNone;
+				if (yearInput) yearInput.disabled = isNone;
+			}
+
+			if (modeField) {
+				modeField.addEventListener('change', syncFilterMode);
+				syncFilterMode();
+			}
+
+			if (filterForm) {
+				filterForm.addEventListener('submit', function (event) {
+					const mode = modeField ? (modeField.value || 'none') : 'none';
+					let errorMessage = '';
+
+					if (mode === 'day') {
+						if (!dayInput || !dayInput.value) {
+							errorMessage = 'Tanggal wajib dipilih untuk mode Spesifik Hari.';
+						} else if (!monthInput || !monthInput.value) {
+							errorMessage = 'Bulan wajib dipilih untuk mode Spesifik Hari.';
+						} else if (!yearInput || !yearInput.value) {
+							errorMessage = 'Tahun wajib dipilih untuk mode Spesifik Hari.';
+						}
+					} else if (mode === 'month') {
+						if (!monthInput || !monthInput.value) {
+							errorMessage = 'Bulan wajib dipilih untuk mode Spesifik Bulan.';
+						} else if (!yearInput || !yearInput.value) {
+							errorMessage = 'Tahun wajib dipilih untuk mode Spesifik Bulan.';
+						}
+					} else if (mode === 'year') {
+						if (!yearInput || !yearInput.value) {
+							errorMessage = 'Tahun wajib dipilih untuk mode Spesifik Tahun.';
+						}
+					}
+
+					if (errorMessage !== '') {
+						event.preventDefault();
+						if (window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
+							window.KedaiKlikNotify.show({
+								type: 'warning',
+								title: 'Filter belum lengkap',
+								message: errorMessage,
+								duration: 3600,
+							});
+						}
+					}
+				});
+			}
+
 			if (typeof Chart === 'undefined') {
 				return;
 			}
