@@ -275,6 +275,8 @@
             const emptyReceiptMessage = @json($emptyReceiptMessage ?? null);
             const flashError = @json(session('error'));
             const flashSuccess = @json(session('success'));
+            const orderIdForNotice = @json(!empty($order) ? (string) ($order->_id ?? '') : '');
+            const receiptEmailSentAt = @json(!empty($order) && !empty($order->receipt_email_sent_at) ? optional($order->receipt_email_sent_at)->toIso8601String() : null);
 
             if (typeof flashError === 'string' && flashError.trim() !== '' && window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
                 window.KedaiKlikNotify.show({
@@ -301,6 +303,28 @@
                     message: emptyReceiptMessage,
                     duration: 4800,
                 });
+            }
+
+            if (
+                orderIdForNotice &&
+                receiptEmailSentAt &&
+                window.KedaiKlikNotify &&
+                typeof window.KedaiKlikNotify.confirm === 'function'
+            ) {
+                const noticeKey = 'kedaiKlikReceiptEmailNotified:' + orderIdForNotice;
+                const alreadyShown = localStorage.getItem(noticeKey) === '1';
+
+                if (!alreadyShown) {
+                    localStorage.setItem(noticeKey, '1');
+                    window.KedaiKlikNotify.confirm({
+                        type: 'success',
+                        badge: 'Email Terkirim',
+                        title: 'Struk berhasil dikirim ke email',
+                        message: 'Silakan cek inbox email Anda untuk melihat struk pembayaran.',
+                        confirmText: 'OK',
+                        singleButton: true,
+                    });
+                }
             }
 
             const formatter = new Intl.DateTimeFormat('id-ID', {

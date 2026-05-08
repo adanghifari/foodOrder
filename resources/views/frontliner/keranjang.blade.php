@@ -36,6 +36,7 @@
                     <div>
                         <label class="block text-gray-700 font-bold mb-2">Email</label>
                         <input id="email-input" type="email" placeholder="Email" class="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 outline-none focus:ring-2 focus:ring-[#C8641E]/30 transition">
+                        <p class="text-slate-500 text-xs mt-1">Pastikan email benar, struk pembayaran akan dikirim ke email ini.</p>
                         <p id="email-error" class="text-red-500 text-xs mt-1 hidden">Email wajib diisi dengan format yang valid.</p>
                     </div>
                     <div>
