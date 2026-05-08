@@ -48,11 +48,11 @@
                         Dine In Ordering
                     </div>
 
-                    <div class="flex flex-col gap-5">
+                    <div class="w-full max-w-[20rem] sm:max-w-[24rem] lg:max-w-[28rem]">
                         <img
                             src="/images/KedaiKlikLogo.png"
                             alt="KedaiKlik"
-                            class="h-5rem w-full max-w-[24rem] shrink-0 drop-shadow-[0_18px_18px_rgba(111,47,15,0.14)] sm:max-w-[24rem]"
+                            class="block w-full aspect-video object-contain drop-shadow-[0_14px_22px_rgba(111,47,15,0.16)]"
                         >
                     </div>
                     <p class="mb-20 max-w-lg text-lg leading-8 text-[rgba(111,47,15,0.72)] sm:text-xl">
@@ -62,10 +62,10 @@
 
                     <div class="mt-8 flex">
                             <a
-                                href="/menu"
+                                href="/kedai/scan"
                                 class="inline-flex items-center justify-center rounded-2xl bg-[#e08a3c] px-7 py-4 text-sm font-bold uppercase tracking-[0.18em] text-white shadow-[0_18px_38px_rgba(224,138,60,0.28)] transition hover:translate-y-[-2px] hover:bg-[#ea9951]"
                             >
-                                Go To Menu
+                                Scan QR lalu Pesan!
                             </a>
                     </div>
 

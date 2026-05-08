@@ -15,19 +15,22 @@ class QrScanController extends Controller
 
 	public function accessFromMenuRoute(Request $request, int $tableId): RedirectResponse
 	{
-		return $this->storeTableAndRedirect($request, $tableId);
+		return $this->storeTableAndRedirect($request, $tableId, '/menu');
 	}
 
 	public function accessFromQueryParam(Request $request): RedirectResponse
 	{
 		$validated = $request->validate([
 			'tableId' => 'required|integer|min:1|max:999',
+			'return_to' => 'nullable|string|max:255',
 		]);
 
-		return $this->storeTableAndRedirect($request, (int) $validated['tableId']);
+		$returnTo = $this->sanitizeReturnPath((string) ($validated['return_to'] ?? ''));
+
+		return $this->storeTableAndRedirect($request, (int) $validated['tableId'], $returnTo);
 	}
 
-	private function storeTableAndRedirect(Request $request, int $tableId): RedirectResponse
+	private function storeTableAndRedirect(Request $request, int $tableId, string $redirectPath = '/menu'): RedirectResponse
 	{
 		if (! $this->tableService->isKnownTable($tableId)) {
 			abort(404, 'Table not found');
@@ -35,6 +38,24 @@ class QrScanController extends Controller
 
 		$this->tableService->storeTableSession($request, $tableId);
 
-		return redirect('/menu');
+		return redirect($redirectPath);
+	}
+
+	private function sanitizeReturnPath(string $path): string
+	{
+		$trimmed = trim($path);
+		if ($trimmed === '') {
+			return '/menu';
+		}
+
+		if (!str_starts_with($trimmed, '/')) {
+			return '/menu';
+		}
+
+		if (str_starts_with($trimmed, '//')) {
+			return '/menu';
+		}
+
+		return $trimmed;
 	}
 }
