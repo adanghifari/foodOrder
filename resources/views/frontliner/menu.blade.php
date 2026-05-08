@@ -78,6 +78,8 @@
             @php
                 $menuStock = (int) ($menu['stock'] ?? 0);
                 $isOutOfStock = $menuStock <= 0;
+                $descriptionRaw = (string) ($menu['description'] ?? '');
+                $descriptionEncoded = base64_encode($descriptionRaw);
             @endphp
             <div class="menu-card flex bg-white rounded-[24px] p-3 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-50 items-center"
                  data-menu-category="{{ strtolower(trim((string) ($menu['category'] ?? ''))) }}">
@@ -94,7 +96,7 @@
                         onclick="lihatDetailMenu(this)"
                         data-name="{{ $menu['name'] }}"
                         data-category="{{ $menu['category'] ?? '-' }}"
-                        data-description="{{ $menu['description'] }}"
+                        data-description-b64="{{ $descriptionEncoded }}"
                         data-price="{{ $menu['price'] }}"
                         data-stock="{{ $menuStock }}"
                         data-img="{{ $imageSrc }}"
@@ -113,7 +115,7 @@
                             <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">Stok {{ $menuStock }}</span>
                         @endif
                     </div>
-                    <p class="text-[11px] text-gray-400 leading-snug mt-1 mb-2 line-clamp-2">{{ $menu['description'] }}</p>
+                    <p class="text-[11px] text-gray-400 leading-snug mt-1 mb-2">{{ \Illuminate\Support\Str::limit((string) ($menu['description'] ?? ''), 25, '...') }}</p>
                     <div class="flex justify-between items-center">
                         <span class="font-black text-gray-800 text-base">Rp {{ number_format($menu['price'], 0, ',', '.') }}</span>
 
@@ -131,7 +133,7 @@
                                     data-harga="{{ $menu['price'] }}"
                                     data-stock="{{ $menuStock }}"
                                     data-img="{{ $menu['image_url'] }}"
-                                    data-desc="{{ $menu['description'] }}"
+                                    data-desc-b64="{{ $descriptionEncoded }}"
                                     {{ $isOutOfStock ? 'disabled' : '' }}
                                     class="{{ $isOutOfStock ? 'bg-slate-300 cursor-not-allowed shadow-none' : 'bg-[#C8641E] shadow-lg shadow-[#C8641E]/20 hover:scale-105' }} text-white p-2.5 rounded-xl transition active:scale-95">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></svg>
@@ -177,7 +179,7 @@
                         <p id="detail-menu-name" class="text-lg font-extrabold text-slate-800"></p>
                         <p id="detail-menu-category" class="text-xs font-bold uppercase tracking-wide text-slate-500"></p>
                     </div>
-                    <p id="detail-menu-description" class="text-sm text-slate-600 leading-relaxed"></p>
+                    <p id="detail-menu-description" class="text-sm text-slate-600 leading-relaxed whitespace-pre-line"></p>
                     <div class="grid grid-cols-2 gap-2">
                         <div class="rounded-lg bg-slate-50 border border-slate-200 p-2">
                             <p class="text-[10px] uppercase font-bold text-slate-500">Harga</p>
@@ -205,7 +207,7 @@
 
             const name = button.dataset.name || '-';
             const category = button.dataset.category || '-';
-            const description = button.dataset.description || 'Deskripsi tidak tersedia';
+            const description = decodeDescription(button.dataset.descriptionB64) || 'Deskripsi tidak tersedia';
             const price = Number(button.dataset.price || 0);
             const stock = Number(button.dataset.stock || 0);
             const imageSrc = button.dataset.img || '';
@@ -224,6 +226,18 @@
 
             modal.classList.remove('hidden');
             document.body.classList.add('overflow-hidden');
+        }
+
+        function decodeDescription(encoded) {
+            if (!encoded) {
+                return '';
+            }
+
+            try {
+                return decodeURIComponent(escape(window.atob(encoded)));
+            } catch (error) {
+                return '';
+            }
         }
 
         function tutupDetailMenu() {
@@ -280,7 +294,7 @@
             const harga = button.dataset.harga;
             const stock = Number(button.dataset.stock || 0);
             const imageUrl = button.dataset.img;
-            const description = button.dataset.desc;
+            const description = decodeDescription(button.dataset.descB64);
 
             const index = keranjang.findIndex(item => item.nama === nama);
             const currentQty = index !== -1 ? Number(keranjang[index].qty || 0) : 0;

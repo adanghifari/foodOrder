@@ -30,7 +30,7 @@
     </x-backoffice.menu.field>
 
     <x-backoffice.menu.field label="Deskripsi" :colSpan="true">
-        <p class="text-sm font-medium text-slate-700">{{ $menu->description ?: '-' }}</p>
+        <p class="text-sm font-medium text-slate-700 whitespace-pre-line">{{ $menu->description ?: '-' }}</p>
     </x-backoffice.menu.field>
 
     <x-slot:footer>
