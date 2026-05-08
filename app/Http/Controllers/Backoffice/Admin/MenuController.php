@@ -57,7 +57,7 @@ class MenuController extends Controller
 		return redirect('/backoffice/daftar_menu?create=1');
 	}
 
-	public function storePage(Request $request): RedirectResponse
+	public function storePage(Request $request)
 	{
 		$validator = Validator::make($request->all(), [
 			'name' => 'required|string|max:255',
@@ -69,6 +69,14 @@ class MenuController extends Controller
 		]);
 
 		if ($validator->fails()) {
+			if ($request->expectsJson() || $request->ajax()) {
+				return response()->json([
+					'status' => 'error',
+					'message' => 'Validation error',
+					'errors' => $validator->errors(),
+				], 422);
+			}
+
 			return redirect('/backoffice/daftar_menu?create=1')
 				->withErrors($validator)
 				->withInput();
@@ -81,6 +89,23 @@ class MenuController extends Controller
 
 		if ($request->hasFile('image')) {
 			$this->menuService->uploadImage($item, $request->file('image'));
+		}
+
+		if ($request->expectsJson() || $request->ajax()) {
+			$freshItem = $this->menuService->findById((string) $item->_id);
+
+			return response()->json([
+				'status' => 'success',
+				'message' => 'Menu baru berhasil ditambahkan.',
+				'data' => [
+					'id' => (string) ($freshItem->_id ?? $item->_id),
+					'name' => (string) ($freshItem->name ?? $item->name ?? ''),
+					'category' => (string) ($freshItem->category ?? $item->category ?? ''),
+					'price' => (float) ($freshItem->price ?? $item->price ?? 0),
+					'stock' => (int) ($freshItem->stock ?? $item->stock ?? 0),
+					'imageUrl' => (string) ($freshItem->image_url ?? $item->image_url ?? ''),
+				],
+			]);
 		}
 
 		return redirect('/backoffice/daftar_menu')->with('success', 'Menu baru berhasil ditambahkan.');
@@ -102,7 +127,7 @@ class MenuController extends Controller
 		return redirect('/backoffice/daftar_menu?edit=' . urlencode($id));
 	}
 
-	public function updatePage(Request $request, string $id): RedirectResponse
+	public function updatePage(Request $request, string $id)
 	{
 		$item = $this->menuService->findById($id);
 
@@ -121,6 +146,14 @@ class MenuController extends Controller
 		]);
 
 		if ($validator->fails()) {
+			if ($request->expectsJson() || $request->ajax()) {
+				return response()->json([
+					'status' => 'error',
+					'message' => 'Validation error',
+					'errors' => $validator->errors(),
+				], 422);
+			}
+
 			return redirect('/backoffice/daftar_menu?edit=' . urlencode($id))
 				->withErrors($validator)
 				->withInput();
@@ -136,6 +169,23 @@ class MenuController extends Controller
 			$this->menuService->uploadImage($item, $request->file('image'));
 		} elseif ($removeImage && $item->image_url) {
 			$this->menuService->deleteImage($item);
+		}
+
+		if ($request->expectsJson() || $request->ajax()) {
+			$freshItem = $this->menuService->findById((string) $item->_id);
+
+			return response()->json([
+				'status' => 'success',
+				'message' => 'Menu berhasil diperbarui.',
+				'data' => [
+					'id' => (string) ($freshItem->_id ?? $item->_id),
+					'name' => (string) ($freshItem->name ?? $item->name ?? ''),
+					'category' => (string) ($freshItem->category ?? $item->category ?? ''),
+					'price' => (float) ($freshItem->price ?? $item->price ?? 0),
+					'stock' => (int) ($freshItem->stock ?? $item->stock ?? 0),
+					'imageUrl' => (string) ($freshItem->image_url ?? $item->image_url ?? ''),
+				],
+			]);
 		}
 
 		return redirect('/backoffice/daftar_menu')->with('success', 'Menu berhasil diperbarui.');
