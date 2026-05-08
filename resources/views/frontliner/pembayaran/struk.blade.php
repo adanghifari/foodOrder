@@ -9,10 +9,10 @@
     <link rel="apple-touch-icon" href="/images/KedaiKlikLogo.png">
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 flex justify-center p-4">
+<body class="bg-gray-100 lg:bg-[radial-gradient(circle_at_top,_#fff7ed,_#f1f5f9_55%)] flex justify-center p-4 lg:p-6 overflow-x-hidden">
     <x-notification-center />
     @if (empty($order))
-        <main class="w-full max-w-md bg-white min-h-screen shadow-2xl rounded-3xl overflow-hidden border border-gray-100 flex flex-col">
+        <main class="w-full max-w-md sm:max-w-2xl md:max-w-3xl bg-white min-h-screen sm:min-h-[calc(100vh-2rem)] lg:min-h-[calc(100vh-3rem)] shadow-2xl sm:rounded-3xl overflow-hidden border border-gray-100 flex flex-col">
             <header class="bg-[#C8641E] text-white px-6 py-6">
                 <p class="text-xs font-semibold uppercase tracking-wide text-orange-100">KedaiKlik</p>
                 <h1 class="text-2xl font-extrabold">Struk Pembelian</h1>
@@ -101,7 +101,7 @@
             : '-';
     @endphp
 
-    <main class="w-full max-w-md bg-white min-h-screen shadow-2xl rounded-3xl overflow-hidden border border-gray-100">
+    <main class="w-full max-w-md sm:max-w-2xl md:max-w-4xl lg:max-w-5xl bg-white min-h-screen sm:min-h-[calc(100vh-2rem)] lg:min-h-[calc(100vh-3rem)] shadow-2xl sm:rounded-3xl overflow-hidden border border-gray-100">
         <header class="bg-[#C8641E] text-white px-6 py-6">
             <div class="flex items-start justify-between gap-3">
                 <div>
@@ -142,8 +142,9 @@
             @endif
         </header>
 
-        <section class="px-6 py-5 space-y-4">
-            <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4 space-y-2">
+        <section class="px-6 py-5 space-y-4 md:grid md:grid-cols-12 md:gap-6 md:space-y-0">
+            <div class="space-y-4 md:col-span-5">
+                <div class="rounded-2xl border border-gray-200 bg-gray-50 p-4 space-y-2">
                 <div class="flex items-center justify-between text-sm">
                     <span class="text-gray-500">Order ID</span>
                     <span class="font-extrabold text-gray-800">{{ $displayOrderId }}</span>
@@ -168,50 +169,53 @@
                     <span class="text-gray-500">Nomor VA</span>
                     <span class="font-semibold text-gray-700 text-right">{{ $vaNumber !== '' ? $vaNumber : '-' }}</span>
                 </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="rounded-2xl border px-3 py-3 {{ $paymentClass }}">
+                        <p class="text-xs font-bold uppercase">Status Payment</p>
+                        <p class="text-sm font-extrabold mt-1">{{ $paymentLabel }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-blue-200 bg-blue-100 text-blue-700 px-3 py-3">
+                        <p class="text-xs font-bold uppercase">Status Pesanan</p>
+                        <p class="text-sm font-extrabold mt-1">{{ $orderLabel }}</p>
+                    </div>
+                </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-3">
-                <div class="rounded-2xl border px-3 py-3 {{ $paymentClass }}">
-                    <p class="text-xs font-bold uppercase">Status Payment</p>
-                    <p class="text-sm font-extrabold mt-1">{{ $paymentLabel }}</p>
+            <div class="space-y-4 md:col-span-7">
+                <div class="rounded-2xl border border-gray-200 overflow-hidden">
+                    <div class="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                        <h2 class="font-bold text-gray-800">Detail Item</h2>
+                    </div>
+                    <ul class="divide-y divide-gray-100">
+                        @forelse ($items as $item)
+                            <li class="px-4 py-3 flex items-start justify-between gap-3">
+                                <div>
+                                    <p class="font-semibold text-gray-800 text-sm">{{ $item['name'] }}</p>
+                                    <p class="text-xs text-gray-500">{{ $item['qty'] }} x Rp {{ number_format($item['unit_price'], 0, ',', '.') }}</p>
+                                </div>
+                                <p class="font-bold text-gray-700 text-sm">Rp {{ number_format($item['line_total'], 0, ',', '.') }}</p>
+                            </li>
+                        @empty
+                            <li class="px-4 py-4 text-sm text-gray-500">Tidak ada item.</li>
+                        @endforelse
+                    </ul>
                 </div>
-                <div class="rounded-2xl border border-blue-200 bg-blue-100 text-blue-700 px-3 py-3">
-                    <p class="text-xs font-bold uppercase">Status Pesanan</p>
-                    <p class="text-sm font-extrabold mt-1">{{ $orderLabel }}</p>
-                </div>
-            </div>
 
-            <div class="rounded-2xl border border-gray-200 overflow-hidden">
-                <div class="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                    <h2 class="font-bold text-gray-800">Detail Item</h2>
-                </div>
-                <ul class="divide-y divide-gray-100">
-                    @forelse ($items as $item)
-                        <li class="px-4 py-3 flex items-start justify-between gap-3">
-                            <div>
-                                <p class="font-semibold text-gray-800 text-sm">{{ $item['name'] }}</p>
-                                <p class="text-xs text-gray-500">{{ $item['qty'] }} x Rp {{ number_format($item['unit_price'], 0, ',', '.') }}</p>
-                            </div>
-                            <p class="font-bold text-gray-700 text-sm">Rp {{ number_format($item['line_total'], 0, ',', '.') }}</p>
-                        </li>
-                    @empty
-                        <li class="px-4 py-4 text-sm text-gray-500">Tidak ada item.</li>
-                    @endforelse
-                </ul>
-            </div>
-
-            <div class="rounded-2xl border border-gray-200 bg-white p-4 space-y-2">
-                <div class="flex items-center justify-between text-sm text-gray-600">
-                    <span>Subtotal</span>
-                    <span class="font-semibold">Rp {{ number_format($subtotal, 0, ',', '.') }}</span>
-                </div>
-                <div class="flex items-center justify-between text-sm text-gray-600">
-                    <span>Biaya Layanan</span>
-                    <span class="font-semibold">Rp {{ number_format($serviceFee, 0, ',', '.') }}</span>
-                </div>
-                <div class="border-t border-gray-200 pt-2 flex items-center justify-between">
-                    <span class="font-bold text-gray-800">Total Pembayaran</span>
-                    <span class="font-black text-[#C8641E]">Rp {{ number_format($total, 0, ',', '.') }}</span>
+                <div class="rounded-2xl border border-gray-200 bg-white p-4 space-y-2">
+                    <div class="flex items-center justify-between text-sm text-gray-600">
+                        <span>Subtotal</span>
+                        <span class="font-semibold">Rp {{ number_format($subtotal, 0, ',', '.') }}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-sm text-gray-600">
+                        <span>Biaya Layanan</span>
+                        <span class="font-semibold">Rp {{ number_format($serviceFee, 0, ',', '.') }}</span>
+                    </div>
+                    <div class="border-t border-gray-200 pt-2 flex items-center justify-between">
+                        <span class="font-bold text-gray-800">Total Pembayaran</span>
+                        <span class="font-black text-[#C8641E]">Rp {{ number_format($total, 0, ',', '.') }}</span>
+                    </div>
                 </div>
             </div>
         </section>

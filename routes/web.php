@@ -29,6 +29,7 @@ Route::prefix('backoffice')->group(function () {
     Route::middleware('backoffice.admin')->group(function () {
         Route::get('/dashboard', [BackofficeDashboardController::class, 'index']);
         Route::get('/overview', [BackofficeOverviewController::class, 'indexPage']);
+        Route::get('/overview/export-pdf', [BackofficeOverviewController::class, 'exportPdf']);
         Route::get('/daftar_menu', [BackofficeMenuController::class, 'indexPage']);
         Route::post('/daftar_menu', [BackofficeMenuController::class, 'storePage']);
         Route::get('/daftar_menu/{id}', [BackofficeMenuController::class, 'showPage']);
