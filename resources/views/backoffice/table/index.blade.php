@@ -100,11 +100,23 @@
                     </div>
 
                     @if ($currentOrder)
+                        @php
+                            $currentOrderStatus = strtoupper((string) ($currentOrder['status'] ?? 'UNKNOWN'));
+                            $currentOrderStatusLabel = match ($currentOrderStatus) {
+                                'PENDING_PAYMENT' => 'Menunggu Pembayaran',
+                                'CONFIRMED' => 'Terkonfirmasi',
+                                'IN_QUEUE' => 'Dalam Antrean',
+                                'IN_PROGRESS' => 'Sedang Diproses',
+                                'DELIVERED' => 'Disajikan',
+                                'CANCELED', 'CANCEL' => 'Dibatalkan',
+                                default => ucfirst(strtolower(str_replace('_', ' ', $currentOrderStatus))),
+                            };
+                        @endphp
                         <div class="mt-3 rounded-xl border border-red-200 bg-white/80 p-3 text-sm text-slate-700 space-y-1">
                             <p class="font-bold text-[var(--rich-black)]">{{ $currentOrder['displayId'] ?? '-' }}</p>
                             <p>Customer: {{ $currentOrder['customerName'] ?? '-' }}</p>
                             <p>Email: {{ $currentOrder['customerEmail'] ?? '-' }}</p>
-                            <p>Status: {{ str_replace('_', ' ', (string) ($currentOrder['status'] ?? 'UNKNOWN')) }}</p>
+                            <p>Status: {{ $currentOrderStatusLabel }}</p>
                         </div>
                     @else
                         <div class="mt-3 rounded-xl border border-emerald-200 bg-white/80 p-3 text-sm font-semibold text-emerald-800">
