@@ -76,13 +76,20 @@ class OrderService
         ];
     }
 
-    public function createConfirmedOrder(string $userId, int $tableNumber, array $orderMenuItems, float|int $totalPrice): Order
+    public function createConfirmedOrder(
+        string $userId,
+        ?int $tableNumber,
+        array $orderMenuItems,
+        float|int $totalPrice,
+        string $orderType = 'dine_in'
+    ): Order
     {
         $lastOrder = Order::orderBy('queue_number', 'desc')->first();
         $queueNumber = $lastOrder ? $lastOrder->queue_number + 1 : 1;
 
         return Order::create([
             'customer_id' => $userId,
+            'order_type' => $orderType,
             'table_number' => $tableNumber,
             'status' => self::INITIAL_UNPAID_ORDER_STATUS,
             'payment_status' => 'PENDING',
@@ -200,17 +207,140 @@ class OrderService
             ];
         }
 
+        $paymentPayload = is_array($order->payment_payload ?? null) ? $order->payment_payload : [];
+        $paymentTypeRaw = trim((string) ($order->payment_type ?? ''));
+        $paymentMethod = $this->mapPaymentMethodLabel($paymentTypeRaw, $paymentPayload);
+        $vaNumber = $this->extractVaNumber($paymentPayload);
+        $paymentExpiry = trim((string) ($paymentPayload['expiry_time'] ?? ''));
+        $qrisImageUrl = $this->extractQrisImageUrl($paymentPayload);
+
         return [
             'orderId' => (string) $order->_id,
             'customer' => $customerData,
+            'orderType' => (string) ($order->order_type ?? 'dine_in'),
             'tableNumber' => $order->table_number,
             'status' => $order->status,
             'paymentStatus' => $order->payment_status,
+            'paymentType' => $order->payment_type,
+            'paymentMethod' => $paymentMethod,
+            'vaNumber' => $vaNumber,
+            'paymentExpiry' => $paymentExpiry,
+            'qrisImageUrl' => $qrisImageUrl,
+            'paymentUrl' => $order->payment_url,
+            'midtransOrderId' => $order->midtrans_order_id,
             'paidAt' => optional($order->paid_at)?->toDateTimeString(),
+            'createdAt' => optional($order->created_at)?->toDateTimeString(),
             'orderDeletedAt' => optional($order->order_deleted_at)?->toDateTimeString(),
             'queueNumber' => $order->queue_number,
             'totalPrice' => $order->total_price,
             'items' => $itemsResponse,
         ];
+    }
+
+    private function mapPaymentMethodLabel(string $paymentTypeRaw, array $paymentPayload): string
+    {
+        $type = strtolower($paymentTypeRaw);
+        $channel = $this->resolvePaymentChannel($paymentPayload);
+
+        return match ($type) {
+            'bank_transfer' => $channel !== '' ? "Bank Transfer ($channel)" : 'Bank Transfer',
+            'echannel' => $channel !== '' ? "Mandiri Bill ($channel)" : 'Mandiri Bill',
+            'qris' => $channel !== '' ? "QRIS ($channel)" : 'QRIS',
+            'gopay' => $channel !== '' ? "GoPay ($channel)" : 'GoPay',
+            'cstore' => $channel !== '' ? "Convenience Store ($channel)" : 'Convenience Store',
+            default => $paymentTypeRaw !== '' ? ucwords(str_replace('_', ' ', $paymentTypeRaw)) : '-',
+        };
+    }
+
+    private function resolvePaymentChannel(array $paymentPayload): string
+    {
+        $bankFromVa = '';
+        $vaNumbers = $paymentPayload['va_numbers'] ?? null;
+        if (is_array($vaNumbers) && !empty($vaNumbers)) {
+            $first = $vaNumbers[0] ?? null;
+            if (is_array($first)) {
+                $bankFromVa = strtoupper(trim((string) ($first['bank'] ?? '')));
+            }
+        }
+
+        if ($bankFromVa !== '') {
+            return $bankFromVa;
+        }
+
+        $bank = strtoupper(trim((string) ($paymentPayload['bank'] ?? '')));
+        if ($bank !== '') {
+            return $bank;
+        }
+
+        $store = strtoupper(trim((string) ($paymentPayload['store'] ?? '')));
+        if ($store !== '') {
+            return $store;
+        }
+
+        $acquirer = strtoupper(trim((string) ($paymentPayload['acquirer'] ?? '')));
+        if ($acquirer !== '') {
+            return $acquirer;
+        }
+
+        return '';
+    }
+
+    private function extractVaNumber(array $paymentPayload): string
+    {
+        $vaNumbers = $paymentPayload['va_numbers'] ?? null;
+        if (is_array($vaNumbers) && !empty($vaNumbers)) {
+            $first = $vaNumbers[0] ?? null;
+            if (is_array($first)) {
+                $value = trim((string) ($first['va_number'] ?? ''));
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+        }
+
+        $permataVa = trim((string) ($paymentPayload['permata_va_number'] ?? ''));
+        if ($permataVa !== '') {
+            return $permataVa;
+        }
+
+        $billKey = trim((string) ($paymentPayload['bill_key'] ?? ''));
+        $billerCode = trim((string) ($paymentPayload['biller_code'] ?? ''));
+        if ($billKey !== '' && $billerCode !== '') {
+            return $billerCode . ' / ' . $billKey;
+        }
+
+        $storePaymentCode = trim((string) ($paymentPayload['payment_code'] ?? ''));
+        if ($storePaymentCode !== '') {
+            return $storePaymentCode;
+        }
+
+        return '-';
+    }
+
+    private function extractQrisImageUrl(array $paymentPayload): string
+    {
+        $actions = $paymentPayload['actions'] ?? null;
+        if (!is_array($actions) || empty($actions)) {
+            return '';
+        }
+
+        foreach ($actions as $action) {
+            if (!is_array($action)) {
+                continue;
+            }
+
+            $name = strtolower(trim((string) ($action['name'] ?? '')));
+            $url = trim((string) ($action['url'] ?? ''));
+
+            if ($url === '') {
+                continue;
+            }
+
+            if ($name === 'generate-qr-code' || str_contains(strtolower($url), 'qr')) {
+                return $url;
+            }
+        }
+
+        return '';
     }
 }

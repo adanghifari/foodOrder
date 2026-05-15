@@ -119,30 +119,32 @@ class CartService
         return ['ok' => true];
     }
 
-    public function checkout($user, ?int $tableNumber): array
+    public function checkout($user, string $orderType, ?int $tableNumber): array
     {
-        if (!$tableNumber) {
-            return [
-                'ok' => false,
-                'status' => 422,
-                'message' => 'Table number is required',
-            ];
-        }
+        if ($orderType === 'dine_in') {
+            if (!$tableNumber) {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'message' => 'Table number is required for dine-in',
+                ];
+            }
 
-        if (!$this->tableService->isKnownTable($tableNumber)) {
-            return [
-                'ok' => false,
-                'status' => 404,
-                'message' => 'Selected table does not exist',
-            ];
-        }
+            if (!$this->tableService->isKnownTable($tableNumber)) {
+                return [
+                    'ok' => false,
+                    'status' => 404,
+                    'message' => 'Selected table does not exist',
+                ];
+            }
 
-        if (!$this->tableService->isTableAvailable($tableNumber)) {
-            return [
-                'ok' => false,
-                'status' => 409,
-                'message' => 'Selected table is not available',
-            ];
+            if (!$this->tableService->isTableAvailable($tableNumber)) {
+                return [
+                    'ok' => false,
+                    'status' => 409,
+                    'message' => 'Selected table is not available',
+                ];
+            }
         }
 
         $cartItems = CartItem::with('menuItem')
@@ -213,7 +215,8 @@ class CartService
             (string) $user->_id,
             $tableNumber,
             $orderMenuItems,
-            $totalPrice
+            $totalPrice,
+            $orderType
         );
 
         CartItem::where('customer_id', $user->_id)->delete();
@@ -223,6 +226,7 @@ class CartService
             'data' => [
                 'orderId' => (string) $order->_id,
                 'customerName' => $user->name,
+                'orderType' => $orderType,
                 'tableNumber' => $order->table_number,
                 'items' => $itemsResponse,
                 'paymentStatus' => $order->payment_status,

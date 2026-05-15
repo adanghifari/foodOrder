@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Frontliner\Mobile;
 use App\Http\Controllers\Controller;
 use App\Domains\Menu\Services\MenuService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
 class MenuController extends Controller
@@ -94,5 +95,29 @@ class MenuController extends Controller
 			'message' => 'Menu items retrieved',
 			'data' => $items
 		]);
+	}
+
+	public function topByCategory()
+	{
+		$items = $this->menuService->topByCategory();
+
+		return response()->json([
+			'status' => 'success',
+			'message' => 'Top menu by category retrieved',
+			'data' => $items,
+		]);
+	}
+
+	public function image(string $filename)
+	{
+		$safeFilename = basename($filename);
+		$path = 'menu/' . $safeFilename;
+
+		if (!Storage::disk('public')->exists($path)) {
+			abort(404);
+		}
+
+		$fullPath = Storage::disk('public')->path($path);
+		return response()->file($fullPath);
 	}
 }

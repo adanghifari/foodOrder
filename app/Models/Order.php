@@ -16,6 +16,7 @@ class Order extends Model
         'customer_name',
         'customer_email',
         'browser_session_id',
+        'order_type',
         'table_number',
         'payment_status',
         'midtrans_order_id',
