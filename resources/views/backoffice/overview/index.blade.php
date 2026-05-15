@@ -52,9 +52,9 @@
 					<button id="overview-apply-filter" type="submit" class="inline-flex items-center justify-center rounded-xl bg-[var(--alloy-orange)] hover:bg-[var(--philippine-bronze)] text-white text-sm font-bold px-4 py-2.5 transition">
 						Terapkan Filter
 					</button>
-					<a href="/backoffice/overview/export-pdf?{{ http_build_query(request()->query()) }}" class="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm font-bold px-4 py-2.5 transition">
-						Export PDF
-					</a>
+						<a href="/backoffice/overview/export-pdf?{{ http_build_query(request()->query()) }}" class="inline-flex items-center justify-center rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2.5 transition">
+							Export PDF
+						</a>
 					<a href="/backoffice/overview" class="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold px-4 py-2.5 transition">
 						Reset
 					</a>
