@@ -441,6 +441,10 @@ class PaymentService
         }
 
         foreach ($orders as $order) {
+            if (!$order instanceof Order) {
+                continue;
+            }
+
             $this->restoreStockForOrder($order, true);
         }
 
