@@ -47,7 +47,11 @@ class TableService
             'browser_session_id',
         ]);
 
-        return $occupyingOrders->contains(function (Order $order) use ($normalizedCustomerName, $normalizedCustomerEmail, $normalizedBrowserSessionId) {
+        return $occupyingOrders->contains(function ($order) use ($normalizedCustomerName, $normalizedCustomerEmail, $normalizedBrowserSessionId) {
+            if (!$order instanceof Order) {
+                return false;
+            }
+
             $orderBrowserSessionId = trim((string) ($order->browser_session_id ?? ''));
             if ($normalizedBrowserSessionId !== '' && $orderBrowserSessionId === $normalizedBrowserSessionId) {
                 return true;
@@ -107,6 +111,10 @@ class TableService
 
         $now = now();
         foreach ($expiredDeliveredOrders as $order) {
+            if (!$order instanceof Order) {
+                continue;
+            }
+
             $order->update([
                 'table_cleared_at' => $order->table_cleared_at ?? $now,
             ]);
