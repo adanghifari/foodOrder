@@ -23,7 +23,7 @@
                 <button
                     type="button"
                     id="remove-image-corner"
-                    class="absolute top-2 right-2 inline-flex items-center justify-center h-8 w-8 rounded-full bg-white/95 border border-red-200 text-red-700 font-bold shadow-sm hover:bg-red-50 transition {{ $hasCurrentImage ? '' : 'hidden' }}"
+                    class="absolute top-2 right-2 z-20 inline-flex items-center justify-center h-8 w-8 rounded-full bg-white/95 border border-red-200 text-red-700 font-bold shadow-sm hover:bg-red-50 transition {{ $hasCurrentImage ? '' : 'hidden' }}"
                     aria-label="Hapus gambar"
                 >
                     ✕
@@ -32,7 +32,7 @@
                 <label
                     for="image"
                     id="add-image-center"
-                    class="absolute inset-0 {{ $hasCurrentImage ? 'hidden' : 'flex' }} items-center justify-center cursor-pointer"
+                    class="absolute inset-0 z-10 {{ $hasCurrentImage ? 'hidden' : 'flex' }} items-center justify-center cursor-pointer"
                 >
                     <span class="inline-flex items-center rounded-xl border border-slate-300 bg-white/95 hover:bg-white text-slate-700 text-sm font-bold px-4 py-2 transition">Tambah File</span>
                 </label>
@@ -82,6 +82,7 @@
         const addCenter = document.getElementById('add-image-center');
         const imagePreview = document.getElementById('image-preview');
         const fileInput = document.getElementById('image');
+        const imageContainer = document.getElementById('image-container');
 
         if (removeCornerButton && removeInput && imagePreview && addCenter) {
             removeCornerButton.addEventListener('click', function () {
@@ -111,6 +112,19 @@
                         addCenter.classList.remove('flex');
                     };
                     reader.readAsDataURL(fileInput.files[0]);
+                }
+            });
+        }
+
+        if (imageContainer && fileInput && imagePreview && removeCornerButton) {
+            imageContainer.addEventListener('click', function (event) {
+                if (event.target === removeCornerButton) {
+                    return;
+                }
+
+                const hasVisiblePreview = !imagePreview.classList.contains('hidden');
+                if (hasVisiblePreview) {
+                    fileInput.click();
                 }
             });
         }
