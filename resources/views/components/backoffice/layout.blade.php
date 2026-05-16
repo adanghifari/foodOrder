@@ -129,6 +129,11 @@
             opacity: 1;
             transform: translateY(0) scale(1);
         }
+
+        body.page-leaving {
+            opacity: 0.88;
+            transition: opacity 140ms ease;
+        }
     </style>
 </head>
 <body class="bg-white text-slate-900">
@@ -312,9 +317,34 @@
         }
 
         (function initBackofficeModalAjax() {
+            function navigateWithSmoothReload(href) {
+                if (!href) return;
+                document.body.classList.add('page-leaving');
+                window.setTimeout(function () {
+                    window.location.href = href;
+                }, 90);
+            }
+
+            function runModalScripts(modalRoot) {
+                if (!modalRoot) return;
+
+                const scripts = modalRoot.querySelectorAll('script');
+                scripts.forEach(function (oldScript) {
+                    const newScript = document.createElement('script');
+
+                    Array.from(oldScript.attributes).forEach(function (attr) {
+                        newScript.setAttribute(attr.name, attr.value);
+                    });
+
+                    newScript.text = oldScript.textContent || '';
+                    oldScript.parentNode.replaceChild(newScript, oldScript);
+                });
+            }
+
             function openModal(modalRoot, pushUrl) {
                 if (!modalRoot) return;
                 document.body.appendChild(modalRoot);
+                runModalScripts(modalRoot);
                 document.body.style.overflow = 'hidden';
                 requestAnimationFrame(function () {
                     modalRoot.classList.add('is-open');
@@ -350,6 +380,11 @@
                     event.preventDefault();
                     const href = openLink.getAttribute('href');
                     if (!href) return;
+
+                    if (openLink.hasAttribute('data-modal-hard-reload')) {
+                        navigateWithSmoothReload(href);
+                        return;
+                    }
 
                     fetch(href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                         .then(function (response) { return response.text(); })
