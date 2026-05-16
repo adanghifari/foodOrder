@@ -95,7 +95,8 @@ class CartController extends Controller
 	public function checkout(Request $request)
 	{
 		$validator = Validator::make($request->all(), [
-			'tableNumber' => 'required|integer|min:1',
+			'orderType' => 'required|string|in:dine_in,pickup',
+			'tableNumber' => 'nullable|integer|min:1',
 		]);
 
 		if ($validator->fails()) {
@@ -107,9 +108,12 @@ class CartController extends Controller
 		}
 
 		$user = $request->user();
-		$tableNumber = (int) $request->input('tableNumber');
+		$orderType = (string) $request->input('orderType');
+		$tableNumber = $request->filled('tableNumber')
+			? (int) $request->input('tableNumber')
+			: null;
 
-		$result = $this->cartService->checkout($user, $tableNumber);
+		$result = $this->cartService->checkout($user, $orderType, $tableNumber);
 		if (!$result['ok']) {
 			return response()->json([
 				'status' => 'error',

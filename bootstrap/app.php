@@ -12,6 +12,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->append(\Illuminate\Http\Middleware\HandleCors::class);
+        $middleware->api(append: [
+            \App\Http\Middleware\ForceApiCors::class,
+        ]);
+
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
             'backoffice.admin' => \App\Http\Middleware\BackofficeAdminMiddleware::class,

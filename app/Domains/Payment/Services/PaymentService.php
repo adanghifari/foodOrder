@@ -352,7 +352,29 @@ class PaymentService
             ];
         }
 
-        $response = $this->postMidtransTransactionAction($serverKey, $isProduction, $midtransOrderId, 'cancel');
+        try {
+            $response = $this->postMidtransTransactionAction($serverKey, $isProduction, $midtransOrderId, 'cancel');
+        } catch (\Throwable $exception) {
+            if ($syncLocal) {
+                $this->forceCancelLocalOrderByMidtransId($midtransOrderId, $exception->getMessage());
+                return [
+                    'ok' => true,
+                    'status' => 200,
+                    'message' => 'Pembayaran dibatalkan secara lokal. Sinkronisasi Midtrans akan dicoba lagi nanti.',
+                    'data' => [
+                        'midtrans_order_id' => $midtransOrderId,
+                        'payment_status' => 'CANCELED',
+                        'fallback_local_only' => true,
+                    ],
+                ];
+            }
+
+            return [
+                'ok' => false,
+                'status' => 502,
+                'message' => 'Failed to cancel Midtrans transaction: ' . $exception->getMessage(),
+            ];
+        }
         $midtransAction = 'cancel';
         $cancelError = null;
 
@@ -361,7 +383,29 @@ class PaymentService
 
             // Some pending payment channels can no longer be canceled directly
             // once a method is chosen. For those cases, expire as a fallback.
-            $expireResponse = $this->postMidtransTransactionAction($serverKey, $isProduction, $midtransOrderId, 'expire');
+            try {
+                $expireResponse = $this->postMidtransTransactionAction($serverKey, $isProduction, $midtransOrderId, 'expire');
+            } catch (\Throwable $exception) {
+                if ($syncLocal) {
+                    $this->forceCancelLocalOrderByMidtransId($midtransOrderId, $exception->getMessage());
+                    return [
+                        'ok' => true,
+                        'status' => 200,
+                        'message' => 'Pembayaran dibatalkan secara lokal. Sinkronisasi Midtrans akan dicoba lagi nanti.',
+                        'data' => [
+                            'midtrans_order_id' => $midtransOrderId,
+                            'payment_status' => 'CANCELED',
+                            'fallback_local_only' => true,
+                        ],
+                    ];
+                }
+
+                return [
+                    'ok' => false,
+                    'status' => 502,
+                    'message' => 'Failed to expire Midtrans transaction: ' . $exception->getMessage(),
+                ];
+            }
 
             if (!$expireResponse->successful()) {
                 return [
@@ -421,6 +465,48 @@ class PaymentService
         ];
     }
 
+    public function cancelPendingOrderLocally(string $orderId): array
+    {
+        $order = Order::find($orderId);
+        if (!$order) {
+            return [
+                'ok' => false,
+                'status' => 404,
+                'message' => 'Order not found',
+            ];
+        }
+
+        $paymentStatus = strtoupper((string) ($order->payment_status ?? 'PENDING'));
+        if ($paymentStatus !== 'PENDING') {
+            return [
+                'ok' => false,
+                'status' => 409,
+                'message' => 'Pembayaran ini sudah tidak bisa dibatalkan.',
+            ];
+        }
+
+        $this->applyPaymentUpdate($order, [
+            'midtrans_order_id' => (string) ($order->midtrans_order_id ?? ''),
+            'payment_status' => 'CANCELED',
+            'payment_type' => (string) ($order->payment_type ?? ''),
+            'payment_payload' => is_array($order->payment_payload ?? null)
+                ? $order->payment_payload
+                : [],
+        ]);
+
+        return [
+            'ok' => true,
+            'status' => 200,
+            'message' => 'Pembayaran berhasil dibatalkan.',
+            'data' => [
+                'order_id' => (string) $order->_id,
+                'midtrans_order_id' => (string) ($order->midtrans_order_id ?? ''),
+                'payment_status' => 'CANCELED',
+                'fallback_local_only' => true,
+            ],
+        ];
+    }
+
     public function releaseExpiredPendingReservations(int $minutes = 20): int
     {
         $effectiveMinutes = max(1, $minutes);
@@ -461,8 +547,40 @@ class PaymentService
             . '/v2/' . urlencode($midtransOrderId) . '/' . $action;
 
         return Http::withBasicAuth($serverKey, '')
+            ->timeout(20)
+            ->connectTimeout(8)
             ->acceptJson()
             ->post($actionUrl);
+    }
+
+    private function forceCancelLocalOrderByMidtransId(string $midtransOrderId, string $errorMessage): void
+    {
+        $order = Order::where('midtrans_order_id', $midtransOrderId)->first();
+        if (!$order && str_starts_with($midtransOrderId, 'ORDER-')) {
+            $parts = explode('-', $midtransOrderId);
+            if (count($parts) >= 3) {
+                $fallbackId = (string) ($parts[1] ?? '');
+                if ($fallbackId !== '') {
+                    $order = Order::find($fallbackId);
+                }
+            }
+        }
+
+        if (!$order) {
+            return;
+        }
+
+        $mergedPayload = array_merge(
+            is_array($order->payment_payload ?? null) ? $order->payment_payload : [],
+            ['cancel_fallback_error' => $errorMessage]
+        );
+
+        $this->applyPaymentUpdate($order, [
+            'midtrans_order_id' => $midtransOrderId,
+            'payment_status' => 'CANCELED',
+            'payment_type' => (string) ($order->payment_type ?? ''),
+            'payment_payload' => $mergedPayload,
+        ]);
     }
 
     private function mapMidtransStatus(string $transactionStatus, string $fraudStatus): string

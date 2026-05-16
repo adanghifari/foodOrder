@@ -13,6 +13,7 @@ class AuthService
 
         return User::create([
             'username' => $username,
+            'email' => strtolower(trim((string) ($input['email'] ?? ''))),
             'name' => $input['name'],
             'no_telp' => $input['no_telp'],
             'password' => Hash::make($input['password']),
@@ -51,6 +52,7 @@ class AuthService
         return [
             'id' => $user->_id,
             'username' => $user->username,
+            'email' => $user->email,
             'name' => $user->name,
             'no_telp' => $user->no_telp,
             'role' => $user->role,

@@ -274,7 +274,12 @@ class PaymentController extends Controller
 
         $midtransOrderId = trim((string) ($order->midtrans_order_id ?? ''));
         if ($midtransOrderId === '') {
-            return redirect('/kedai/pembayaran/struk')->with('error', 'ID transaksi Midtrans tidak ditemukan.');
+            $result = $this->paymentService->cancelPendingOrderLocally((string) $order->_id);
+            if (!($result['ok'] ?? false)) {
+                return redirect('/kedai/pembayaran/struk')->with('error', $result['message'] ?? 'Gagal membatalkan pembayaran.');
+            }
+
+            return redirect('/kedai/pembayaran/struk')->with('success', 'Pembayaran berhasil dibatalkan.');
         }
 
         $result = $this->paymentService->cancelTransaction($midtransOrderId);

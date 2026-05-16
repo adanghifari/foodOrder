@@ -24,6 +24,9 @@ Route::group(['prefix' => 'v1/auth'], function ($router) {
 
 Route::group(['prefix' => 'v1/menus'], function ($router) {
     Route::get('/', [MobileCustomerMenuController::class, 'list']);
+    Route::get('/top-by-category', [MobileCustomerMenuController::class, 'topByCategory']);
+    Route::get('/image/{filename}', [MobileCustomerMenuController::class, 'image'])
+        ->where('filename', '.*');
     Route::get('/search', [MobileCustomerMenuController::class, 'search']);
     Route::get('/filter', [MobileCustomerMenuController::class, 'filter']);
     
@@ -67,6 +70,12 @@ Route::group(['prefix' => 'v1/orders', 'middleware' => 'auth:api'], function () 
 Route::group(['prefix' => 'v1/payments'], function () {
     Route::get('/', [MobilePaymentController::class, 'list'])->middleware(['auth:api', 'role:ADMIN']);
     Route::post('/create', [MobilePaymentController::class, 'create'])->middleware(['auth:api', 'throttle:30,1']);
+    Route::post('/continue/{orderId}', [MobilePaymentController::class, 'continuePending'])
+        ->middleware(['auth:api', 'role:CUSTOMER', 'throttle:30,1']);
+    Route::post('/change-method/{orderId}', [MobilePaymentController::class, 'changeMethod'])
+        ->middleware(['auth:api', 'role:CUSTOMER', 'throttle:30,1']);
+    Route::post('/cancel/{orderId}', [MobilePaymentController::class, 'cancelPending'])
+        ->middleware(['auth:api', 'role:CUSTOMER', 'throttle:30,1']);
     Route::get('/webhook', [MidtransWebhookController::class, 'landing'])->middleware('throttle:20,1');
     Route::post('/webhook', [MidtransWebhookController::class, 'handle'])->middleware('throttle:120,1');
 });
