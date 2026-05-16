@@ -192,6 +192,14 @@ class TableService
     public function storeTableSession(Request $request, int $tableId): void
     {
         $request->session()->put('table_id', $tableId);
+        $request->session()->put('order_type', 'DINE_IN');
+        $request->session()->put('table_session_started_at', now()->toDateTimeString());
+    }
+
+    public function storeTakeAwaySession(Request $request): void
+    {
+        $request->session()->forget('table_id');
+        $request->session()->put('order_type', 'TAKE_AWAY');
         $request->session()->put('table_session_started_at', now()->toDateTimeString());
     }
 
@@ -210,6 +218,7 @@ class TableService
     private function clearSessionKeys(Request $request): void
     {
         $request->session()->forget('table_id');
+        $request->session()->forget('order_type');
         $request->session()->forget('table_session_started_at');
         $request->session()->forget('frontliner_receipt_order_id');
         $request->session()->forget('frontliner_receipt_order_ids');

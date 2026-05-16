@@ -25,7 +25,8 @@ class PaymentController extends Controller
     public function createFromCart(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'tableNumber' => 'required|integer|min:1|max:999',
+            'orderType' => 'nullable|string|in:dine_in,take_away',
+            'tableNumber' => 'nullable|integer|min:1|max:999',
             'customerName' => 'required|string|max:255',
             'customerEmail' => 'required|email|max:255',
             'items' => 'required|array|min:1',
@@ -42,31 +43,41 @@ class PaymentController extends Controller
         }
 
         $validated = $validator->validated();
+        $orderType = strtolower((string) ($validated['orderType'] ?? 'dine_in'));
 
-        if (! $this->tableService->isKnownTable((int) $validated['tableNumber'])) {
+        if ($orderType === 'dine_in' && empty($validated['tableNumber'])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Nomor meja wajib diisi untuk dine in.',
+            ], 422);
+        }
+
+        if ($orderType === 'dine_in' && ! $this->tableService->isKnownTable((int) $validated['tableNumber'])) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Nomor meja tidak terdaftar.',
             ], 422);
         }
 
-        $tableNumber = (int) $validated['tableNumber'];
+        $tableNumber = $orderType === 'dine_in' ? (int) $validated['tableNumber'] : 0;
         $browserSessionId = $request->hasSession() ? (string) $request->session()->getId() : null;
         $sessionTableId = $request->hasSession() ? (int) $request->session()->get('table_id', 0) : null;
         $receiptTableId = $request->hasSession() ? (int) $request->session()->get('frontliner_receipt_table_id', 0) : null;
 
-        if (! $this->tableService->canPlaceOrderForSession(
-            $tableNumber,
-            (string) $validated['customerName'],
-            (string) $validated['customerEmail'],
-            $browserSessionId,
-            $sessionTableId,
-            $receiptTableId
-        )) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Meja masih terisi oleh session atau pemesan lain. Gunakan device/browser yang sama atau nama dan email pemesan yang sama untuk menambah order di meja ini.',
-            ], 409);
+        if ($orderType === 'dine_in') {
+            if (! $this->tableService->canPlaceOrderForSession(
+                $tableNumber,
+                (string) $validated['customerName'],
+                (string) $validated['customerEmail'],
+                $browserSessionId,
+                $sessionTableId,
+                $receiptTableId
+            )) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Meja masih terisi oleh session atau pemesan lain. Gunakan device/browser yang sama atau nama dan email pemesan yang sama untuk menambah order di meja ini.',
+                ], 409);
+            }
         }
 
         $rawItems = collect($validated['items']);
@@ -151,8 +162,14 @@ class PaymentController extends Controller
             'items' => $embeddedItems,
         ]);
 
-        // Customer started a new order cycle on this table; refresh session anchor.
-        $request->session()->put('table_id', $tableNumber);
+        // Customer started a new order cycle; refresh session anchor.
+        if ($orderType === 'dine_in') {
+            $request->session()->put('table_id', $tableNumber);
+            $request->session()->put('order_type', 'DINE_IN');
+        } else {
+            $request->session()->forget('table_id');
+            $request->session()->put('order_type', 'TAKE_AWAY');
+        }
         $request->session()->put('table_session_started_at', now()->toDateTimeString());
 
         $receiptOrderIds = collect($request->session()->get('frontliner_receipt_order_ids', []))
@@ -194,6 +211,7 @@ class PaymentController extends Controller
             'message' => 'Payment transaction created',
             'data' => [
                 ...($result['data'] ?? []),
+                'order_type' => $orderType,
                 'table_number' => $tableNumber,
                 'subtotal' => $subtotal,
                 'service_fee' => $serviceFee,
@@ -462,8 +480,16 @@ class PaymentController extends Controller
 
         $sessionTableId = (int) $request->session()->get('table_id', 0);
         $sessionReceiptTableId = (int) $request->session()->get('frontliner_receipt_table_id', 0);
+        $sessionOrderType = strtoupper((string) $request->session()->get('order_type', 'DINE_IN'));
         $orderId = (string) $order->_id;
         $orderTableNumber = (int) ($order->table_number ?? 0);
+        $isTakeAwaySession = $sessionOrderType === 'TAKE_AWAY';
+
+        if ($isTakeAwaySession) {
+            return $sessionOrderIds->contains($orderId)
+                && $sessionReceiptTableId === 0
+                && $orderTableNumber === 0;
+        }
 
         return $sessionOrderIds->contains($orderId)
             && $sessionTableId > 0
@@ -494,7 +520,14 @@ class PaymentController extends Controller
 
         $sessionTableId = (int) $request->session()->get('table_id', 0);
         $sessionReceiptTableId = (int) $request->session()->get('frontliner_receipt_table_id', 0);
-        if ($sessionOrderIds->isEmpty() || $sessionTableId <= 0 || $sessionReceiptTableId <= 0) {
+        $sessionOrderType = strtoupper((string) $request->session()->get('order_type', 'DINE_IN'));
+        $isTakeAwaySession = $sessionOrderType === 'TAKE_AWAY';
+
+        if ($sessionOrderIds->isEmpty()) {
+            return ['ok' => false, 'message' => null];
+        }
+
+        if (!$isTakeAwaySession && ($sessionTableId <= 0 || $sessionReceiptTableId <= 0)) {
             return ['ok' => false, 'message' => null];
         }
 
@@ -502,13 +535,17 @@ class PaymentController extends Controller
             ->get()
             ->keyBy(fn ($order) => (string) $order->_id);
 
-        $validOrderIds = $sessionOrderIds->filter(function ($id) use ($ordersById, $sessionTableId, $sessionReceiptTableId) {
+        $validOrderIds = $sessionOrderIds->filter(function ($id) use ($ordersById, $sessionTableId, $sessionReceiptTableId, $isTakeAwaySession) {
             $order = $ordersById->get($id);
             if (!$order) {
                 return false;
             }
 
             $tableNumber = (int) ($order->table_number ?? 0);
+            if ($isTakeAwaySession) {
+                return $tableNumber === 0 && $sessionReceiptTableId === 0;
+            }
+
             return $tableNumber === $sessionTableId && $tableNumber === $sessionReceiptTableId;
         })->values();
 

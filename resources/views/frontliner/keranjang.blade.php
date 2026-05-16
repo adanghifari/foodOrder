@@ -31,7 +31,8 @@
                 <div class="space-y-4 mb-8">
                     <div>
                         <label class="block text-gray-700 font-bold mb-2">Nomor Meja</label>
-                        <input id="table-number-input" type="text" value="{{ $tableNumber ?? '-' }}" readonly class="w-full bg-gray-100 border border-gray-200 rounded-xl py-3 px-4 text-gray-600 outline-none cursor-not-allowed">
+                        <input id="table-number-input" type="text" value="{{ $tableLabel ?? ($tableNumber ?? '-') }}" readonly class="w-full bg-gray-100 border border-gray-200 rounded-xl py-3 px-4 text-gray-600 outline-none cursor-not-allowed">
+                        <input id="order-type-input" type="hidden" value="{{ $orderType ?? 'dine_in' }}">
                     </div>
                     <div>
                         <label class="block text-gray-700 font-bold mb-2">Email</label>
@@ -276,6 +277,7 @@
         async function prosesBayar() {
             const cart = JSON.parse(localStorage.getItem('kedaiKlikCart')) || [];
             const tableNumber = (document.getElementById('table-number-input')?.value || '').trim();
+            const orderType = (document.getElementById('order-type-input')?.value || 'dine_in').trim();
             const payButton = document.getElementById('bayar-button');
 
             if (cart.length === 0) {
@@ -283,7 +285,7 @@
                 return;
             }
 
-            if (!tableNumber || tableNumber === '-') {
+            if (orderType === 'dine_in' && (!tableNumber || tableNumber === '-')) {
                 await showTableRequiredPopup();
                 return;
             }
@@ -325,6 +327,7 @@
             }));
 
             localStorage.setItem('kedaiKlikLastCheckout', JSON.stringify({
+                orderType,
                 tableNumber,
                 customerName: customerInfo.customerName,
                 customerEmail: customerInfo.email,
@@ -352,7 +355,8 @@
                         'X-CSRF-TOKEN': csrfToken,
                     },
                     body: JSON.stringify({
-                        tableNumber: Number(tableNumber),
+                        orderType: orderType,
+                        tableNumber: orderType === 'dine_in' ? Number(tableNumber) : null,
                         customerName: customerInfo.customerName,
                         customerEmail: customerInfo.email,
                         items: condensedItems,
@@ -370,6 +374,7 @@
                 const midtransOrderId = result?.data?.midtrans_order_id || '';
 
                 localStorage.setItem('kedaiKlikLastCheckout', JSON.stringify({
+                    orderType,
                     tableNumber,
                     customerName: customerInfo.customerName,
                     customerEmail: customerInfo.email,
