@@ -24,6 +24,10 @@ WORKDIR /app
 # Copy project files
 COPY . .
 
+# Create required Laravel storage directories and set permissions
+RUN mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views
+RUN chmod -R 775 storage bootstrap/cache
+
 # Install dependencies
 RUN composer install --no-dev --optimize-autoloader
 
