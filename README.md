@@ -73,18 +73,19 @@ php artisan key:generate
 php artisan jwt:secret
 ```
 
-### 5.3 Set MongoDB Database in `.env`
+### 5.3 Set MongoDB Atlas in `.env`
 
 Minimal konfigurasi:
 
 ```env
 DB_CONNECTION=mongodb
-DB_HOST=127.0.0.1
-DB_PORT=27017
-DB_DATABASE=foodOrder_db
-DB_USERNAME=
-DB_PASSWORD=
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/foodOrder_db?retryWrites=true&w=majority&appName=<app-name>
 ```
+
+Checklist Atlas:
+- Buat database user di Atlas (`Database Access`)
+- Whitelist IP server/aplikasi di `Network Access` (atau `0.0.0.0/0` untuk testing sementara)
+- Pastikan database name di URI adalah `foodOrder_db`
 
 ### 5.4 Configure Midtrans (Sandbox)
 
