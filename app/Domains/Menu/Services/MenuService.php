@@ -5,7 +5,10 @@ namespace App\Domains\Menu\Services;
 use App\Models\MenuItem;
 use App\Models\Order;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 
 class MenuService
 {
@@ -35,8 +38,9 @@ class MenuService
     {
         $this->deleteStoredMenuImage($item->image_url);
 
-        $path = $image->store('menu', 'public');
-        $imageUrl = '/storage/' . $path;
+        $imageUrl = $this->isCloudinaryConfigured()
+            ? $this->uploadToCloudinary($image)
+            : $this->uploadToLocalStorage($image);
 
         $item->update(['image_url' => $imageUrl]);
 
@@ -148,11 +152,148 @@ class MenuService
             return;
         }
 
+        if ($this->isCloudinaryUrl($imageUrl)) {
+            $this->deleteFromCloudinary($imageUrl);
+            return;
+        }
+
         if (!str_starts_with($imageUrl, '/storage/menu/')) {
             return;
         }
 
         $oldPath = ltrim(str_replace('/storage/', '', $imageUrl), '/');
         Storage::disk('public')->delete($oldPath);
+    }
+
+    private function uploadToLocalStorage(UploadedFile $image): string
+    {
+        $path = $image->store('menu', 'public');
+        return '/storage/' . $path;
+    }
+
+    private function isCloudinaryConfigured(): bool
+    {
+        return !empty(config('services.cloudinary.cloud_name'))
+            && !empty(config('services.cloudinary.api_key'))
+            && !empty(config('services.cloudinary.api_secret'));
+    }
+
+    private function uploadToCloudinary(UploadedFile $image): string
+    {
+        $cloudName = (string) config('services.cloudinary.cloud_name');
+        $apiKey = (string) config('services.cloudinary.api_key');
+        $apiSecret = (string) config('services.cloudinary.api_secret');
+        $folder = (string) config('services.cloudinary.folder', 'kedaiklik/menu');
+        $timestamp = time();
+
+        $paramsToSign = [
+            'folder' => $folder,
+            'timestamp' => $timestamp,
+        ];
+
+        ksort($paramsToSign);
+        $signatureBase = http_build_query($paramsToSign, '', '&', PHP_QUERY_RFC3986);
+        $signature = sha1($signatureBase . $apiSecret);
+
+        $response = Http::timeout(30)
+            ->asMultipart()
+            ->attach('file', file_get_contents($image->getRealPath()), $image->getClientOriginalName())
+            ->post("https://api.cloudinary.com/v1_1/{$cloudName}/image/upload", [
+                'api_key' => $apiKey,
+                'timestamp' => $timestamp,
+                'folder' => $folder,
+                'signature' => $signature,
+            ]);
+
+        if (!$response->successful()) {
+            throw new RuntimeException('Upload gambar ke Cloudinary gagal: ' . $response->body());
+        }
+
+        $secureUrl = (string) $response->json('secure_url', '');
+        if ($secureUrl === '') {
+            throw new RuntimeException('Upload gambar ke Cloudinary gagal: secure_url kosong.');
+        }
+
+        return $secureUrl;
+    }
+
+    private function isCloudinaryUrl(string $imageUrl): bool
+    {
+        return str_contains($imageUrl, 'res.cloudinary.com');
+    }
+
+    private function deleteFromCloudinary(string $imageUrl): void
+    {
+        if (!$this->isCloudinaryConfigured()) {
+            return;
+        }
+
+        $publicId = $this->extractCloudinaryPublicId($imageUrl);
+        if ($publicId === null) {
+            return;
+        }
+
+        $cloudName = (string) config('services.cloudinary.cloud_name');
+        $apiKey = (string) config('services.cloudinary.api_key');
+        $apiSecret = (string) config('services.cloudinary.api_secret');
+        $timestamp = time();
+
+        $paramsToSign = [
+            'public_id' => $publicId,
+            'timestamp' => $timestamp,
+        ];
+
+        ksort($paramsToSign);
+        $signatureBase = http_build_query($paramsToSign, '', '&', PHP_QUERY_RFC3986);
+        $signature = sha1($signatureBase . $apiSecret);
+
+        $response = Http::timeout(20)
+            ->asForm()
+            ->post("https://api.cloudinary.com/v1_1/{$cloudName}/image/destroy", [
+                'api_key' => $apiKey,
+                'timestamp' => $timestamp,
+                'public_id' => $publicId,
+                'signature' => $signature,
+            ]);
+
+        if (!$response->successful()) {
+            Log::warning('Cloudinary image destroy failed', [
+                'public_id' => $publicId,
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+        }
+    }
+
+    private function extractCloudinaryPublicId(string $imageUrl): ?string
+    {
+        $path = parse_url($imageUrl, PHP_URL_PATH);
+        if (!is_string($path) || $path === '') {
+            return null;
+        }
+
+        $marker = '/image/upload/';
+        $pos = strpos($path, $marker);
+        if ($pos === false) {
+            return null;
+        }
+
+        $resource = substr($path, $pos + strlen($marker));
+        if ($resource === '') {
+            return null;
+        }
+
+        $parts = explode('/', $resource);
+        if (!empty($parts) && preg_match('/^v\d+$/', $parts[0])) {
+            array_shift($parts);
+        }
+
+        $publicPath = implode('/', $parts);
+        if ($publicPath === '') {
+            return null;
+        }
+
+        $publicPath = rawurldecode($publicPath);
+        return preg_replace('/\.[^.]+$/', '', $publicPath) ?: null;
     }
 }
