@@ -18,12 +18,12 @@
 
         <x-backoffice.menu.field label="Gambar Menu" :colSpan="true">
             <div id="image-container" class="relative h-44 rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
-                <img id="image-preview" src="{{ $previewImage }}" alt="Preview gambar menu" class="h-full w-full object-cover {{ $hasCurrentImage ? '' : 'hidden' }}">
+                <img id="image-preview" src="{{ $previewImage }}" alt="Preview gambar menu" class="h-full w-full object-cover pointer-events-none {{ $hasCurrentImage ? '' : 'hidden' }}">
 
                 <button
                     type="button"
                     id="remove-image-corner"
-                    class="absolute top-2 right-2 z-20 inline-flex items-center justify-center h-8 w-8 rounded-full bg-white/95 border border-red-200 text-red-700 font-bold shadow-sm hover:bg-red-50 transition {{ $hasCurrentImage ? '' : 'hidden' }}"
+                    class="absolute top-2 right-2 z-30 pointer-events-auto inline-flex items-center justify-center h-8 w-8 rounded-full bg-white/95 border border-red-200 text-red-700 font-bold shadow-sm hover:bg-red-50 transition {{ $hasCurrentImage ? '' : 'hidden' }}"
                     aria-label="Hapus gambar"
                 >
                     ✕
@@ -85,7 +85,10 @@
         const imageContainer = document.getElementById('image-container');
 
         if (removeCornerButton && removeInput && imagePreview && addCenter) {
-            removeCornerButton.addEventListener('click', function () {
+            removeCornerButton.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+
                 removeInput.value = '1';
                 if (fileInput) {
                     fileInput.value = '';
@@ -118,7 +121,11 @@
 
         if (imageContainer && fileInput && imagePreview && removeCornerButton) {
             imageContainer.addEventListener('click', function (event) {
-                if (event.target === removeCornerButton) {
+                if (event.target === removeCornerButton || event.target.closest('#remove-image-corner')) {
+                    return;
+                }
+
+                if (event.target.closest('#add-image-center')) {
                     return;
                 }
 
