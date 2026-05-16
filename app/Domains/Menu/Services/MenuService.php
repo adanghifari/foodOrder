@@ -191,9 +191,7 @@ class MenuService
             'timestamp' => $timestamp,
         ];
 
-        ksort($paramsToSign);
-        $signatureBase = http_build_query($paramsToSign, '', '&', PHP_QUERY_RFC3986);
-        $signature = sha1($signatureBase . $apiSecret);
+        $signature = $this->generateCloudinarySignature($paramsToSign, $apiSecret);
 
         $response = Http::timeout(30)
             ->asMultipart()
@@ -243,9 +241,7 @@ class MenuService
             'timestamp' => $timestamp,
         ];
 
-        ksort($paramsToSign);
-        $signatureBase = http_build_query($paramsToSign, '', '&', PHP_QUERY_RFC3986);
-        $signature = sha1($signatureBase . $apiSecret);
+        $signature = $this->generateCloudinarySignature($paramsToSign, $apiSecret);
 
         $response = Http::timeout(20)
             ->asForm()
@@ -295,5 +291,17 @@ class MenuService
 
         $publicPath = rawurldecode($publicPath);
         return preg_replace('/\.[^.]+$/', '', $publicPath) ?: null;
+    }
+
+    private function generateCloudinarySignature(array $params, string $apiSecret): string
+    {
+        ksort($params);
+
+        $parts = [];
+        foreach ($params as $key => $value) {
+            $parts[] = $key . '=' . $value;
+        }
+
+        return sha1(implode('&', $parts) . $apiSecret);
     }
 }
