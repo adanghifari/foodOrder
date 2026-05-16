@@ -59,13 +59,22 @@ Route::get('/menu/semua', function () {
 Route::get('/menu/makanan-utama', [FrontlinerMenuController::class, 'makananUtama']);
 Route::get('/menu/cemilan', [FrontlinerMenuController::class, 'cemilan']);
 Route::get('/menu/minuman', [FrontlinerMenuController::class, 'minuman']);
+Route::get('/menu/take_away', [FrontlinerQrScanController::class, 'accessTakeAwayRoute']);
 Route::get('/menu/{tableId}', [FrontlinerQrScanController::class, 'accessFromMenuRoute'])
     ->whereNumber('tableId');
 Route::get('/scan', [FrontlinerQrScanController::class, 'accessFromQueryParam']);
 Route::view('/kedai/scan', 'frontliner.scan');
 Route::get('/keranjang', function (Request $request) {
+    $orderType = strtoupper((string) $request->session()->get('order_type', ''));
+    $isTakeAway = $orderType === 'TAKE_AWAY';
+    $tableNumber = $request->session()->get('table_id');
+
     return view('frontliner.keranjang', [
-        'tableNumber' => $request->session()->get('table_id'),
+        'tableNumber' => $tableNumber,
+        'orderType' => $isTakeAway ? 'take_away' : 'dine_in',
+        'tableLabel' => $isTakeAway
+            ? 'Diambil ke resto'
+            : ($tableNumber ? (string) $tableNumber : '-'),
     ]);
 });
 Route::post('/kedai/pembayaran/create', [FrontlinerPaymentController::class, 'createFromCart'])

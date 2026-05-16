@@ -18,16 +18,34 @@ class QrScanController extends Controller
 		return $this->storeTableAndRedirect($request, $tableId, '/menu');
 	}
 
+	public function accessTakeAwayRoute(Request $request): RedirectResponse
+	{
+		return $this->storeTakeAwayAndRedirect($request, '/menu');
+	}
+
 	public function accessFromQueryParam(Request $request): RedirectResponse
 	{
 		$validated = $request->validate([
-			'tableId' => 'required|integer|min:1|max:999',
+			'tableId' => 'nullable',
+			'mode' => 'nullable|string|in:take_away',
 			'return_to' => 'nullable|string|max:255',
 		]);
 
 		$returnTo = $this->sanitizeReturnPath((string) ($validated['return_to'] ?? ''));
+		$mode = strtolower((string) ($validated['mode'] ?? ''));
+		$tableIdRaw = strtolower(trim((string) ($validated['tableId'] ?? '')));
 
-		return $this->storeTableAndRedirect($request, (int) $validated['tableId'], $returnTo);
+		if ($mode === 'take_away' || $tableIdRaw === 'take_away') {
+			return $this->storeTakeAwayAndRedirect($request, $returnTo);
+		}
+
+		$tableId = (int) $request->input('tableId', 0);
+		if ($tableId <= 0 || $tableId > 999) {
+			return redirect('/kedai/scan?return_to=' . urlencode($returnTo))
+				->with('error', 'QR tidak valid. Silakan scan ulang.');
+		}
+
+		return $this->storeTableAndRedirect($request, $tableId, $returnTo);
 	}
 
 	private function storeTableAndRedirect(Request $request, int $tableId, string $redirectPath = '/menu'): RedirectResponse
@@ -38,6 +56,12 @@ class QrScanController extends Controller
 
 		$this->tableService->storeTableSession($request, $tableId);
 
+		return redirect($redirectPath);
+	}
+
+	private function storeTakeAwayAndRedirect(Request $request, string $redirectPath = '/menu'): RedirectResponse
+	{
+		$this->tableService->storeTakeAwaySession($request);
 		return redirect($redirectPath);
 	}
 

@@ -14,7 +14,7 @@
         <a href="/kedai" class="inline-flex items-center text-sm font-bold text-[#C8641E] hover:text-[#A85318]">← Kembali</a>
 
         <h1 class="mt-3 text-2xl font-extrabold text-gray-800">Scan QR lalu Pesan!</h1>
-        <p class="mt-2 text-sm text-gray-500">Arahkan kamera ke QR meja. Setelah terbaca, Anda akan langsung masuk ke menu.</p>
+        <p class="mt-2 text-sm text-gray-500">Arahkan kamera ke QR meja atau QR takeaway. Setelah terbaca, Anda akan langsung masuk ke menu.</p>
 
         <section class="mt-5">
             <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-black">
@@ -51,29 +51,50 @@
                 window.location.href = target.toString();
             }
 
-            function extractTableId(rawValue) {
+            function goToTakeAway() {
+                const target = new URL('/scan', window.location.origin);
+                target.searchParams.set('mode', 'take_away');
+                target.searchParams.set('return_to', returnTo);
+                window.location.href = target.toString();
+            }
+
+            function extractScanPayload(rawValue) {
                 const raw = String(rawValue || '').trim();
                 if (raw === '') return null;
 
+                if (/^take[_\-\s]?away$/i.test(raw)) {
+                    return { mode: 'take_away' };
+                }
+
                 if (/^\d{1,3}$/.test(raw)) {
-                    return Number(raw);
+                    return { mode: 'table', tableId: Number(raw) };
                 }
 
                 try {
                     const url = new URL(raw);
+                    const mode = (url.searchParams.get('mode') || '').toLowerCase();
+                    const tableIdParam = (url.searchParams.get('tableId') || '').toLowerCase();
+                    if (mode === 'take_away' || tableIdParam === 'take_away') {
+                        return { mode: 'take_away' };
+                    }
+
+                    if (/\/menu\/take[_\-\s]?away$/i.test(url.pathname)) {
+                        return { mode: 'take_away' };
+                    }
+
                     const fromParam = url.searchParams.get('tableId');
                     if (fromParam && /^\d{1,3}$/.test(fromParam)) {
-                        return Number(fromParam);
+                        return { mode: 'table', tableId: Number(fromParam) };
                     }
 
                     const matchMenuPath = url.pathname.match(/\/menu\/(\d{1,3})$/);
                     if (matchMenuPath) {
-                        return Number(matchMenuPath[1]);
+                        return { mode: 'table', tableId: Number(matchMenuPath[1]) };
                     }
                 } catch (error) {
                     const matchPlain = raw.match(/(?:tableId=|\/menu\/)(\d{1,3})/i);
                     if (matchPlain) {
-                        return Number(matchPlain[1]);
+                        return { mode: 'table', tableId: Number(matchPlain[1]) };
                     }
                 }
 
@@ -116,14 +137,18 @@
                             }
                         }
 
-                        const tableId = extractTableId(decodedValue);
-                        if (tableId) {
+                        const payload = extractScanPayload(decodedValue);
+                        if (payload) {
                             setStatus('QR terdeteksi. Mengarahkan ke menu...', false);
                             active = false;
                             if (stream) {
                                 stream.getTracks().forEach(function (track) { track.stop(); });
                             }
-                            goToTable(tableId);
+                            if (payload.mode === 'take_away') {
+                                goToTakeAway();
+                            } else {
+                                goToTable(payload.tableId);
+                            }
                             return;
                         }
                     } catch (error) {
