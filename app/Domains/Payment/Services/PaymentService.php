@@ -2,7 +2,6 @@
 
 namespace App\Domains\Payment\Services;
 
-use App\Mail\FrontlinerReceiptMail;
 use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\User;
@@ -10,7 +9,6 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 
 class PaymentService
@@ -778,9 +776,12 @@ class PaymentService
             );
 
             $pdfBinary = $this->renderReceiptPdf($order, $displayOrderId);
-
-            Mail::to($customerEmail)->send(
-                new FrontlinerReceiptMail($order, $receiptLink, $displayOrderId, $pdfBinary)
+            $this->sendReceiptEmailViaSendgrid(
+                order: $order,
+                customerEmail: $customerEmail,
+                receiptLink: $receiptLink,
+                displayOrderId: $displayOrderId,
+                pdfBinary: $pdfBinary
             );
 
             $order->update([
@@ -796,6 +797,69 @@ class PaymentService
             $order->update([
                 'receipt_email_error' => $exception->getMessage(),
             ]);
+        }
+    }
+
+    private function sendReceiptEmailViaSendgrid(
+        Order $order,
+        string $customerEmail,
+        string $receiptLink,
+        string $displayOrderId,
+        string $pdfBinary
+    ): void {
+        $sendgridApiKey = trim((string) config('services.sendgrid.api_key', ''));
+        if ($sendgridApiKey === '') {
+            throw new \RuntimeException('SendGrid API key is not configured');
+        }
+
+        $fromEmail = trim((string) config('mail.from.address', ''));
+        if ($fromEmail === '') {
+            throw new \RuntimeException('MAIL_FROM_ADDRESS is not configured');
+        }
+
+        $fromName = trim((string) config('mail.from.name', 'KedaiKlik'));
+        $htmlContent = view('emails.frontliner-receipt', [
+            'order' => $order,
+            'receiptLink' => $receiptLink,
+            'displayOrderId' => $displayOrderId,
+        ])->render();
+
+        $payload = [
+            'from' => [
+                'email' => $fromEmail,
+                'name' => $fromName,
+            ],
+            'personalizations' => [[
+                'to' => [[
+                    'email' => $customerEmail,
+                ]],
+                'subject' => 'Struk Pembelian KedaiKlik - ' . $displayOrderId,
+            ]],
+            'content' => [[
+                'type' => 'text/html',
+                'value' => $htmlContent,
+            ]],
+        ];
+
+        if ($pdfBinary !== '') {
+            $payload['attachments'] = [[
+                'content' => base64_encode($pdfBinary),
+                'filename' => 'struk-' . $displayOrderId . '.pdf',
+                'type' => 'application/pdf',
+                'disposition' => 'attachment',
+            ]];
+        }
+
+        $response = Http::withToken($sendgridApiKey)
+            ->acceptJson()
+            ->timeout(20)
+            ->connectTimeout(8)
+            ->post('https://api.sendgrid.com/v3/mail/send', $payload);
+
+        if (!$response->successful()) {
+            throw new \RuntimeException(
+                'SendGrid API failed: HTTP ' . $response->status() . ' ' . $response->body()
+            );
         }
     }
 
