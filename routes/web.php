@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Backoffice\AuthController as BackofficeAuthController;
 use App\Http\Controllers\Backoffice\Admin\DashboardController as BackofficeDashboardController;
@@ -92,6 +94,33 @@ Route::get('/kedai/pembayaran/struk/email-link/{id}', [FrontlinerPaymentControll
     ->middleware(['signed', 'throttle:30,1']);
 Route::get('/kedai/pembayaran/struk/download', [FrontlinerPaymentController::class, 'downloadReceiptPdf'])
     ->middleware('throttle:20,1');
+
+Route::get('/test-mail', function (Request $request) {
+    if ((string) $request->query('key', '') !== (string) env('MAIL_TEST_KEY', '')) {
+        return response()->json(['ok' => false, 'message' => 'Unauthorized'], 401);
+    }
+
+    try {
+        Log::info('TEST MAIL START');
+
+        Mail::raw('hello', function ($msg) {
+            $msg->to('emailkamu@gmail.com')
+                ->subject('Railway Test');
+        });
+
+        Log::info('TEST MAIL SUCCESS');
+        return response()->json(['ok' => true, 'message' => 'Mail sent']);
+    } catch (\Throwable $e) {
+        Log::error('TEST MAIL ERROR', [
+            'message' => $e->getMessage(),
+        ]);
+
+        return response()->json([
+            'ok' => false,
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+})->middleware('throttle:5,1');
 
 
 # buat debugging ngecek tableId di session pake dibawah ini ya ges, 
