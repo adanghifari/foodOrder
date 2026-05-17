@@ -122,6 +122,13 @@ Route::get('/test-mail', function (Request $request) {
     }
 })->middleware('throttle:5,1');
 
+Route::get('/test-mail-debug', function (Request $request) {
+    return [
+        'query' => $request->query('key'),
+        'env' => env('MAIL_TEST_KEY'),
+    ];
+});
+
 
 # buat debugging ngecek tableId di session pake dibawah ini ya ges, 
 // Route::get('/debug/table-session', function (Request $request) {
