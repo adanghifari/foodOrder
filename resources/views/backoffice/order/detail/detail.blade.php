@@ -92,6 +92,25 @@
                                     <td class="px-4 py-3 font-semibold text-slate-600">Nomor Meja</td>
                                     <td class="px-4 py-3 text-slate-800">{{ (int) ($selectedOrder['tableNumber'] ?? 0) }}</td>
                                 </tr>
+                                @php
+                                    $detailOrderType = strtoupper((string) ($selectedOrder['orderType'] ?? 'DINE_IN'));
+                                    $detailOrderTypeLabel = match ($detailOrderType) {
+                                        'DINE_IN' => 'Dine In',
+                                        'TAKE_AWAY' => 'Take Away',
+                                        default => ucwords(strtolower(str_replace('_', ' ', $detailOrderType))),
+                                    };
+                                    $detailOrderTypeClass = match ($detailOrderType) {
+                                        'DINE_IN' => 'bg-sky-100 text-sky-700',
+                                        'TAKE_AWAY' => 'bg-violet-100 text-violet-700',
+                                        default => 'bg-slate-100 text-slate-700',
+                                    };
+                                @endphp
+                                <tr>
+                                    <td class="px-4 py-3 font-semibold text-slate-600">Tipe Pesanan</td>
+                                    <td class="px-4 py-3">
+                                        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $detailOrderTypeClass }}">{{ $detailOrderTypeLabel }}</span>
+                                    </td>
+                                </tr>
                                 <tr>
                                     <td class="px-4 py-3 font-semibold text-slate-600">Status Pesanan</td>
                                     <td class="px-4 py-3">

@@ -8,6 +8,7 @@ use App\Http\Controllers\Backoffice\Admin\OrderController as AdminOrderControlle
 use App\Http\Controllers\Backoffice\Admin\OverviewController as AdminOverviewController;
 use App\Http\Controllers\Frontliner\Mobile\AuthController;
 use App\Http\Controllers\Frontliner\Mobile\CartController as CustomerCartController;
+use App\Http\Controllers\Frontliner\Mobile\BookingController as CustomerBookingController;
 use App\Http\Controllers\Frontliner\Mobile\MenuController as MobileCustomerMenuController;
 use App\Http\Controllers\Frontliner\Mobile\OrderController as CustomerOrderController;
 use App\Http\Controllers\Frontliner\Mobile\PaymentController as MobilePaymentController;
@@ -65,6 +66,12 @@ Route::group(['prefix' => 'v1/orders', 'middleware' => 'auth:api'], function () 
         Route::post('/', [CustomerOrderController::class, 'create']);
         Route::get('/me', [CustomerOrderController::class, 'myOrders']);
     });
+});
+
+Route::group(['prefix' => 'v1/bookings', 'middleware' => ['auth:api', 'role:CUSTOMER']], function () {
+    Route::get('/availability', [CustomerBookingController::class, 'availability']);
+    Route::post('/', [CustomerBookingController::class, 'create']);
+    Route::get('/me', [CustomerBookingController::class, 'myBookings']);
 });
 
 Route::group(['prefix' => 'v1/payments'], function () {

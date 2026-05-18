@@ -10,6 +10,7 @@ use App\Http\Controllers\Backoffice\Admin\OverviewController as BackofficeOvervi
 use App\Http\Controllers\Backoffice\Admin\MenuController as BackofficeMenuController;
 use App\Http\Controllers\Backoffice\Admin\OrderController as BackofficeOrderController;
 use App\Http\Controllers\Backoffice\Admin\PaymentController as BackofficePaymentController;
+use App\Http\Controllers\Backoffice\Admin\BookingController as BackofficeBookingController;
 use App\Http\Controllers\Backoffice\Admin\UserController as BackofficeUserController;
 use App\Http\Controllers\Backoffice\Admin\TableController as BackofficeTableController;
 use App\Http\Controllers\Frontliner\Web\MenuController as FrontlinerMenuController;
@@ -41,6 +42,8 @@ Route::prefix('backoffice')->group(function () {
         Route::get('/add_menu', [BackofficeMenuController::class, 'createPage']);
         Route::get('/daftar_pesanan', [BackofficeOrderController::class, 'indexPage']);
         Route::patch('/daftar_pesanan/{id}/status', [BackofficeOrderController::class, 'updateStatusPage']);
+        Route::get('/booking', [BackofficeBookingController::class, 'indexPage']);
+        Route::patch('/booking/{id}/status', [BackofficeBookingController::class, 'updateStatusPage']);
         Route::get('/pembayaran', [BackofficePaymentController::class, 'indexPage']);
         Route::delete('/pembayaran/{id}', [BackofficePaymentController::class, 'delete']);
         Route::get('/pengguna', [BackofficeUserController::class, 'indexPage']);
@@ -75,7 +78,7 @@ Route::get('/keranjang', function (Request $request) {
         'tableNumber' => $tableNumber,
         'orderType' => $isTakeAway ? 'take_away' : 'dine_in',
         'tableLabel' => $isTakeAway
-            ? 'Diambil ke resto'
+            ? 'Pesan & ambil'
             : ($tableNumber ? (string) $tableNumber : '-'),
     ]);
 });

@@ -119,14 +119,20 @@ class CartService
         return ['ok' => true];
     }
 
-    public function checkout($user, string $orderType, ?int $tableNumber): array
+    public function checkout(
+        $user,
+        string $orderType,
+        ?int $tableNumber,
+        ?string $bookingStartAt = null,
+        ?int $durationHours = null
+    ): array
     {
-        if ($orderType === 'dine_in') {
+        if ($orderType === 'booking_dine_in') {
             if (!$tableNumber) {
                 return [
                     'ok' => false,
                     'status' => 422,
-                    'message' => 'Table number is required for dine-in',
+                    'message' => 'Table number is required for booking dine-in',
                 ];
             }
 
@@ -145,6 +151,45 @@ class CartService
                     'message' => 'Selected table is not available',
                 ];
             }
+
+            if (!$bookingStartAt || !$durationHours) {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'message' => 'Booking start time and duration are required for booking dine-in',
+                ];
+            }
+        } elseif ($orderType === 'dine_in') {
+            if (!$tableNumber) {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'message' => 'Table number is required for on the spot dine-in',
+                ];
+            }
+
+            if (!$this->tableService->isKnownTable($tableNumber)) {
+                return [
+                    'ok' => false,
+                    'status' => 404,
+                    'message' => 'Selected table does not exist',
+                ];
+            }
+
+            if (!$this->tableService->isTableAvailable($tableNumber)) {
+                return [
+                    'ok' => false,
+                    'status' => 409,
+                    'message' => 'Selected table is not available',
+                ];
+            }
+
+            $bookingStartAt = null;
+            $durationHours = null;
+        } else {
+            $tableNumber = null;
+            $bookingStartAt = null;
+            $durationHours = null;
         }
 
         $cartItems = CartItem::with('menuItem')
@@ -216,7 +261,9 @@ class CartService
             $tableNumber,
             $orderMenuItems,
             $totalPrice,
-            $orderType
+            $orderType,
+            $bookingStartAt,
+            $durationHours
         );
 
         CartItem::where('customer_id', $user->_id)->delete();
@@ -228,6 +275,8 @@ class CartService
                 'customerName' => $user->name,
                 'orderType' => $orderType,
                 'tableNumber' => $order->table_number,
+                'bookingStartAt' => $order->booking_start_at,
+                'durationHours' => $order->duration_hours,
                 'items' => $itemsResponse,
                 'paymentStatus' => $order->payment_status,
                 'queueNumber' => $order->queue_number,

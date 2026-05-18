@@ -3,8 +3,8 @@
         <article class="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 md:p-6">
             <div class="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <h2 class="text-xl md:text-2xl font-extrabold text-[var(--rich-black)]">Pesanan Hari Ini</h2>
-                    <p class="text-sm font-semibold text-slate-500">Menampilkan order untuk {{ $businessDateLabel ?? '-' }}.</p>
+                    <h2 class="text-xl md:text-2xl font-extrabold text-[var(--rich-black)]">Antrian Pesanan Hari Ini</h2>
+                    <p class="text-sm font-semibold text-slate-500">Menampilkan antrian aktif untuk {{ $businessDateLabel ?? '-' }} (status disajikan dipisah).</p>
                 </div>
                 <span class="inline-flex items-center rounded-full border border-[#6A2B09]/20 bg-[#FCB861]/20 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-[#6A2B09]">
                     Fokus Operasional Hari Ini
@@ -45,8 +45,8 @@
 
                 <div class="lg:col-span-4">
                     <select id="order-sort" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
-                        <option value="default">Sort by: Terbaru</option>
-                        <option value="queue-asc">No Antrian Terkecil</option>
+                        <option value="queue-asc" selected>Sort by: Antrian (Terlama ke Terbaru)</option>
+                        <option value="default">Urutan Data Awal</option>
                         <option value="queue-desc">No Antrian Terbesar</option>
                         <option value="total-asc">Total Termurah</option>
                         <option value="total-desc">Total Termahal</option>
@@ -57,9 +57,9 @@
             </div>
         </article>
 
-        <section class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <section id="today-queue-section" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-                <h3 class="text-sm font-extrabold uppercase tracking-wide text-slate-600">Order Hari Ini</h3>
+                <h3 id="today-section-title" class="text-sm font-extrabold uppercase tracking-wide text-slate-600">Antrian Hari Ini</h3>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full min-w-[980px] text-left">
@@ -83,7 +83,11 @@
                                 $tableNumber = (int) ($order['tableNumber'] ?? 0);
                                 $totalPrice = (float) ($order['totalPrice'] ?? 0);
                                 $orderId = (string) ($order['orderId'] ?? '');
-                                $displayId = 'ORD-' . strtoupper(substr($orderId, -6));
+                                $sourceType = strtoupper((string) ($order['sourceType'] ?? 'ORDER'));
+                                $isBookingRow = $sourceType === 'BOOKING';
+                                $displayId = (string) ($order['displayId'] ?? ($isBookingRow
+                                    ? 'BKG-' . strtoupper(substr(str_replace('BOOKING:', '', $orderId), -6))
+                                    : 'ORD-' . strtoupper(substr($orderId, -6))));
                                 $customerName = trim((string) (data_get($order, 'customer.name') ?: data_get($order, 'customer.username') ?: '-'));
                                 $customerEmail = trim((string) (data_get($order, 'customer.email') ?: '-'));
                                 $statusLabel = match ($status) {
@@ -105,38 +109,42 @@
                                 <td class="px-4 py-3 text-sm font-extrabold text-[var(--rich-black)]">{{ $displayId }}</td>
                                 <td class="px-4 py-3 text-sm font-semibold text-slate-800">{{ $customerName !== '' ? $customerName : '-' }}</td>
                                 <td class="px-4 py-3 text-sm text-slate-700">{{ $customerEmail !== '' ? $customerEmail : '-' }}</td>
-                                <td class="px-4 py-3 text-sm font-bold text-slate-700">#{{ $queueNumber }}</td>
+                                <td class="px-4 py-3 text-sm font-bold text-slate-700">{{ $queueNumber > 0 ? '#' . $queueNumber : ($isBookingRow ? 'Booking' : '-') }}</td>
                                 <td class="px-4 py-3 text-sm text-slate-700">{{ $tableNumber > 0 ? $tableNumber : '-' }}</td>
                                 <td class="px-4 py-3"><span data-order-status-badge class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $statusClass }}">{{ $statusLabel }}</span></td>
                                 <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format($totalPrice, 0, ',', '.') }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex items-center gap-2">
-                                        <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2" data-order-status-form>
-                                            @csrf
-                                            @method('PATCH')
-                                            <select name="status" class="min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
-                                                @foreach (($statusOptions ?? []) as $statusOption)
-                                                    @php
-                                                        $optionLabel = match ($statusOption) {
-                                                            'CONFIRMED' => 'Terkonfirmasi',
-                                                            'IN_QUEUE' => 'Dalam Antrean',
-                                                            'IN_PROGRESS' => 'Sedang Diproses',
-                                                            'DELIVERED' => 'Disajikan',
-                                                            default => $statusOption,
-                                                        };
-                                                    @endphp
-                                                    <option value="{{ $statusOption }}" {{ $status === $statusOption ? 'selected' : '' }}>{{ $optionLabel }}</option>
-                                                @endforeach
-                                            </select>
-                                            <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>
-                                        </form>
-                                        <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
+                                        @if ($isBookingRow)
+                                            <a href="/backoffice/booking" class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Kelola Booking</a>
+                                        @else
+                                            <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2" data-order-status-form>
+                                                @csrf
+                                                @method('PATCH')
+                                                <select name="status" class="min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
+                                                    @foreach (($statusOptions ?? []) as $statusOption)
+                                                        @php
+                                                            $optionLabel = match ($statusOption) {
+                                                                'CONFIRMED' => 'Terkonfirmasi',
+                                                                'IN_QUEUE' => 'Dalam Antrean',
+                                                                'IN_PROGRESS' => 'Sedang Diproses',
+                                                                'DELIVERED' => 'Disajikan',
+                                                                default => $statusOption,
+                                                            };
+                                                        @endphp
+                                                        <option value="{{ $statusOption }}" {{ $status === $statusOption ? 'selected' : '' }}>{{ $optionLabel }}</option>
+                                                    @endforeach
+                                                </select>
+                                                <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>
+                                            </form>
+                                            <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
+                                        @endif
                                     </div>
                                 </td>
                             </tr>
                         @empty
                             <tr class="order-empty-row">
-                                <td colspan="8" class="px-4 py-10 text-center text-sm font-semibold text-slate-500">Belum ada pesanan hari ini.</td>
+                                <td colspan="8" class="px-4 py-10 text-center text-sm font-semibold text-slate-500">Belum ada antrian aktif hari ini.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -144,6 +152,104 @@
             </div>
             <div id="order-today-empty" class="hidden px-4 py-8 text-center border-t border-slate-200">
                 <p class="text-sm font-semibold text-slate-500">Pesanan hari ini tidak ditemukan untuk filter ini.</p>
+            </div>
+        </section>
+
+        <section id="delivered-section" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-200 bg-emerald-50">
+                <h3 class="text-sm font-extrabold uppercase tracking-wide text-emerald-700">Disajikan Hari Ini</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full min-w-[980px] text-left">
+                    <thead class="bg-white border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                            <th class="px-4 py-3 font-bold">Order ID</th>
+                            <th class="px-4 py-3 font-bold">Nama</th>
+                            <th class="px-4 py-3 font-bold">Email</th>
+                            <th class="px-4 py-3 font-bold">No Antrian</th>
+                            <th class="px-4 py-3 font-bold">No Meja</th>
+                            <th class="px-4 py-3 font-bold">Status</th>
+                            <th class="px-4 py-3 font-bold">Total</th>
+                            <th class="px-4 py-3 font-bold">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="order-delivered-table-body" class="divide-y divide-slate-200" data-section="delivered">
+                        @forelse (($todayDeliveredOrders ?? []) as $order)
+                            @php
+                                $status = strtoupper((string) ($order['status'] ?? 'UNKNOWN'));
+                                $queueNumber = (int) ($order['queueNumber'] ?? 0);
+                                $tableNumber = (int) ($order['tableNumber'] ?? 0);
+                                $totalPrice = (float) ($order['totalPrice'] ?? 0);
+                                $orderId = (string) ($order['orderId'] ?? '');
+                                $sourceType = strtoupper((string) ($order['sourceType'] ?? 'ORDER'));
+                                $isBookingRow = $sourceType === 'BOOKING';
+                                $displayId = (string) ($order['displayId'] ?? ($isBookingRow
+                                    ? 'BKG-' . strtoupper(substr(str_replace('BOOKING:', '', $orderId), -6))
+                                    : 'ORD-' . strtoupper(substr($orderId, -6))));
+                                $customerName = trim((string) (data_get($order, 'customer.name') ?: data_get($order, 'customer.username') ?: '-'));
+                                $customerEmail = trim((string) (data_get($order, 'customer.email') ?: '-'));
+                                $statusLabel = match ($status) {
+                                    'CONFIRMED' => 'Terkonfirmasi',
+                                    'IN_QUEUE' => 'Dalam Antrean',
+                                    'IN_PROGRESS' => 'Sedang Diproses',
+                                    'DELIVERED' => 'Disajikan',
+                                    default => ucfirst(strtolower(str_replace('_', ' ', $status))),
+                                };
+                                $statusClass = match ($status) {
+                                    'CONFIRMED' => 'bg-amber-100 text-amber-700',
+                                    'IN_QUEUE' => 'bg-orange-100 text-orange-700',
+                                    'IN_PROGRESS' => 'bg-blue-100 text-blue-700',
+                                    'DELIVERED' => 'bg-emerald-100 text-emerald-700',
+                                    default => 'bg-slate-100 text-slate-700',
+                                };
+                            @endphp
+                            <tr class="order-row" data-order-id="{{ strtolower($displayId) }}" data-customer="{{ strtolower($customerName) }}" data-email="{{ strtolower($customerEmail) }}" data-status="{{ strtolower($status) }}" data-total="{{ $totalPrice }}" data-table="{{ $tableNumber }}" data-queue="{{ $queueNumber }}">
+                                <td class="px-4 py-3 text-sm font-extrabold text-[var(--rich-black)]">{{ $displayId }}</td>
+                                <td class="px-4 py-3 text-sm font-semibold text-slate-800">{{ $customerName !== '' ? $customerName : '-' }}</td>
+                                <td class="px-4 py-3 text-sm text-slate-700">{{ $customerEmail !== '' ? $customerEmail : '-' }}</td>
+                                <td class="px-4 py-3 text-sm font-bold text-slate-700">{{ $queueNumber > 0 ? '#' . $queueNumber : ($isBookingRow ? 'Booking' : '-') }}</td>
+                                <td class="px-4 py-3 text-sm text-slate-700">{{ $tableNumber > 0 ? $tableNumber : '-' }}</td>
+                                <td class="px-4 py-3"><span data-order-status-badge class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $statusClass }}">{{ $statusLabel }}</span></td>
+                                <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format($totalPrice, 0, ',', '.') }}</td>
+                                <td class="px-4 py-3">
+                                    <div class="flex items-center gap-2">
+                                        @if ($isBookingRow)
+                                            <a href="/backoffice/booking" class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Kelola Booking</a>
+                                        @else
+                                            <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2" data-order-status-form>
+                                                @csrf
+                                                @method('PATCH')
+                                                <select name="status" class="min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
+                                                    @foreach (($statusOptions ?? []) as $statusOption)
+                                                        @php
+                                                            $optionLabel = match ($statusOption) {
+                                                                'CONFIRMED' => 'Terkonfirmasi',
+                                                                'IN_QUEUE' => 'Dalam Antrean',
+                                                                'IN_PROGRESS' => 'Sedang Diproses',
+                                                                'DELIVERED' => 'Disajikan',
+                                                                default => $statusOption,
+                                                            };
+                                                        @endphp
+                                                        <option value="{{ $statusOption }}" {{ $status === $statusOption ? 'selected' : '' }}>{{ $optionLabel }}</option>
+                                                    @endforeach
+                                                </select>
+                                                <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>
+                                            </form>
+                                            <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
+                                        @endif
+                                    </div>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr class="order-empty-row">
+                                <td colspan="8" class="px-4 py-10 text-center text-sm font-semibold text-slate-500">Belum ada pesanan yang disajikan hari ini.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+            <div id="order-delivered-empty" class="hidden px-4 py-8 text-center border-t border-slate-200">
+                <p class="text-sm font-semibold text-slate-500">Pesanan disajikan hari ini tidak ditemukan untuk filter ini.</p>
             </div>
         </section>
 
@@ -179,7 +285,11 @@
                                     $tableNumber = (int) ($order['tableNumber'] ?? 0);
                                     $totalPrice = (float) ($order['totalPrice'] ?? 0);
                                     $orderId = (string) ($order['orderId'] ?? '');
-                                    $displayId = 'ORD-' . strtoupper(substr($orderId, -6));
+                                    $sourceType = strtoupper((string) ($order['sourceType'] ?? 'ORDER'));
+                                    $isBookingRow = $sourceType === 'BOOKING';
+                                    $displayId = (string) ($order['displayId'] ?? ($isBookingRow
+                                        ? 'BKG-' . strtoupper(substr(str_replace('BOOKING:', '', $orderId), -6))
+                                        : 'ORD-' . strtoupper(substr($orderId, -6))));
                                     $customerName = trim((string) (data_get($order, 'customer.name') ?: data_get($order, 'customer.username') ?: '-'));
                                     $customerEmail = trim((string) (data_get($order, 'customer.email') ?: '-'));
                                     $statusLabel = match ($status) {
@@ -201,32 +311,36 @@
                                     <td class="px-4 py-3 text-sm font-extrabold text-[var(--rich-black)]">{{ $displayId }}</td>
                                     <td class="px-4 py-3 text-sm font-semibold text-slate-800">{{ $customerName !== '' ? $customerName : '-' }}</td>
                                     <td class="px-4 py-3 text-sm text-slate-700">{{ $customerEmail !== '' ? $customerEmail : '-' }}</td>
-                                    <td class="px-4 py-3 text-sm font-bold text-slate-700">#{{ $queueNumber }}</td>
+                                    <td class="px-4 py-3 text-sm font-bold text-slate-700">{{ $queueNumber > 0 ? '#' . $queueNumber : ($isBookingRow ? 'Booking' : '-') }}</td>
                                     <td class="px-4 py-3 text-sm text-slate-700">{{ $tableNumber > 0 ? $tableNumber : '-' }}</td>
                                 <td class="px-4 py-3"><span data-order-status-badge class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $statusClass }}">{{ $statusLabel }}</span></td>
                                     <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format($totalPrice, 0, ',', '.') }}</td>
                                     <td class="px-4 py-3">
                                         <div class="flex items-center gap-2">
-                                            <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2" data-order-status-form>
-                                                @csrf
-                                                @method('PATCH')
-                                                <select name="status" class="min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
-                                                    @foreach (($statusOptions ?? []) as $statusOption)
-                                                        @php
-                                                            $optionLabel = match ($statusOption) {
-                                                                'CONFIRMED' => 'Terkonfirmasi',
-                                                                'IN_QUEUE' => 'Dalam Antrean',
-                                                                'IN_PROGRESS' => 'Sedang Diproses',
-                                                                'DELIVERED' => 'Disajikan',
-                                                                default => $statusOption,
-                                                            };
-                                                        @endphp
-                                                        <option value="{{ $statusOption }}" {{ $status === $statusOption ? 'selected' : '' }}>{{ $optionLabel }}</option>
-                                                    @endforeach
-                                                </select>
-                                                <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>
-                                            </form>
-                                            <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
+                                            @if ($isBookingRow)
+                                                <a href="/backoffice/booking" class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Kelola Booking</a>
+                                            @else
+                                                <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2" data-order-status-form>
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <select name="status" class="min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
+                                                        @foreach (($statusOptions ?? []) as $statusOption)
+                                                            @php
+                                                                $optionLabel = match ($statusOption) {
+                                                                    'CONFIRMED' => 'Terkonfirmasi',
+                                                                    'IN_QUEUE' => 'Dalam Antrean',
+                                                                    'IN_PROGRESS' => 'Sedang Diproses',
+                                                                    'DELIVERED' => 'Disajikan',
+                                                                    default => $statusOption,
+                                                                };
+                                                            @endphp
+                                                            <option value="{{ $statusOption }}" {{ $status === $statusOption ? 'selected' : '' }}>{{ $optionLabel }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                    <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>
+                                                </form>
+                                                <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
+                                            @endif
                                         </div>
                                     </td>
                                 </tr>
@@ -253,10 +367,17 @@
             const historyToggle = document.getElementById('order-history-toggle');
             const historyPanel = document.getElementById('order-history-panel');
             const historyIcon = document.getElementById('order-history-icon');
+            const todayQueueSection = document.getElementById('today-queue-section');
+            const todaySectionTitle = document.getElementById('today-section-title');
+            const deliveredSection = document.getElementById('delivered-section');
             const sections = [
                 {
                     body: document.getElementById('order-today-table-body'),
                     empty: document.getElementById('order-today-empty'),
+                },
+                {
+                    body: document.getElementById('order-delivered-table-body'),
+                    empty: document.getElementById('order-delivered-empty'),
                 },
                 {
                     body: document.getElementById('order-previous-table-body'),
@@ -280,13 +401,20 @@
             });
 
             let activeStatus = 'all';
+            const statusSectionTitle = {
+                all: 'Antrian Hari Ini',
+                confirmed: 'Terkonfirmasi Hari Ini',
+                in_queue: 'Dalam Antrean Hari Ini',
+                in_progress: 'Sedang Diproses Hari Ini',
+                delivered: 'Disajikan Hari Ini',
+            };
 
             function normalize(text) {
                 return String(text || '').toLowerCase().trim();
             }
 
             function sortRows(list) {
-                const mode = sortSelect ? sortSelect.value : 'default';
+                const mode = sortSelect ? sortSelect.value : 'queue-asc';
 
                 if (mode === 'default') {
                     return list.sort((a, b) => baseOrder.get(a) - baseOrder.get(b));
@@ -350,6 +478,21 @@
             }
 
             function applyFilters() {
+                if (todaySectionTitle) {
+                    todaySectionTitle.textContent = statusSectionTitle[activeStatus] || 'Antrian Hari Ini';
+                }
+
+                const isAllTab = activeStatus === 'all';
+                const isDeliveredTab = activeStatus === 'delivered';
+
+                if (todayQueueSection) {
+                    todayQueueSection.classList.toggle('hidden', isDeliveredTab);
+                }
+
+                if (deliveredSection) {
+                    deliveredSection.classList.toggle('hidden', !(isAllTab || isDeliveredTab));
+                }
+
                 sections.forEach(function (section, index) {
                     applyToSection(section, rowsBySection[index]);
                 });

@@ -81,7 +81,9 @@ class OrderService
         ?int $tableNumber,
         array $orderMenuItems,
         float|int $totalPrice,
-        string $orderType = 'dine_in'
+        string $orderType = 'dine_in',
+        ?string $bookingStartAt = null,
+        ?int $durationHours = null
     ): Order
     {
         $lastOrder = Order::orderBy('queue_number', 'desc')->first();
@@ -91,6 +93,8 @@ class OrderService
             'customer_id' => $userId,
             'order_type' => $orderType,
             'table_number' => $tableNumber,
+            'booking_start_at' => $bookingStartAt,
+            'duration_hours' => $durationHours,
             'status' => self::INITIAL_UNPAID_ORDER_STATUS,
             'payment_status' => 'PENDING',
             'table_cleared_at' => null,
@@ -219,6 +223,8 @@ class OrderService
             'customer' => $customerData,
             'orderType' => (string) ($order->order_type ?? 'dine_in'),
             'tableNumber' => $order->table_number,
+            'bookingStartAt' => $order->booking_start_at,
+            'durationHours' => $order->duration_hours,
             'status' => $order->status,
             'paymentStatus' => $order->payment_status,
             'paymentType' => $order->payment_type,

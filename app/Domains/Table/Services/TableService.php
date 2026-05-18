@@ -38,16 +38,14 @@ class TableService
         }
 
         $normalizedCustomerName = $this->normalizeCustomerName($customerName);
-        $normalizedCustomerEmail = $this->normalizeCustomerEmail($customerEmail);
         $normalizedBrowserSessionId = trim((string) $browserSessionId);
 
         $occupyingOrders = $this->occupyingOrdersQuery($tableId)->get([
             'customer_name',
-            'customer_email',
             'browser_session_id',
         ]);
 
-        return $occupyingOrders->contains(function ($order) use ($normalizedCustomerName, $normalizedCustomerEmail, $normalizedBrowserSessionId) {
+        return $occupyingOrders->contains(function ($order) use ($normalizedCustomerName, $normalizedBrowserSessionId) {
             if (!$order instanceof Order) {
                 return false;
             }
@@ -57,12 +55,11 @@ class TableService
                 return true;
             }
 
-            if ($normalizedCustomerName === '' || $normalizedCustomerEmail === '') {
+            if ($normalizedCustomerName === '') {
                 return false;
             }
 
-            return $this->normalizeCustomerName((string) ($order->customer_name ?? '')) === $normalizedCustomerName
-                && $this->normalizeCustomerEmail((string) ($order->customer_email ?? '')) === $normalizedCustomerEmail;
+            return $this->normalizeCustomerName((string) ($order->customer_name ?? '')) === $normalizedCustomerName;
         });
     }
 

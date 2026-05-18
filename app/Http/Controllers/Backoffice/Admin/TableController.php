@@ -68,12 +68,18 @@ class TableController extends Controller
             $tableId = (int) $tableId;
             $occupants = $ordersByTable->get($tableId, collect());
             $primary = $occupants->first();
+            $occupyingOrderItems = $occupants
+                ->map(function (Order $order) {
+                    return $this->buildOrderLitePayload($order);
+                })
+                ->values();
 
             return [
                 'tableId' => $tableId,
                 'isOccupied' => $occupants->isNotEmpty(),
                 'activeOrderCount' => $occupants->count(),
                 'currentOrder' => $primary ? $this->buildOrderLitePayload($primary) : null,
+                'occupyingOrders' => $occupyingOrderItems,
             ];
         })->values();
 

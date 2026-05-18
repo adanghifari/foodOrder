@@ -18,6 +18,8 @@ class Order extends Model
         'browser_session_id',
         'order_type',
         'table_number',
+        'booking_start_at',
+        'duration_hours',
         'payment_status',
         'midtrans_order_id',
         'payment_type',

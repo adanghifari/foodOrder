@@ -37,6 +37,7 @@ class DashboardController extends Controller
                 'id' => (string) $order->_id,
                 'display_id' => 'ORD-' . strtoupper(substr((string) $order->_id, -6)),
                 'status' => (string) ($order->status ?? 'UNKNOWN'),
+                'order_type' => strtoupper((string) ($order->order_type ?? 'DINE_IN')),
                 'customer_name' => $customerName !== '' ? $customerName : '-',
                 'customer_email' => trim((string) ($order->customer_email ?? '')) ?: '-',
                 'queue_number' => (int) ($order->queue_number ?? 0),

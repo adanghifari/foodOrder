@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Backoffice\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Domains\Order\Services\OrderService;
+use App\Models\Booking;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Validator;
@@ -19,13 +20,62 @@ class OrderController extends Controller
 
 	public function indexPage()
 	{
-		$orders = collect($this->orderService->adminList())
+		$paidOrders = collect($this->orderService->adminList())
 			->filter(function ($order) {
 				return empty($order['orderDeletedAt']);
 			})
 			->filter(function ($order) {
 				return in_array(strtoupper((string) ($order['paymentStatus'] ?? '')), self::PAID_STATUSES, true);
 			})
+			->values();
+
+		$bookingSnapshots = Booking::with('customer')
+			->orderBy('booking_start_at', 'asc')
+			->orderBy('_id', 'desc')
+			->get()
+			->map(function (Booking $booking) {
+				$mappedStatus = match (strtoupper((string) ($booking->status ?? ''))) {
+					'CONFIRMED' => 'CONFIRMED',
+					'SEATED' => 'IN_PROGRESS',
+					'COMPLETED' => 'DELIVERED',
+					default => null,
+				};
+
+				if ($mappedStatus === null) {
+					return null;
+				}
+
+				$customer = $booking->customer;
+				$customerName = (string) ($customer?->name ?? $customer?->username ?? '-');
+				$customerEmail = (string) ($customer?->email ?? $customer?->username ?? '-');
+				$bookingId = (string) $booking->_id;
+
+				return [
+					'orderId' => 'BOOKING:' . $bookingId,
+					'displayId' => 'BKG-' . strtoupper(substr($bookingId, -6)),
+					'sourceType' => 'BOOKING',
+					'customer' => [
+						'name' => $customerName,
+						'username' => $customerName,
+						'email' => $customerEmail,
+					],
+					'tableNumber' => (int) ($booking->table_number ?? 0),
+					'status' => $mappedStatus,
+					'paymentStatus' => 'SUCCESS',
+					'paidAt' => optional($booking->booking_start_at)?->toDateTimeString(),
+					'queueNumber' => 0,
+					'totalPrice' => (int) ($booking->extra_charge ?? 0),
+				];
+			})
+			->filter()
+			->values();
+
+		$orders = $paidOrders
+			->map(function (array $order) {
+				$order['sourceType'] = 'ORDER';
+				return $order;
+			})
+			->concat($bookingSnapshots)
 			->values();
 
 		$businessTimezone = 'Asia/Jakarta';
@@ -48,6 +98,18 @@ class OrderController extends Controller
 			return $paidAtDate->between($todayStart, $todayEnd);
 		})->values();
 
+		$todayDeliveredOrders = $todayOrders
+			->filter(function ($order) {
+				return strtoupper((string) ($order['status'] ?? '')) === 'DELIVERED';
+			})
+			->values();
+
+		$todayQueueOrders = $todayOrders
+			->reject(function ($order) {
+				return strtoupper((string) ($order['status'] ?? '')) === 'DELIVERED';
+			})
+			->values();
+
 		$previousOrders = $orders->reject(function ($order) use ($todayOrders) {
 			return $todayOrders->contains('orderId', (string) ($order['orderId'] ?? ''));
 		})->values();
@@ -61,13 +123,14 @@ class OrderController extends Controller
 
 		$summary = [
 			'total' => $todayOrders->count(),
-			'waiting' => $todayOrders->whereIn('status', ['CONFIRMED', 'IN_QUEUE'])->count(),
-			'processing' => $todayOrders->where('status', 'IN_PROGRESS')->count(),
-			'delivered' => $todayOrders->where('status', 'DELIVERED')->count(),
+			'waiting' => $todayQueueOrders->whereIn('status', ['CONFIRMED', 'IN_QUEUE'])->count(),
+			'processing' => $todayQueueOrders->where('status', 'IN_PROGRESS')->count(),
+			'delivered' => $todayDeliveredOrders->count(),
 		];
 
 		return view('backoffice.order.index', [
-			'todayOrders' => $todayOrders,
+			'todayOrders' => $todayQueueOrders,
+			'todayDeliveredOrders' => $todayDeliveredOrders,
 			'previousOrders' => $previousOrders,
 			'summary' => $summary,
 			'selectedOrder' => $selectedOrder,

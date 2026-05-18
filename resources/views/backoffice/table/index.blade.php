@@ -81,6 +81,7 @@
                     $isOccupied = (bool) ($table['isOccupied'] ?? false);
                     $activeOrderCount = (int) ($table['activeOrderCount'] ?? 0);
                     $currentOrder = $table['currentOrder'] ?? null;
+                    $occupyingOrders = collect($table['occupyingOrders'] ?? []);
                     $cardClass = $isOccupied
                         ? 'border-red-200 bg-red-50'
                         : 'border-emerald-200 bg-emerald-50';
@@ -118,6 +119,35 @@
                             <p>Email: {{ $currentOrder['customerEmail'] ?? '-' }}</p>
                             <p>Status: {{ $currentOrderStatusLabel }}</p>
                         </div>
+
+                        @if ($occupyingOrders->count() > 1)
+                            <details class="mt-3 rounded-xl border border-red-200 bg-white/90">
+                                <summary class="cursor-pointer list-none px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-red-700 flex items-center justify-between">
+                                    <span>Lihat Detail</span>
+                                    <span>{{ $occupyingOrders->count() }} order</span>
+                                </summary>
+                                <div class="px-3 pb-3 space-y-2">
+                                    @foreach ($occupyingOrders as $orderItem)
+                                        @php
+                                            $statusRaw = strtoupper((string) ($orderItem['status'] ?? 'UNKNOWN'));
+                                            $statusText = match ($statusRaw) {
+                                                'PENDING_PAYMENT' => 'Menunggu Pembayaran',
+                                                'CONFIRMED' => 'Terkonfirmasi',
+                                                'IN_QUEUE' => 'Dalam Antrean',
+                                                'IN_PROGRESS' => 'Sedang Diproses',
+                                                'DELIVERED' => 'Disajikan',
+                                                default => ucfirst(strtolower(str_replace('_', ' ', $statusRaw))),
+                                            };
+                                        @endphp
+                                        <div class="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700">
+                                            <p class="font-bold text-[var(--rich-black)]">{{ $orderItem['displayId'] ?? '-' }} | #{{ (int) ($orderItem['queueNumber'] ?? 0) }}</p>
+                                            <p>{{ $orderItem['customerName'] ?? '-' }} ({{ $orderItem['customerEmail'] ?? '-' }})</p>
+                                            <p>Status: {{ $statusText }}</p>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </details>
+                        @endif
                     @else
                         <div class="mt-3 rounded-xl border border-emerald-200 bg-white/80 p-3 text-sm font-semibold text-emerald-800">
                             Belum ada order aktif di meja ini.
@@ -141,7 +171,7 @@
                             @method('PATCH')
                             <button
                                 type="submit"
-                                class="w-full inline-flex items-center justify-center rounded-lg border border-red-200 bg-white hover:bg-red-50 text-red-700 text-xs font-extrabold px-3 py-2 transition"
+                                class="w-full inline-flex items-center justify-center rounded-lg border border-red-700 bg-red-700 hover:bg-red-800 text-white text-xs font-extrabold px-3 py-2 transition"
                             >
                                 Kosongkan Meja
                             </button>
