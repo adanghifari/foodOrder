@@ -125,12 +125,15 @@
                                         $dashOrderType = strtoupper((string) ($selectedOrder['order_type'] ?? 'DINE_IN'));
                                         $dashOrderTypeLabel = match ($dashOrderType) {
                                             'DINE_IN' => 'Dine In',
-                                            'TAKE_AWAY' => 'Take Away',
+                                            'BOOKING_DINE_IN' => 'Booking Dine In',
+                                            'PICKUP' => 'Pickup',
+                                            'TAKE_AWAY' => 'Pickup',
                                             default => ucwords(strtolower(str_replace('_', ' ', $dashOrderType))),
                                         };
                                         $dashOrderTypeClass = match ($dashOrderType) {
                                             'DINE_IN' => 'bg-sky-100 text-sky-700',
-                                            'TAKE_AWAY' => 'bg-violet-100 text-violet-700',
+                                            'BOOKING_DINE_IN' => 'bg-indigo-100 text-indigo-700',
+                                            'PICKUP', 'TAKE_AWAY' => 'bg-violet-100 text-violet-700',
                                             default => 'bg-slate-100 text-slate-700',
                                         };
                                     @endphp

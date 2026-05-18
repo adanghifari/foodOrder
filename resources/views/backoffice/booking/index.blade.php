@@ -58,8 +58,13 @@
                         $endAt = '-';
                     }
 
+                    $sourceType = (string) ($booking['sourceType'] ?? 'BOOKING');
+                    $sourceLabel = $sourceType === 'BOOKING_DINE_IN' ? 'Booking Dine In' : 'Booking';
+                    $sourceClass = $sourceType === 'BOOKING_DINE_IN' ? 'bg-indigo-100 text-indigo-700' : 'bg-sky-100 text-sky-700';
+
                     echo '<tr class="border-b border-slate-200">';
                     echo '<td class="px-4 py-3 text-sm font-extrabold text-[var(--rich-black)]">' . e((string) ($booking['displayId'] ?? '-')) . '</td>';
+                    echo '<td class="px-4 py-3"><span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ' . e($sourceClass) . '">' . e($sourceLabel) . '</span></td>';
                     echo '<td class="px-4 py-3 text-sm text-slate-700">Meja ' . e((string) ((int) ($booking['tableNumber'] ?? 0))) . '</td>';
                     echo '<td class="px-4 py-3 text-sm text-slate-700">' . e((string) ($booking['customerName'] ?? '-')) . '</td>';
                     echo '<td class="px-4 py-3 text-sm text-slate-700">' . e((string) ($booking['customerEmail'] ?? '-')) . '</td>';
@@ -101,6 +106,7 @@
                     <thead class="bg-white border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
                         <tr>
                             <th class="px-4 py-3 font-bold">Booking ID</th>
+                            <th class="px-4 py-3 font-bold">Tipe</th>
                             <th class="px-4 py-3 font-bold">Meja</th>
                             <th class="px-4 py-3 font-bold">Nama</th>
                             <th class="px-4 py-3 font-bold">Email</th>
@@ -115,7 +121,7 @@
                     <tbody>
                         @if (collect($todayBookings ?? [])->isEmpty())
                             <tr>
-                                <td colspan="10" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">Belum ada booking hari ini.</td>
+                                <td colspan="11" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">Belum ada booking hari ini.</td>
                             </tr>
                         @else
                             {!! $renderRows($todayBookings ?? []) !!}
@@ -134,6 +140,7 @@
                     <thead class="bg-white border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
                         <tr>
                             <th class="px-4 py-3 font-bold">Booking ID</th>
+                            <th class="px-4 py-3 font-bold">Tipe</th>
                             <th class="px-4 py-3 font-bold">Meja</th>
                             <th class="px-4 py-3 font-bold">Nama</th>
                             <th class="px-4 py-3 font-bold">Email</th>
@@ -148,7 +155,7 @@
                     <tbody>
                         @if (collect($upcomingBookings ?? [])->isEmpty())
                             <tr>
-                                <td colspan="10" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">Belum ada booking jadwal akan datang.</td>
+                                <td colspan="11" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">Belum ada booking jadwal akan datang.</td>
                             </tr>
                         @else
                             {!! $renderRows($upcomingBookings ?? []) !!}
@@ -167,6 +174,7 @@
                     <thead class="bg-white border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
                         <tr>
                             <th class="px-4 py-3 font-bold">Booking ID</th>
+                            <th class="px-4 py-3 font-bold">Tipe</th>
                             <th class="px-4 py-3 font-bold">Meja</th>
                             <th class="px-4 py-3 font-bold">Nama</th>
                             <th class="px-4 py-3 font-bold">Email</th>
@@ -181,7 +189,7 @@
                     <tbody>
                         @if (collect($previousBookings ?? [])->isEmpty())
                             <tr>
-                                <td colspan="10" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">Belum ada riwayat booking sebelumnya.</td>
+                                <td colspan="11" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">Belum ada riwayat booking sebelumnya.</td>
                             </tr>
                         @else
                             {!! $renderRows($previousBookings ?? []) !!}

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Backoffice\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
+use App\Models\Order;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Validator;
@@ -25,6 +26,21 @@ class BookingController extends Controller
             ->map(function (Booking $booking) {
                 return $this->buildBookingPayload($booking);
             })
+            ->values();
+
+        $bookingDineInOrders = Order::with('customer')
+            ->where('order_type', 'booking_dine_in')
+            ->whereNull('order_deleted_at')
+            ->orderBy('booking_start_at', 'asc')
+            ->orderBy('_id', 'desc')
+            ->get()
+            ->map(function (Order $order) {
+                return $this->buildBookingPayloadFromOrder($order);
+            })
+            ->values();
+
+        $bookings = $bookings->concat($bookingDineInOrders)
+            ->sortBy('bookingStartAt')
             ->values();
 
         $todayBookings = $bookings->filter(function (array $booking) use ($todayStart, $todayEnd, $timezone) {
@@ -127,6 +143,7 @@ class BookingController extends Controller
         return [
             'bookingId' => (string) $booking->_id,
             'displayId' => 'BKG-' . strtoupper(substr((string) $booking->_id, -6)),
+            'sourceType' => 'BOOKING',
             'tableNumber' => (int) ($booking->table_number ?? 0),
             'status' => strtoupper((string) ($booking->status ?? 'UNKNOWN')),
             'customerName' => $customerName,
@@ -136,6 +153,50 @@ class BookingController extends Controller
             'totalBookingCharge' => (int) ($booking->total_booking_charge ?? 0),
             'bookingStartAt' => optional($booking->booking_start_at)?->toIso8601String(),
             'bookingEndAt' => optional($booking->booking_end_at)?->toIso8601String(),
+        ];
+    }
+
+    private function buildBookingPayloadFromOrder(Order $order): array
+    {
+        $customer = $order->customer;
+        $customerName = (string) ($customer?->name ?? $customer?->username ?? '-');
+        $customerEmail = (string) ($customer?->email ?? $customer?->username ?? '-');
+
+        $mappedStatus = match (strtoupper((string) ($order->status ?? ''))) {
+            'PENDING_PAYMENT' => 'CONFIRMED',
+            'CONFIRMED' => 'CONFIRMED',
+            'IN_QUEUE', 'IN_PROGRESS' => 'SEATED',
+            'DELIVERED' => 'COMPLETED',
+            default => strtoupper((string) ($order->status ?? 'UNKNOWN')),
+        };
+
+        $bookingStartAt = $order->booking_start_at;
+        $durationHours = (int) ($order->duration_hours ?? 0);
+        $bookingEndAt = null;
+
+        if ($bookingStartAt && $durationHours > 0) {
+            try {
+                $bookingEndAt = \Illuminate\Support\Carbon::parse($bookingStartAt)
+                    ->addHours($durationHours)
+                    ->toIso8601String();
+            } catch (\Throwable $e) {
+                $bookingEndAt = null;
+            }
+        }
+
+        return [
+            'bookingId' => (string) $order->_id,
+            'displayId' => 'ORD-' . strtoupper(substr((string) $order->_id, -6)),
+            'sourceType' => 'BOOKING_DINE_IN',
+            'tableNumber' => (int) ($order->table_number ?? 0),
+            'status' => $mappedStatus,
+            'customerName' => $customerName,
+            'customerEmail' => $customerEmail,
+            'durationHours' => $durationHours,
+            'extraCharge' => (int) ($order->total_price ?? 0),
+            'totalBookingCharge' => (int) ($order->total_price ?? 0),
+            'bookingStartAt' => $bookingStartAt ? (is_string($bookingStartAt) ? $bookingStartAt : $bookingStartAt->toIso8601String()) : null,
+            'bookingEndAt' => $bookingEndAt,
         ];
     }
 }
