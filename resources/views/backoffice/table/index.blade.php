@@ -82,6 +82,8 @@
                     $activeOrderCount = (int) ($table['activeOrderCount'] ?? 0);
                     $currentOrder = $table['currentOrder'] ?? null;
                     $occupyingOrders = collect($table['occupyingOrders'] ?? []);
+                    $todaySectionItems = collect($table['todaySectionItems'] ?? []);
+                    $upcomingSectionItems = collect($table['upcomingSectionItems'] ?? []);
                     $cardClass = $isOccupied
                         ? 'border-red-200 bg-red-50'
                         : 'border-emerald-200 bg-emerald-50';
@@ -99,6 +101,18 @@
                             {{ $activeOrderCount }} order
                         </span>
                     </div>
+
+                    <button
+                        type="button"
+                        class="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-extrabold px-3 py-2 transition"
+                        data-table-detail-open="{{ $tableId }}"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                        <span>Lihat Detail Meja</span>
+                    </button>
 
                     @if ($currentOrder)
                         @php
@@ -120,34 +134,6 @@
                             <p>Status: {{ $currentOrderStatusLabel }}</p>
                         </div>
 
-                        @if ($occupyingOrders->count() > 1)
-                            <details class="mt-3 rounded-xl border border-red-200 bg-white/90">
-                                <summary class="cursor-pointer list-none px-3 py-2 text-xs font-extrabold uppercase tracking-wide text-red-700 flex items-center justify-between">
-                                    <span>Lihat Detail</span>
-                                    <span>{{ $occupyingOrders->count() }} order</span>
-                                </summary>
-                                <div class="px-3 pb-3 space-y-2">
-                                    @foreach ($occupyingOrders as $orderItem)
-                                        @php
-                                            $statusRaw = strtoupper((string) ($orderItem['status'] ?? 'UNKNOWN'));
-                                            $statusText = match ($statusRaw) {
-                                                'PENDING_PAYMENT' => 'Menunggu Pembayaran',
-                                                'CONFIRMED' => 'Terkonfirmasi',
-                                                'IN_QUEUE' => 'Dalam Antrean',
-                                                'IN_PROGRESS' => 'Sedang Diproses',
-                                                'DELIVERED' => 'Disajikan',
-                                                default => ucfirst(strtolower(str_replace('_', ' ', $statusRaw))),
-                                            };
-                                        @endphp
-                                        <div class="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-700">
-                                            <p class="font-bold text-[var(--rich-black)]">{{ $orderItem['displayId'] ?? '-' }} | #{{ (int) ($orderItem['queueNumber'] ?? 0) }}</p>
-                                            <p>{{ $orderItem['customerName'] ?? '-' }} ({{ $orderItem['customerEmail'] ?? '-' }})</p>
-                                            <p>Status: {{ $statusText }}</p>
-                                        </div>
-                                    @endforeach
-                                </div>
-                            </details>
-                        @endif
                     @else
                         <div class="mt-3 rounded-xl border border-emerald-200 bg-white/80 p-3 text-sm font-semibold text-emerald-800">
                             Belum ada order aktif di meja ini.
@@ -178,6 +164,114 @@
                         </form>
                     @endif
                 </article>
+
+                <div
+                    class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 px-4"
+                    data-table-detail-modal="{{ $tableId }}"
+                >
+                    <div class="w-full max-w-3xl rounded-2xl bg-white shadow-xl">
+                        <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                            <h4 class="text-lg font-extrabold text-[var(--rich-black)]">Detail Meja {{ $tableId }}</h4>
+                            <button type="button" class="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-slate-100" data-table-detail-close="{{ $tableId }}">Tutup</button>
+                        </div>
+
+                        <div class="max-h-[70vh] overflow-y-auto p-5 space-y-5">
+                            <section class="space-y-2">
+                                <h5 class="text-sm font-extrabold uppercase tracking-wide text-slate-600">Hari Ini</h5>
+                                @if ($todaySectionItems->isEmpty())
+                                    <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                                        Tidak ada status meja untuk hari ini.
+                                    </div>
+                                @else
+                                    <div class="space-y-2">
+                                        @foreach ($todaySectionItems as $item)
+                                            @php
+                                                $entryType = (string) ($item['entryType'] ?? '');
+                                                $entry = $item['data'] ?? [];
+                                                $statusRaw = strtoupper((string) ($entry['status'] ?? 'UNKNOWN'));
+                                                $statusText = match ($statusRaw) {
+                                                    'PENDING_PAYMENT' => 'Menunggu Pembayaran',
+                                                    'CONFIRMED' => 'Terkonfirmasi',
+                                                    'IN_QUEUE' => 'Dalam Antrean',
+                                                    'IN_PROGRESS' => 'Sedang Diproses',
+                                                    'DELIVERED' => 'Disajikan',
+                                                    'PENDING' => 'Menunggu Konfirmasi',
+                                                    'SEATED' => 'Sudah Duduk',
+                                                    default => ucfirst(strtolower(str_replace('_', ' ', $statusRaw))),
+                                                };
+                                                $startLabel = isset($entry['bookingStartAt']) && $entry['bookingStartAt']
+                                                    ? \Illuminate\Support\Carbon::parse($entry['bookingStartAt'])->timezone('Asia/Jakarta')->format('d M Y H:i')
+                                                    : null;
+                                                $endLabel = isset($entry['bookingEndAt']) && $entry['bookingEndAt']
+                                                    ? \Illuminate\Support\Carbon::parse($entry['bookingEndAt'])->timezone('Asia/Jakarta')->format('d M Y H:i')
+                                                    : null;
+                                            @endphp
+                                            <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                                                <p class="font-bold text-[var(--rich-black)]">
+                                                    {{ $entryType === 'order' ? 'On The Spot' : 'Booking Hari Ini' }} - {{ $entry['displayId'] ?? '-' }}
+                                                </p>
+                                                <p>{{ $entry['customerName'] ?? '-' }} ({{ $entry['customerEmail'] ?? '-' }})</p>
+                                                <p>Status: {{ $statusText }}</p>
+                                                @if ($startLabel)
+                                                    <p>Mulai: {{ $startLabel }}</p>
+                                                @endif
+                                                @if ($endLabel)
+                                                    <p>Selesai: {{ $endLabel }}</p>
+                                                @endif
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endif
+                            </section>
+
+                            <section class="space-y-2">
+                                <h5 class="text-sm font-extrabold uppercase tracking-wide text-slate-600">Booking Mendatang (Bukan Hari Ini)</h5>
+                                @if ($upcomingSectionItems->isEmpty())
+                                    <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                                        Tidak ada booking mendatang di luar hari ini.
+                                    </div>
+                                @else
+                                    <div class="space-y-2" data-upcoming-list="{{ $tableId }}">
+                                        @foreach ($upcomingSectionItems as $item)
+                                            @php
+                                                $entry = $item['data'] ?? [];
+                                                $statusRaw = strtoupper((string) ($entry['status'] ?? 'UNKNOWN'));
+                                                $statusText = match ($statusRaw) {
+                                                    'PENDING' => 'Menunggu Konfirmasi',
+                                                    'CONFIRMED' => 'Terkonfirmasi',
+                                                    'SEATED' => 'Sudah Duduk',
+                                                    default => ucfirst(strtolower(str_replace('_', ' ', $statusRaw))),
+                                                };
+                                                $startLabel = isset($entry['bookingStartAt']) && $entry['bookingStartAt']
+                                                    ? \Illuminate\Support\Carbon::parse($entry['bookingStartAt'])->timezone('Asia/Jakarta')->format('d M Y H:i')
+                                                    : '-';
+                                                $endLabel = isset($entry['bookingEndAt']) && $entry['bookingEndAt']
+                                                    ? \Illuminate\Support\Carbon::parse($entry['bookingEndAt'])->timezone('Asia/Jakarta')->format('d M Y H:i')
+                                                    : '-';
+                                            @endphp
+                                            <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700" data-upcoming-item="{{ $tableId }}">
+                                                <p class="font-bold text-[var(--rich-black)]">Booking - {{ $entry['displayId'] ?? '-' }}</p>
+                                                <p>{{ $entry['customerName'] ?? '-' }} ({{ $entry['customerEmail'] ?? '-' }})</p>
+                                                <p>Status: {{ $statusText }}</p>
+                                                <p>Mulai: {{ $startLabel }}</p>
+                                                <p>Selesai: {{ $endLabel }}</p>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    <div class="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs" data-upcoming-pagination="{{ $tableId }}">
+                                        <button type="button" class="rounded-md border border-slate-300 px-2 py-1 font-bold text-slate-600 disabled:opacity-40" data-upcoming-prev="{{ $tableId }}">
+                                            Sebelumnya
+                                        </button>
+                                        <span class="font-semibold text-slate-600" data-upcoming-page-label="{{ $tableId }}">Halaman 1</span>
+                                        <button type="button" class="rounded-md border border-slate-300 px-2 py-1 font-bold text-slate-600 disabled:opacity-40" data-upcoming-next="{{ $tableId }}">
+                                            Berikutnya
+                                        </button>
+                                    </div>
+                                @endif
+                            </section>
+                        </div>
+                    </div>
+                </div>
             @empty
                 <article class="md:col-span-2 xl:col-span-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
                     <p class="text-sm font-semibold text-slate-500">Belum ada data meja.</p>
@@ -185,5 +279,87 @@
             @endforelse
         </section>
     </section>
+
+    <script>
+        (function () {
+            const pageSize = 3;
+            const paginations = document.querySelectorAll('[data-upcoming-pagination]');
+
+            paginations.forEach(function (paginationEl) {
+                const tableId = paginationEl.getAttribute('data-upcoming-pagination');
+                const items = Array.from(document.querySelectorAll('[data-upcoming-item="' + tableId + '"]'));
+                const prevBtn = paginationEl.querySelector('[data-upcoming-prev="' + tableId + '"]');
+                const nextBtn = paginationEl.querySelector('[data-upcoming-next="' + tableId + '"]');
+                const pageLabel = paginationEl.querySelector('[data-upcoming-page-label="' + tableId + '"]');
+
+                if (!items.length || !prevBtn || !nextBtn || !pageLabel) {
+                    paginationEl.classList.add('hidden');
+                    return;
+                }
+
+                let currentPage = 1;
+                const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+
+                function render() {
+                    const start = (currentPage - 1) * pageSize;
+                    const end = start + pageSize;
+
+                    items.forEach(function (item, index) {
+                        item.classList.toggle('hidden', !(index >= start && index < end));
+                    });
+
+                    pageLabel.textContent = 'Halaman ' + currentPage + ' dari ' + totalPages;
+                    prevBtn.disabled = currentPage === 1;
+                    nextBtn.disabled = currentPage === totalPages;
+                }
+
+                prevBtn.addEventListener('click', function () {
+                    if (currentPage > 1) {
+                        currentPage -= 1;
+                        render();
+                    }
+                });
+
+                nextBtn.addEventListener('click', function () {
+                    if (currentPage < totalPages) {
+                        currentPage += 1;
+                        render();
+                    }
+                });
+
+                render();
+            });
+        })();
+
+        document.addEventListener('click', function (event) {
+            const openTrigger = event.target.closest('[data-table-detail-open]');
+            if (openTrigger) {
+                const tableId = openTrigger.getAttribute('data-table-detail-open');
+                const modal = document.querySelector('[data-table-detail-modal="' + tableId + '"]');
+                if (modal) {
+                    modal.classList.remove('hidden');
+                    modal.classList.add('flex');
+                }
+                return;
+            }
+
+            const closeTrigger = event.target.closest('[data-table-detail-close]');
+            if (closeTrigger) {
+                const tableId = closeTrigger.getAttribute('data-table-detail-close');
+                const modal = document.querySelector('[data-table-detail-modal="' + tableId + '"]');
+                if (modal) {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                }
+                return;
+            }
+
+            const modalBackdrop = event.target.closest('[data-table-detail-modal]');
+            if (modalBackdrop && event.target === modalBackdrop) {
+                modalBackdrop.classList.add('hidden');
+                modalBackdrop.classList.remove('flex');
+            }
+        });
+    </script>
 
 </x-backoffice.layout>

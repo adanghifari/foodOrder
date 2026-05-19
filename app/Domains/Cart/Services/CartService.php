@@ -2,6 +2,7 @@
 
 namespace App\Domains\Cart\Services;
 
+use App\Domains\Booking\Services\BookingService;
 use App\Models\CartItem;
 use App\Models\MenuItem;
 use App\Domains\Order\Services\OrderService;
@@ -11,7 +12,8 @@ class CartService
 {
     public function __construct(
         private readonly TableService $tableService,
-        private readonly OrderService $orderService
+        private readonly OrderService $orderService,
+        private readonly BookingService $bookingService
     ) {
     }
 
@@ -144,19 +146,33 @@ class CartService
                 ];
             }
 
-            if (!$this->tableService->isTableAvailable($tableNumber)) {
-                return [
-                    'ok' => false,
-                    'status' => 409,
-                    'message' => 'Selected table is not available',
-                ];
-            }
-
             if (!$bookingStartAt || !$durationHours) {
                 return [
                     'ok' => false,
                     'status' => 422,
                     'message' => 'Booking start time and duration are required for booking dine-in',
+                ];
+            }
+
+            $availability = $this->bookingService->getAvailability($bookingStartAt, (int) $durationHours);
+            if (!($availability['ok'] ?? false)) {
+                return [
+                    'ok' => false,
+                    'status' => (int) ($availability['status'] ?? 422),
+                    'message' => (string) ($availability['message'] ?? 'Gagal memeriksa ketersediaan meja.'),
+                ];
+            }
+
+            $availableTables = collect($availability['data']['availableTables'] ?? [])
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn ($id) => $id > 0)
+                ->values();
+
+            if (! $availableTables->contains($tableNumber)) {
+                return [
+                    'ok' => false,
+                    'status' => 409,
+                    'message' => 'Meja tidak tersedia pada jam yang dipilih.',
                 ];
             }
         } elseif ($orderType === 'dine_in') {
@@ -177,10 +193,11 @@ class CartService
             }
 
             if (!$this->tableService->isTableAvailable($tableNumber)) {
+                $reason = $this->tableService->getTableUnavailableReason($tableNumber);
                 return [
                     'ok' => false,
                     'status' => 409,
-                    'message' => 'Selected table is not available',
+                    'message' => $reason ?? 'Selected table is not available',
                 ];
             }
 

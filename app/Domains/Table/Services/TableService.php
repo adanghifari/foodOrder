@@ -2,8 +2,10 @@
 
 namespace App\Domains\Table\Services;
 
+use App\Models\Booking;
 use App\Models\Order;
 use App\Support\TableGuard;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
@@ -22,7 +24,117 @@ class TableService
 
     public function isTableAvailable(int $tableId): bool
     {
-        return ! $this->occupyingOrdersQuery($tableId)->exists();
+        return ! $this->occupyingOrdersQuery($tableId)->exists()
+            && ! $this->isPreBlockedByUpcomingBooking($tableId);
+    }
+
+    public function getTableUnavailableReason(int $tableId): ?string
+    {
+        if ($this->occupyingOrdersQuery($tableId)->exists()) {
+            return 'Meja sedang dipakai.';
+        }
+
+        if ($this->isPreBlockedByUpcomingBooking($tableId)) {
+            $preBlockHours = max(0, (int) config('booking.pre_block_hours', 2));
+            return 'Meja terblokir karena ada booking terjadwal dalam '
+                . $preBlockHours
+                . ' jam ke depan.';
+        }
+
+        return null;
+    }
+
+    public function occupyingTableIds(?array $knownTableIds = null): array
+    {
+        $query = Order::query();
+
+        if (is_array($knownTableIds) && !empty($knownTableIds)) {
+            $query->whereIn('table_number', $knownTableIds);
+        }
+
+        return $this->applyBookingDineInStartConstraint(
+            $query
+            ->where(function ($query) {
+                $query->where(function ($paidFlowQuery) {
+                    $paidFlowQuery->whereIn('payment_status', self::PAID_STATUSES)
+                        ->where(function ($paidStatusQuery) {
+                            $paidStatusQuery->whereIn('status', self::ACTIVE_ORDER_STATUSES)
+                                ->orWhere(function ($deliveredQuery) {
+                                    $deliveredQuery->where('status', 'DELIVERED')
+                                        ->whereNull('table_cleared_at');
+                                });
+                        });
+                })->orWhere(function ($pendingFlowQuery) {
+                    $pendingFlowQuery->whereIn('payment_status', self::HOLD_PAYMENT_STATUSES)
+                        ->whereIn('status', self::HOLD_ORDER_STATUSES)
+                        ->whereNull('table_cleared_at');
+                });
+            })
+        )
+            ->pluck('table_number')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->toArray();
+    }
+
+    public function blockingTableIdsForBookingSlot(
+        Carbon $slotStartAt,
+        Carbon $slotEndAt,
+        array $knownTableIds
+    ): array {
+        if (empty($knownTableIds)) {
+            return [];
+        }
+
+        $localSlotStart = $slotStartAt->copy()->timezone('Asia/Jakarta');
+        $localSlotEnd = $slotEndAt->copy()->timezone('Asia/Jakarta');
+        $openingAt = $localSlotStart->copy()
+            ->startOfDay()
+            ->setHour((int) config('booking.open_hour', 8))
+            ->setMinute(0)
+            ->setSecond(0);
+        $closingAt = $localSlotStart->copy()
+            ->startOfDay()
+            ->setHour((int) config('booking.close_hour', 20))
+            ->setMinute(0)
+            ->setSecond(0);
+
+        if ($localSlotStart->gte($closingAt)) {
+            return [];
+        }
+
+        $blockingWindowEnd = $localSlotEnd->lte($closingAt) ? $localSlotEnd : $closingAt;
+
+        return Order::whereIn('table_number', $knownTableIds)
+            ->where('order_type', 'dine_in')
+            ->whereNull('table_cleared_at')
+            ->where(function ($query) {
+                $query->where(function ($paidFlowQuery) {
+                    $paidFlowQuery->whereIn('payment_status', self::PAID_STATUSES)
+                        ->where(function ($paidStatusQuery) {
+                            $paidStatusQuery->whereIn('status', self::ACTIVE_ORDER_STATUSES)
+                                ->orWhere('status', 'DELIVERED');
+                        });
+                })->orWhere(function ($pendingFlowQuery) {
+                    $pendingFlowQuery->whereIn('payment_status', self::HOLD_PAYMENT_STATUSES)
+                        ->whereIn('status', self::HOLD_ORDER_STATUSES);
+                });
+            })
+            ->where(function ($query) use ($openingAt, $blockingWindowEnd) {
+                // On-the-spot dine-in blocks a table from order creation time
+                // until closing time on the same booking date,
+                // unless table is cleared manually/automatically.
+                $query->where('created_at', '>=', $openingAt->utc())
+                    ->where('created_at', '<', $blockingWindowEnd->utc());
+            })
+            ->pluck('table_number')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->toArray();
     }
 
     public function canPlaceOrderForSession(
@@ -65,7 +177,8 @@ class TableService
 
     public function occupyingOrdersQuery(int $tableId)
     {
-        return Order::where('table_number', $tableId)
+        return $this->applyBookingDineInStartConstraint(
+            Order::where('table_number', $tableId)
             ->where(function ($query) {
                 $query->where(function ($paidFlowQuery) {
                     $paidFlowQuery->whereIn('payment_status', self::PAID_STATUSES)
@@ -82,7 +195,34 @@ class TableService
                         ->whereIn('status', self::HOLD_ORDER_STATUSES)
                         ->whereNull('table_cleared_at');
                 });
-            });
+            })
+        );
+    }
+
+    private function applyBookingDineInStartConstraint(Builder $query): Builder
+    {
+        $now = now();
+
+        return $query->where(function ($scopedQuery) use ($now) {
+            $scopedQuery->where('order_type', '!=', 'booking_dine_in')
+                ->orWhere(function ($bookingDineInQuery) use ($now) {
+                    $bookingDineInQuery->where('order_type', 'booking_dine_in')
+                        ->where('booking_start_at', '<=', $now);
+                });
+        });
+    }
+
+    private function isPreBlockedByUpcomingBooking(int $tableId): bool
+    {
+        $preBlockHours = max(0, (int) config('booking.pre_block_hours', 2));
+        $now = now();
+        $preBlockBoundary = $now->copy()->addHours($preBlockHours);
+
+        return Booking::where('table_number', $tableId)
+            ->whereIn('status', ['PENDING', 'CONFIRMED', 'SEATED'])
+            ->where('booking_end_at', '>', $now)
+            ->where('booking_start_at', '<=', $preBlockBoundary)
+            ->exists();
     }
 
     public function autoClearExpiredDeliveredAssignments(?int $graceMinutes = null): int

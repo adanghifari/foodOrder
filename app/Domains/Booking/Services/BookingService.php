@@ -3,12 +3,20 @@
 namespace App\Domains\Booking\Services;
 
 use App\Models\Booking;
+use App\Models\Order;
+use App\Domains\Table\Services\TableService;
 use App\Support\TableGuard;
 use Illuminate\Support\Carbon;
 
 class BookingService
 {
     private const ACTIVE_BOOKING_STATUSES = ['PENDING', 'CONFIRMED', 'SEATED'];
+    private const ACTIVE_BOOKING_ORDER_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'IN_QUEUE', 'IN_PROGRESS'];
+
+    public function __construct(
+        private readonly TableService $tableService
+    ) {
+    }
 
     public function getAvailability(string $startAtRaw, int $durationHours): array
     {
@@ -21,6 +29,8 @@ class BookingService
         $startAt = $timeWindow['start_at'];
         /** @var Carbon $endAt */
         $endAt = $timeWindow['end_at'];
+        $preBlockHours = max(0, (int) config('booking.pre_block_hours', 2));
+        $expandedEndAt = $endAt->copy()->addHours($preBlockHours);
 
         $knownTables = collect(config('tables.known_table_ids', []))
             ->map(fn ($id) => (int) $id)
@@ -34,17 +44,42 @@ class BookingService
             ));
         }
 
-        $conflictingTableIds = Booking::whereIn('table_number', $knownTables->toArray())
+        $startWithCooldownBoundary = $startAt->copy()->subHours($preBlockHours);
+
+        $conflictingBookingTableIds = Booking::whereIn('table_number', $knownTables->toArray())
             ->whereIn('status', self::ACTIVE_BOOKING_STATUSES)
-            ->where('booking_start_at', '<', $endAt)
-            ->where('booking_end_at', '>', $startAt)
+            ->where('booking_start_at', '<', $expandedEndAt)
+            ->where('booking_end_at', '>', $startWithCooldownBoundary)
             ->pluck('table_number')
             ->map(fn ($id) => (int) $id)
             ->unique()
             ->values();
 
+        $conflictingBookingOrderTableIds = $this->getConflictingBookingOrderTableIds(
+            $startAt,
+            $expandedEndAt,
+            $knownTables->toArray()
+        );
+
+        $onSpotBlockingTableIds = collect(
+            $this->tableService->blockingTableIdsForBookingSlot(
+                $startAt,
+                $endAt,
+                $knownTables->toArray()
+            )
+        )
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        $unavailableTableIds = $conflictingBookingTableIds
+            ->merge($conflictingBookingOrderTableIds)
+            ->merge($onSpotBlockingTableIds)
+            ->unique()
+            ->values();
+
         $availableTableIds = $knownTables
-            ->reject(fn ($tableId) => $conflictingTableIds->contains((int) $tableId))
+            ->reject(fn ($tableId) => $unavailableTableIds->contains((int) $tableId))
             ->values();
 
         return [
@@ -55,7 +90,7 @@ class BookingService
                 'durationHours' => $durationHours,
                 'extraCharge' => $this->calculateExtraCharge($durationHours),
                 'availableTables' => $availableTableIds->toArray(),
-                'unavailableTables' => $conflictingTableIds->toArray(),
+                'unavailableTables' => $unavailableTableIds->toArray(),
             ],
         ];
     }
@@ -79,14 +114,24 @@ class BookingService
         $startAt = $timeWindow['start_at'];
         /** @var Carbon $endAt */
         $endAt = $timeWindow['end_at'];
+        $preBlockHours = max(0, (int) config('booking.pre_block_hours', 2));
+        $expandedEndAt = $endAt->copy()->addHours($preBlockHours);
 
-        $hasConflict = Booking::where('table_number', $tableNumber)
+        $startWithCooldownBoundary = $startAt->copy()->subHours($preBlockHours);
+
+        $hasBookingConflict = Booking::where('table_number', $tableNumber)
             ->whereIn('status', self::ACTIVE_BOOKING_STATUSES)
-            ->where('booking_start_at', '<', $endAt)
-            ->where('booking_end_at', '>', $startAt)
+            ->where('booking_start_at', '<', $expandedEndAt)
+            ->where('booking_end_at', '>', $startWithCooldownBoundary)
             ->exists();
 
-        if ($hasConflict) {
+        $hasBookingOrderConflict = $this->getConflictingBookingOrderTableIds(
+            $startAt,
+            $expandedEndAt,
+            [$tableNumber]
+        )->isNotEmpty();
+
+        if ($hasBookingConflict || $hasBookingOrderConflict) {
             return [
                 'ok' => false,
                 'status' => 409,
@@ -181,7 +226,35 @@ class BookingService
             ];
         }
 
+        $openHour = (int) config('booking.open_hour', 8);
+        $closeHour = (int) config('booking.close_hour', 20);
+        $localStart = $startAt->copy()->timezone('Asia/Jakarta');
+        if ($hour < $openHour || $hour >= $closeHour) {
+            return [
+                'ok' => false,
+                'status' => 422,
+                'message' => 'Jam booking hanya tersedia antara '
+                    . str_pad((string) $openHour, 2, '0', STR_PAD_LEFT)
+                    . ':00 sampai '
+                    . str_pad((string) $closeHour, 2, '0', STR_PAD_LEFT)
+                    . ':00.',
+            ];
+        }
+
         $endAt = $startAt->copy()->addHours($durationHours);
+        $localEnd = $endAt->copy()->timezone('Asia/Jakarta');
+        $closingAt = $localStart->copy()
+            ->startOfDay()
+            ->setHour($closeHour)
+            ->setMinute(0)
+            ->setSecond(0);
+        if ($localEnd->gt($closingAt)) {
+            return [
+                'ok' => false,
+                'status' => 422,
+                'message' => 'Booking melewati jam tutup. Pilih jam mulai lebih awal atau durasi lebih pendek.',
+            ];
+        }
 
         return [
             'ok' => true,
@@ -196,5 +269,86 @@ class BookingService
         $amount = max(0, (int) config('booking.extra_charge_amount', 40000));
 
         return $durationHours >= $threshold ? $amount : 0;
+    }
+
+    private function getConflictingBookingOrderTableIds(
+        Carbon $startAt,
+        Carbon $expandedEndAt,
+        array $tableNumbers
+    ) {
+        $preBlockHours = max(0, (int) config('booking.pre_block_hours', 2));
+        $startWithCooldownBoundary = $startAt->copy()->subHours($preBlockHours);
+
+        $candidateOrders = Order::whereIn('table_number', $tableNumbers)
+            ->where('order_type', 'booking_dine_in')
+            ->whereNull('order_deleted_at')
+            ->whereIn('status', self::ACTIVE_BOOKING_ORDER_STATUSES)
+            ->whereNotNull('booking_start_at')
+            ->get([
+                'table_number',
+                'booking_start_at',
+                'booking_end_at',
+                'duration_hours',
+            ]);
+
+        return $candidateOrders
+            ->filter(function (Order $order) use ($startWithCooldownBoundary, $expandedEndAt) {
+                $orderStartAt = $this->resolveBookingOrderStartAt($order);
+                if (! $orderStartAt) {
+                    return false;
+                }
+
+                $endAt = $this->resolveBookingOrderEndAt($order);
+                if (! $endAt) {
+                    return false;
+                }
+
+                // Overlap + cooldown rule:
+                // existing.start < requested.end && existing.end > (requested.start - cooldown)
+                return $orderStartAt->lt($expandedEndAt) && $endAt->gt($startWithCooldownBoundary);
+            })
+            ->pluck('table_number')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+    }
+
+    private function resolveBookingOrderStartAt(Order $order): ?Carbon
+    {
+        if (! $order->booking_start_at) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($order->booking_start_at);
+        } catch (\Throwable $exception) {
+            return null;
+        }
+    }
+
+    private function resolveBookingOrderEndAt(Order $order): ?Carbon
+    {
+        if ($order->booking_end_at) {
+            try {
+                return Carbon::parse($order->booking_end_at);
+            } catch (\Throwable $exception) {
+                return null;
+            }
+        }
+
+        if (! $order->booking_start_at) {
+            return null;
+        }
+
+        $durationHours = (int) ($order->duration_hours ?? 0);
+        if ($durationHours <= 0) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($order->booking_start_at)->addHours($durationHours);
+        } catch (\Throwable $exception) {
+            return null;
+        }
     }
 }

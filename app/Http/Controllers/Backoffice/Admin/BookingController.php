@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Validator;
 class BookingController extends Controller
 {
     private array $allowedStatuses = ['CONFIRMED', 'SEATED', 'COMPLETED', 'NO_SHOW'];
+    private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
 
     public function indexPage()
     {
@@ -31,6 +32,7 @@ class BookingController extends Controller
         $bookingDineInOrders = Order::with('customer')
             ->where('order_type', 'booking_dine_in')
             ->whereNull('order_deleted_at')
+            ->whereIn('payment_status', self::PAID_STATUSES)
             ->orderBy('booking_start_at', 'asc')
             ->orderBy('_id', 'desc')
             ->get()
