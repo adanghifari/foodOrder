@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Backoffice\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Domains\Order\Services\OrderService;
+use App\Domains\Table\Services\TableService;
 use App\Models\Booking;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -14,12 +15,17 @@ class OrderController extends Controller
 	private $allowedStatuses = ['CONFIRMED', 'IN_QUEUE', 'IN_PROGRESS', 'DELIVERED'];
 	private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
 
-	public function __construct(private readonly OrderService $orderService)
+	public function __construct(
+		private readonly OrderService $orderService,
+		private readonly TableService $tableService
+	)
 	{
 	}
 
 	public function indexPage()
 	{
+		$this->tableService->autoClearExpiredDeliveredAssignments();
+
 		$paidOrders = collect($this->orderService->adminList())
 			->filter(function ($order) {
 				return empty($order['orderDeletedAt']);
@@ -141,8 +147,12 @@ class OrderController extends Controller
 			->sortBy('eventTs')
 			->values();
 
-		$previousOrders = $orders->reject(function ($order) use ($todayOrders) {
-			return $todayOrders->contains('orderId', (string) ($order['orderId'] ?? ''));
+		$previousOrders = $orders->filter(function ($order) use ($todayStart, $resolveEventAt) {
+			$eventAt = $resolveEventAt($order);
+			if (!$eventAt) {
+				return false;
+			}
+			return $eventAt->lt($todayStart);
 		})->values();
 
 		$detailOrderId = request()->query('detail');
