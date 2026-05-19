@@ -4,21 +4,29 @@
             <div class="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
                 <div>
                     <h2 class="text-xl md:text-2xl font-extrabold text-[var(--rich-black)]">Antrian Pesanan Hari Ini</h2>
-                    <p class="text-sm font-semibold text-slate-500">Menampilkan antrian aktif untuk {{ $businessDateLabel ?? '-' }} (status disajikan dipisah).</p>
+                    <p class="text-sm font-semibold text-slate-500">Menampilkan antrian aktif untuk {{ $businessDateLabel ?? '-' }} </p>
                 </div>
                 <span class="inline-flex items-center rounded-full border border-[#6A2B09]/20 bg-[#FCB861]/20 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-[#6A2B09]">
                     Fokus Operasional Hari Ini
                 </span>
             </div>
 
-            <div class="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div class="mt-4 grid grid-cols-2 lg:grid-cols-6 gap-3">
                 <div class="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
                     <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Total Order</p>
                     <p class="mt-1 text-xl font-extrabold text-[var(--rich-black)]">{{ (int) ($summary['total'] ?? 0) }}</p>
                 </div>
+                <div class="rounded-xl border border-cyan-200 bg-cyan-50 p-3.5">
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-cyan-700">Total Booking</p>
+                    <p class="mt-1 text-xl font-extrabold text-cyan-800">{{ (int) ($summary['booking_total'] ?? 0) }}</p>
+                </div>
+                <div class="rounded-xl border border-teal-200 bg-teal-50 p-3.5">
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-teal-700">Terkonfirmasi</p>
+                    <p class="mt-1 text-xl font-extrabold text-teal-800">{{ (int) ($summary['confirmed'] ?? 0) }}</p>
+                </div>
                 <div class="rounded-xl border border-amber-200 bg-amber-50 p-3.5">
-                    <p class="text-[11px] font-bold uppercase tracking-wide text-amber-700">Menunggu</p>
-                    <p class="mt-1 text-xl font-extrabold text-amber-800">{{ (int) ($summary['waiting'] ?? 0) }}</p>
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-amber-700">Dalam Antrean</p>
+                    <p class="mt-1 text-xl font-extrabold text-amber-800">{{ (int) ($summary['in_queue'] ?? 0) }}</p>
                 </div>
                 <div class="rounded-xl border border-blue-200 bg-blue-50 p-3.5">
                     <p class="text-[11px] font-bold uppercase tracking-wide text-blue-700">Sedang Diproses</p>
@@ -40,6 +48,7 @@
                         <button type="button" class="order-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="in_queue">Dalam Antrean</button>
                         <button type="button" class="order-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="in_progress">Sedang Diproses</button>
                         <button type="button" class="order-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="delivered">Disajikan</button>
+                        <button type="button" class="order-status-tab inline-flex items-center rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold px-3 py-2 transition" data-status="booking_dine_in">Booking Dine-In</button>
                     </div>
                 </div>
 
@@ -52,6 +61,7 @@
                         <option value="total-desc">Total Termahal</option>
                         <option value="table-asc">Nomor Meja Kecil</option>
                         <option value="table-desc">Nomor Meja Besar</option>
+                        <option value="pickup_takeaway">Pickup/Take Away</option>
                     </select>
                 </div>
             </div>
@@ -85,6 +95,18 @@
                                 $orderId = (string) ($order['orderId'] ?? '');
                                 $sourceType = strtoupper((string) ($order['sourceType'] ?? 'ORDER'));
                                 $isBookingRow = $sourceType === 'BOOKING';
+                                $orderType = strtolower((string) ($order['orderType'] ?? ''));
+                                $isBookingDineIn = $isBookingRow || $orderType === 'booking_dine_in';
+                                $tableDisplayLabel = $tableNumber > 0
+                                    ? (string) $tableNumber
+                                    : match ($orderType) {
+                                        'take_away' => 'Take Away',
+                                        'pickup' => 'Pickup',
+                                        default => '-',
+                                    };
+                                $bookingStartAtRaw = (string) (($order['bookingStartAt'] ?? $order['booking_start_at'] ?? '') ?: '');
+                                $bookingStartAt = $bookingStartAtRaw !== '' ? \Illuminate\Support\Carbon::parse($bookingStartAtRaw)->setTimezone('Asia/Jakarta') : null;
+                                $bookingDuration = (int) ($order['durationHours'] ?? $order['duration_hours'] ?? 0);
                                 $displayId = (string) ($order['displayId'] ?? ($isBookingRow
                                     ? 'BKG-' . strtoupper(substr(str_replace('BOOKING:', '', $orderId), -6))
                                     : 'ORD-' . strtoupper(substr($orderId, -6))));
@@ -105,12 +127,22 @@
                                     default => 'bg-slate-100 text-slate-700',
                                 };
                             @endphp
-                            <tr class="order-row" data-order-id="{{ strtolower($displayId) }}" data-customer="{{ strtolower($customerName) }}" data-email="{{ strtolower($customerEmail) }}" data-status="{{ strtolower($status) }}" data-total="{{ $totalPrice }}" data-table="{{ $tableNumber }}" data-queue="{{ $queueNumber }}">
+                            <tr class="order-row" data-order-id="{{ strtolower($displayId) }}" data-customer="{{ strtolower($customerName) }}" data-email="{{ strtolower($customerEmail) }}" data-status="{{ strtolower($status) }}" data-order-type="{{ $isBookingDineIn ? 'booking_dine_in' : $orderType }}" data-total="{{ $totalPrice }}" data-table="{{ $tableNumber }}" data-queue="{{ $queueNumber }}" data-event-ts="{{ (int) ($order['eventTs'] ?? 0) }}">
                                 <td class="px-4 py-3 text-sm font-extrabold text-[var(--rich-black)]">{{ $displayId }}</td>
                                 <td class="px-4 py-3 text-sm font-semibold text-slate-800">{{ $customerName !== '' ? $customerName : '-' }}</td>
                                 <td class="px-4 py-3 text-sm text-slate-700">{{ $customerEmail !== '' ? $customerEmail : '-' }}</td>
                                 <td class="px-4 py-3 text-sm font-bold text-slate-700">{{ $queueNumber > 0 ? '#' . $queueNumber : ($isBookingRow ? 'Booking' : '-') }}</td>
-                                <td class="px-4 py-3 text-sm text-slate-700">{{ $tableNumber > 0 ? $tableNumber : '-' }}</td>
+                                <td class="px-4 py-3 text-sm text-slate-700">
+                                    <div>{{ $tableDisplayLabel }}</div>
+                                    @if ($isBookingDineIn && $bookingStartAt)
+                                        <div class="mt-1 text-[11px] font-semibold text-slate-500">
+                                            {{ $bookingStartAt->format('d-m-Y') }} • {{ $bookingStartAt->format('H:i') }}
+                                            @if ($bookingDuration > 0)
+                                                • {{ $bookingDuration }} jam
+                                            @endif
+                                        </div>
+                                    @endif
+                                </td>
                                 <td class="px-4 py-3"><span data-order-status-badge class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $statusClass }}">{{ $statusLabel }}</span></td>
                                 <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format($totalPrice, 0, ',', '.') }}</td>
                                 <td class="px-4 py-3">
@@ -183,6 +215,18 @@
                                 $orderId = (string) ($order['orderId'] ?? '');
                                 $sourceType = strtoupper((string) ($order['sourceType'] ?? 'ORDER'));
                                 $isBookingRow = $sourceType === 'BOOKING';
+                                $orderType = strtolower((string) ($order['orderType'] ?? ''));
+                                $isBookingDineIn = $isBookingRow || $orderType === 'booking_dine_in';
+                                $tableDisplayLabel = $tableNumber > 0
+                                    ? (string) $tableNumber
+                                    : match ($orderType) {
+                                        'take_away' => 'Take Away',
+                                        'pickup' => 'Pickup',
+                                        default => '-',
+                                    };
+                                $bookingStartAtRaw = (string) (($order['bookingStartAt'] ?? $order['booking_start_at'] ?? '') ?: '');
+                                $bookingStartAt = $bookingStartAtRaw !== '' ? \Illuminate\Support\Carbon::parse($bookingStartAtRaw)->setTimezone('Asia/Jakarta') : null;
+                                $bookingDuration = (int) ($order['durationHours'] ?? $order['duration_hours'] ?? 0);
                                 $displayId = (string) ($order['displayId'] ?? ($isBookingRow
                                     ? 'BKG-' . strtoupper(substr(str_replace('BOOKING:', '', $orderId), -6))
                                     : 'ORD-' . strtoupper(substr($orderId, -6))));
@@ -203,12 +247,22 @@
                                     default => 'bg-slate-100 text-slate-700',
                                 };
                             @endphp
-                            <tr class="order-row" data-order-id="{{ strtolower($displayId) }}" data-customer="{{ strtolower($customerName) }}" data-email="{{ strtolower($customerEmail) }}" data-status="{{ strtolower($status) }}" data-total="{{ $totalPrice }}" data-table="{{ $tableNumber }}" data-queue="{{ $queueNumber }}">
+                            <tr class="order-row" data-order-id="{{ strtolower($displayId) }}" data-customer="{{ strtolower($customerName) }}" data-email="{{ strtolower($customerEmail) }}" data-status="{{ strtolower($status) }}" data-order-type="{{ $isBookingDineIn ? 'booking_dine_in' : $orderType }}" data-total="{{ $totalPrice }}" data-table="{{ $tableNumber }}" data-queue="{{ $queueNumber }}" data-event-ts="{{ (int) ($order['eventTs'] ?? 0) }}">
                                 <td class="px-4 py-3 text-sm font-extrabold text-[var(--rich-black)]">{{ $displayId }}</td>
                                 <td class="px-4 py-3 text-sm font-semibold text-slate-800">{{ $customerName !== '' ? $customerName : '-' }}</td>
                                 <td class="px-4 py-3 text-sm text-slate-700">{{ $customerEmail !== '' ? $customerEmail : '-' }}</td>
                                 <td class="px-4 py-3 text-sm font-bold text-slate-700">{{ $queueNumber > 0 ? '#' . $queueNumber : ($isBookingRow ? 'Booking' : '-') }}</td>
-                                <td class="px-4 py-3 text-sm text-slate-700">{{ $tableNumber > 0 ? $tableNumber : '-' }}</td>
+                                <td class="px-4 py-3 text-sm text-slate-700">
+                                    <div>{{ $tableDisplayLabel }}</div>
+                                    @if ($isBookingDineIn && $bookingStartAt)
+                                        <div class="mt-1 text-[11px] font-semibold text-slate-500">
+                                            {{ $bookingStartAt->format('d-m-Y') }} • {{ $bookingStartAt->format('H:i') }}
+                                            @if ($bookingDuration > 0)
+                                                • {{ $bookingDuration }} jam
+                                            @endif
+                                        </div>
+                                    @endif
+                                </td>
                                 <td class="px-4 py-3"><span data-order-status-badge class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $statusClass }}">{{ $statusLabel }}</span></td>
                                 <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format($totalPrice, 0, ',', '.') }}</td>
                                 <td class="px-4 py-3">
@@ -287,6 +341,18 @@
                                     $orderId = (string) ($order['orderId'] ?? '');
                                     $sourceType = strtoupper((string) ($order['sourceType'] ?? 'ORDER'));
                                     $isBookingRow = $sourceType === 'BOOKING';
+                                    $orderType = strtolower((string) ($order['orderType'] ?? ''));
+                                    $isBookingDineIn = $isBookingRow || $orderType === 'booking_dine_in';
+                                    $tableDisplayLabel = $tableNumber > 0
+                                        ? (string) $tableNumber
+                                        : match ($orderType) {
+                                            'take_away' => 'Take Away',
+                                            'pickup' => 'Pickup',
+                                            default => '-',
+                                        };
+                                    $bookingStartAtRaw = (string) (($order['bookingStartAt'] ?? $order['booking_start_at'] ?? '') ?: '');
+                                    $bookingStartAt = $bookingStartAtRaw !== '' ? \Illuminate\Support\Carbon::parse($bookingStartAtRaw)->setTimezone('Asia/Jakarta') : null;
+                                    $bookingDuration = (int) ($order['durationHours'] ?? $order['duration_hours'] ?? 0);
                                     $displayId = (string) ($order['displayId'] ?? ($isBookingRow
                                         ? 'BKG-' . strtoupper(substr(str_replace('BOOKING:', '', $orderId), -6))
                                         : 'ORD-' . strtoupper(substr($orderId, -6))));
@@ -307,12 +373,22 @@
                                         default => 'bg-slate-100 text-slate-700',
                                     };
                                 @endphp
-                                <tr class="order-row" data-order-id="{{ strtolower($displayId) }}" data-customer="{{ strtolower($customerName) }}" data-email="{{ strtolower($customerEmail) }}" data-status="{{ strtolower($status) }}" data-total="{{ $totalPrice }}" data-table="{{ $tableNumber }}" data-queue="{{ $queueNumber }}">
+                                <tr class="order-row" data-order-id="{{ strtolower($displayId) }}" data-customer="{{ strtolower($customerName) }}" data-email="{{ strtolower($customerEmail) }}" data-status="{{ strtolower($status) }}" data-order-type="{{ $isBookingDineIn ? 'booking_dine_in' : $orderType }}" data-total="{{ $totalPrice }}" data-table="{{ $tableNumber }}" data-queue="{{ $queueNumber }}" data-event-ts="{{ (int) ($order['eventTs'] ?? 0) }}">
                                     <td class="px-4 py-3 text-sm font-extrabold text-[var(--rich-black)]">{{ $displayId }}</td>
                                     <td class="px-4 py-3 text-sm font-semibold text-slate-800">{{ $customerName !== '' ? $customerName : '-' }}</td>
                                     <td class="px-4 py-3 text-sm text-slate-700">{{ $customerEmail !== '' ? $customerEmail : '-' }}</td>
                                     <td class="px-4 py-3 text-sm font-bold text-slate-700">{{ $queueNumber > 0 ? '#' . $queueNumber : ($isBookingRow ? 'Booking' : '-') }}</td>
-                                    <td class="px-4 py-3 text-sm text-slate-700">{{ $tableNumber > 0 ? $tableNumber : '-' }}</td>
+                                    <td class="px-4 py-3 text-sm text-slate-700">
+                                        <div>{{ $tableDisplayLabel }}</div>
+                                        @if ($isBookingDineIn && $bookingStartAt)
+                                            <div class="mt-1 text-[11px] font-semibold text-slate-500">
+                                                {{ $bookingStartAt->format('d-m-Y') }} • {{ $bookingStartAt->format('H:i') }}
+                                                @if ($bookingDuration > 0)
+                                                    • {{ $bookingDuration }} jam
+                                                @endif
+                                            </div>
+                                        @endif
+                                    </td>
                                 <td class="px-4 py-3"><span data-order-status-badge class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $statusClass }}">{{ $statusLabel }}</span></td>
                                     <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format($totalPrice, 0, ',', '.') }}</td>
                                     <td class="px-4 py-3">
@@ -407,6 +483,7 @@
                 in_queue: 'Dalam Antrean Hari Ini',
                 in_progress: 'Sedang Diproses Hari Ini',
                 delivered: 'Disajikan Hari Ini',
+                booking_dine_in: 'Booking Dine-In Hari Ini',
             };
 
             function normalize(text) {
@@ -415,15 +492,26 @@
 
             function sortRows(list) {
                 const mode = sortSelect ? sortSelect.value : 'queue-asc';
+                const isPickupOrTakeAway = function (row) {
+                    const type = normalize(row.dataset.orderType);
+                    return type === 'pickup' || type === 'take_away';
+                };
+                const tableRank = function (row) {
+                    const table = Number(row.dataset.table || 0);
+                    if (table > 0) {
+                        return table;
+                    }
+                    return null;
+                };
 
                 if (mode === 'default') {
                     return list.sort((a, b) => baseOrder.get(a) - baseOrder.get(b));
                 }
                 if (mode === 'queue-asc') {
-                    return list.sort((a, b) => Number(a.dataset.queue || 0) - Number(b.dataset.queue || 0));
+                    return list.sort((a, b) => Number(a.dataset.eventTs || 0) - Number(b.dataset.eventTs || 0));
                 }
                 if (mode === 'queue-desc') {
-                    return list.sort((a, b) => Number(b.dataset.queue || 0) - Number(a.dataset.queue || 0));
+                    return list.sort((a, b) => Number(b.dataset.eventTs || 0) - Number(a.dataset.eventTs || 0));
                 }
                 if (mode === 'total-asc') {
                     return list.sort((a, b) => Number(a.dataset.total || 0) - Number(b.dataset.total || 0));
@@ -432,10 +520,32 @@
                     return list.sort((a, b) => Number(b.dataset.total || 0) - Number(a.dataset.total || 0));
                 }
                 if (mode === 'table-asc') {
-                    return list.sort((a, b) => Number(a.dataset.table || 0) - Number(b.dataset.table || 0));
+                    return list.sort((a, b) => {
+                        const aTable = tableRank(a);
+                        const bTable = tableRank(b);
+                        if (aTable === null && bTable === null) return 0;
+                        if (aTable === null) return 1;
+                        if (bTable === null) return -1;
+                        return aTable - bTable;
+                    });
                 }
                 if (mode === 'table-desc') {
-                    return list.sort((a, b) => Number(b.dataset.table || 0) - Number(a.dataset.table || 0));
+                    return list.sort((a, b) => {
+                        const aTable = tableRank(a);
+                        const bTable = tableRank(b);
+                        if (aTable === null && bTable === null) return 0;
+                        if (aTable === null) return 1;
+                        if (bTable === null) return -1;
+                        return bTable - aTable;
+                    });
+                }
+                if (mode === 'pickup_takeaway') {
+                    return list.sort((a, b) => {
+                        const aPriority = isPickupOrTakeAway(a) ? 0 : 1;
+                        const bPriority = isPickupOrTakeAway(b) ? 0 : 1;
+                        if (aPriority !== bPriority) return aPriority - bPriority;
+                        return Number(a.dataset.eventTs || 0) - Number(b.dataset.eventTs || 0);
+                    });
                 }
 
                 return list;
@@ -450,9 +560,11 @@
                     const email = normalize(row.dataset.email);
                     const table = normalize(row.dataset.table);
                     const status = normalize(row.dataset.status);
+                    const orderType = normalize(row.dataset.orderType);
 
                     const bySearch = keyword === '' || orderId.includes(keyword) || customer.includes(keyword) || email.includes(keyword) || table.includes(keyword);
-                    const byStatus = activeStatus === 'all' || status === activeStatus;
+                    const byStatus = activeStatus === 'all'
+                        || (activeStatus === 'booking_dine_in' ? orderType === 'booking_dine_in' : status === activeStatus);
 
                     return bySearch && byStatus;
                 });
@@ -484,13 +596,14 @@
 
                 const isAllTab = activeStatus === 'all';
                 const isDeliveredTab = activeStatus === 'delivered';
+                const isBookingTab = activeStatus === 'booking_dine_in';
 
                 if (todayQueueSection) {
                     todayQueueSection.classList.toggle('hidden', isDeliveredTab);
                 }
 
                 if (deliveredSection) {
-                    deliveredSection.classList.toggle('hidden', !(isAllTab || isDeliveredTab));
+                    deliveredSection.classList.toggle('hidden', !(isAllTab || isDeliveredTab || isBookingTab));
                 }
 
                 sections.forEach(function (section, index) {

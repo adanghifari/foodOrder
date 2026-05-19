@@ -18,8 +18,8 @@
                     <p class="mt-1 text-xl font-extrabold text-indigo-800">{{ (int) ($summary['upcoming'] ?? 0) }}</p>
                 </div>
                 <div class="rounded-xl border border-blue-200 bg-blue-50 p-3.5">
-                    <p class="text-[11px] font-bold uppercase tracking-wide text-blue-700">Sedang Duduk</p>
-                    <p class="mt-1 text-xl font-extrabold text-blue-800">{{ (int) ($summary['seated'] ?? 0) }}</p>
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-blue-700">Sedang Berjalan</p>
+                    <p class="mt-1 text-xl font-extrabold text-blue-800">{{ (int) ($summary['running'] ?? 0) }}</p>
                 </div>
                 <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3.5">
                     <p class="text-[11px] font-bold uppercase tracking-wide text-emerald-700">Selesai Hari Ini</p>
@@ -29,22 +29,21 @@
         </article>
 
         @php
-            $statusOptions = $statusOptions ?? [];
-            $renderRows = function ($rows) use ($statusOptions) {
+            $renderRows = function ($rows) {
                 foreach (($rows ?? []) as $booking) {
                     $status = strtoupper((string) ($booking['status'] ?? 'UNKNOWN'));
                     $statusLabel = match ($status) {
                         'CONFIRMED' => 'Terkonfirmasi',
-                        'SEATED' => 'Sedang Duduk',
-                        'COMPLETED' => 'Selesai',
-                        'NO_SHOW' => 'Tidak Hadir',
+                        'IN_QUEUE' => 'Dalam Antrean',
+                        'IN_PROGRESS' => 'Sedang Diproses',
+                        'DELIVERED' => 'Disajikan',
                         default => ucfirst(strtolower(str_replace('_', ' ', $status))),
                     };
                     $statusClass = match ($status) {
                         'CONFIRMED' => 'bg-amber-100 text-amber-700',
-                        'SEATED' => 'bg-blue-100 text-blue-700',
-                        'COMPLETED' => 'bg-emerald-100 text-emerald-700',
-                        'NO_SHOW' => 'bg-rose-100 text-rose-700',
+                        'IN_QUEUE' => 'bg-orange-100 text-orange-700',
+                        'IN_PROGRESS' => 'bg-blue-100 text-blue-700',
+                        'DELIVERED' => 'bg-emerald-100 text-emerald-700',
                         default => 'bg-slate-100 text-slate-700',
                     };
 
@@ -58,40 +57,16 @@
                         $endAt = '-';
                     }
 
-                    $sourceType = (string) ($booking['sourceType'] ?? 'BOOKING');
-                    $sourceLabel = $sourceType === 'BOOKING_DINE_IN' ? 'Booking Dine In' : 'Booking';
-                    $sourceClass = $sourceType === 'BOOKING_DINE_IN' ? 'bg-indigo-100 text-indigo-700' : 'bg-sky-100 text-sky-700';
-
                     echo '<tr class="border-b border-slate-200">';
                     echo '<td class="px-4 py-3 text-sm font-extrabold text-[var(--rich-black)]">' . e((string) ($booking['displayId'] ?? '-')) . '</td>';
-                    echo '<td class="px-4 py-3"><span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ' . e($sourceClass) . '">' . e($sourceLabel) . '</span></td>';
                     echo '<td class="px-4 py-3 text-sm text-slate-700">Meja ' . e((string) ((int) ($booking['tableNumber'] ?? 0))) . '</td>';
                     echo '<td class="px-4 py-3 text-sm text-slate-700">' . e((string) ($booking['customerName'] ?? '-')) . '</td>';
-                    echo '<td class="px-4 py-3 text-sm text-slate-700">' . e((string) ($booking['customerEmail'] ?? '-')) . '</td>';
                     echo '<td class="px-4 py-3 text-sm text-slate-700">' . e($startAt) . '</td>';
                     echo '<td class="px-4 py-3 text-sm text-slate-700">' . e($endAt) . '</td>';
                     echo '<td class="px-4 py-3 text-sm text-slate-700">' . e((string) ((int) ($booking['durationHours'] ?? 0))) . ' jam</td>';
                     echo '<td class="px-4 py-3 text-sm font-bold text-[var(--philippine-bronze)]">Rp ' . e(number_format((int) ($booking['extraCharge'] ?? 0), 0, ',', '.')) . '</td>';
                     echo '<td class="px-4 py-3"><span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ' . e($statusClass) . '">' . e($statusLabel) . '</span></td>';
-                    echo '<td class="px-4 py-3">';
-                    echo '<form method="POST" action="/backoffice/booking/' . urlencode((string) ($booking['bookingId'] ?? '')) . '/status" class="flex items-center gap-2">';
-                    echo csrf_field() . method_field('PATCH');
-                    echo '<select name="status" class="min-w-36 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700">';
-                    foreach (($statusOptions ?? []) as $statusOption) {
-                        $optionLabel = match ($statusOption) {
-                            'CONFIRMED' => 'Terkonfirmasi',
-                            'SEATED' => 'Sedang Duduk',
-                            'COMPLETED' => 'Selesai',
-                            'NO_SHOW' => 'Tidak Hadir',
-                            default => $statusOption,
-                        };
-                        $selected = $status === $statusOption ? 'selected' : '';
-                        echo '<option value="' . e($statusOption) . '" ' . $selected . '>' . e($optionLabel) . '</option>';
-                    }
-                    echo '</select>';
-                    echo '<button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>';
-                    echo '</form>';
-                    echo '</td>';
+                    echo '<td class="px-4 py-3"><a href="/backoffice/booking?detail=' . urlencode((string) ($booking['bookingId'] ?? '')) . '" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a></td>';
                     echo '</tr>';
                 }
             };
@@ -106,10 +81,8 @@
                     <thead class="bg-white border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
                         <tr>
                             <th class="px-4 py-3 font-bold">Booking ID</th>
-                            <th class="px-4 py-3 font-bold">Tipe</th>
                             <th class="px-4 py-3 font-bold">Meja</th>
                             <th class="px-4 py-3 font-bold">Nama</th>
-                            <th class="px-4 py-3 font-bold">Email</th>
                             <th class="px-4 py-3 font-bold">Mulai</th>
                             <th class="px-4 py-3 font-bold">Selesai</th>
                             <th class="px-4 py-3 font-bold">Durasi</th>
@@ -121,7 +94,7 @@
                     <tbody>
                         @if (collect($todayBookings ?? [])->isEmpty())
                             <tr>
-                                <td colspan="11" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">Belum ada booking hari ini.</td>
+                                <td colspan="10" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">Belum ada booking hari ini.</td>
                             </tr>
                         @else
                             {!! $renderRows($todayBookings ?? []) !!}
@@ -140,10 +113,8 @@
                     <thead class="bg-white border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
                         <tr>
                             <th class="px-4 py-3 font-bold">Booking ID</th>
-                            <th class="px-4 py-3 font-bold">Tipe</th>
                             <th class="px-4 py-3 font-bold">Meja</th>
                             <th class="px-4 py-3 font-bold">Nama</th>
-                            <th class="px-4 py-3 font-bold">Email</th>
                             <th class="px-4 py-3 font-bold">Mulai</th>
                             <th class="px-4 py-3 font-bold">Selesai</th>
                             <th class="px-4 py-3 font-bold">Durasi</th>
@@ -155,7 +126,7 @@
                     <tbody>
                         @if (collect($upcomingBookings ?? [])->isEmpty())
                             <tr>
-                                <td colspan="11" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">Belum ada booking jadwal akan datang.</td>
+                                <td colspan="10" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">Belum ada booking jadwal akan datang.</td>
                             </tr>
                         @else
                             {!! $renderRows($upcomingBookings ?? []) !!}
@@ -174,10 +145,8 @@
                     <thead class="bg-white border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
                         <tr>
                             <th class="px-4 py-3 font-bold">Booking ID</th>
-                            <th class="px-4 py-3 font-bold">Tipe</th>
                             <th class="px-4 py-3 font-bold">Meja</th>
                             <th class="px-4 py-3 font-bold">Nama</th>
-                            <th class="px-4 py-3 font-bold">Email</th>
                             <th class="px-4 py-3 font-bold">Mulai</th>
                             <th class="px-4 py-3 font-bold">Selesai</th>
                             <th class="px-4 py-3 font-bold">Durasi</th>
@@ -189,7 +158,7 @@
                     <tbody>
                         @if (collect($previousBookings ?? [])->isEmpty())
                             <tr>
-                                <td colspan="11" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">Belum ada riwayat booking sebelumnya.</td>
+                                <td colspan="10" class="px-4 py-8 text-center text-sm font-semibold text-slate-500">Belum ada riwayat booking sebelumnya.</td>
                             </tr>
                         @else
                             {!! $renderRows($previousBookings ?? []) !!}
@@ -199,4 +168,6 @@
             </div>
         </section>
     </section>
+
+    @include('backoffice.booking.detail.detail', ['selectedBooking' => $selectedBooking ?? null])
 </x-backoffice.layout>

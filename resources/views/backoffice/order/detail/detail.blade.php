@@ -43,12 +43,26 @@
         $detailCustomerEmail = trim((string) (data_get($selectedOrder, 'customer.email') ?: '-'));
         $detailPaidAtRaw = (string) ($selectedOrder['paidAt'] ?? '');
         $detailPaidAtLabel = '-';
+        $detailSourceType = strtoupper((string) ($selectedOrder['sourceType'] ?? 'ORDER'));
+        $detailOrderTypeRaw = strtoupper((string) ($selectedOrder['orderType'] ?? 'DINE_IN'));
+        $isBookingDineInDetail = $detailSourceType === 'BOOKING' || $detailOrderTypeRaw === 'BOOKING_DINE_IN';
+        $detailBookingStartRaw = (string) (($selectedOrder['bookingStartAt'] ?? $selectedOrder['booking_start_at'] ?? '') ?: '');
+        $detailBookingStart = null;
+        $detailBookingDuration = (int) ($selectedOrder['durationHours'] ?? $selectedOrder['duration_hours'] ?? 0);
 
         if ($detailPaidAtRaw !== '') {
             try {
                 $detailPaidAtLabel = \Carbon\Carbon::parse($detailPaidAtRaw)->format('d M Y, H:i:s');
             } catch (\Throwable $exception) {
                 $detailPaidAtLabel = $detailPaidAtRaw;
+            }
+        }
+
+        if ($detailBookingStartRaw !== '') {
+            try {
+                $detailBookingStart = \Carbon\Carbon::parse($detailBookingStartRaw)->setTimezone('Asia/Jakarta');
+            } catch (\Throwable $exception) {
+                $detailBookingStart = null;
             }
         }
     @endphp
@@ -93,7 +107,7 @@
                                     <td class="px-4 py-3 text-slate-800">{{ (int) ($selectedOrder['tableNumber'] ?? 0) }}</td>
                                 </tr>
                                 @php
-                                    $detailOrderType = strtoupper((string) ($selectedOrder['orderType'] ?? 'DINE_IN'));
+                                    $detailOrderType = $detailOrderTypeRaw;
                                     $detailOrderTypeLabel = match ($detailOrderType) {
                                         'DINE_IN' => 'Dine In',
                                         'BOOKING_DINE_IN' => 'Booking Dine In',
@@ -130,6 +144,20 @@
                                     <td class="px-4 py-3 font-semibold text-slate-600">Waktu Pemesanan</td>
                                     <td class="px-4 py-3 text-slate-800">{{ $detailPaidAtLabel }}</td>
                                 </tr>
+                                @if ($isBookingDineInDetail)
+                                    <tr>
+                                        <td class="px-4 py-3 font-semibold text-slate-600">Tanggal Booking</td>
+                                        <td class="px-4 py-3 text-slate-800">{{ $detailBookingStart ? $detailBookingStart->format('d-m-Y') : '-' }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 font-semibold text-slate-600">Waktu Booking</td>
+                                        <td class="px-4 py-3 text-slate-800">{{ $detailBookingStart ? $detailBookingStart->format('H:i') : '-' }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 font-semibold text-slate-600">Durasi Booking</td>
+                                        <td class="px-4 py-3 text-slate-800">{{ $detailBookingDuration > 0 ? $detailBookingDuration . ' jam' : '-' }}</td>
+                                    </tr>
+                                @endif
                                 <tr>
                                     <td class="px-4 py-3 font-semibold text-slate-600">Total Pesanan</td>
                                     <td class="px-4 py-3 text-[var(--philippine-bronze)] font-extrabold">Rp {{ number_format((float) ($selectedOrder['totalPrice'] ?? 0), 0, ',', '.') }}</td>

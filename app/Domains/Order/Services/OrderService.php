@@ -218,10 +218,15 @@ class OrderService
         $paymentExpiry = trim((string) ($paymentPayload['expiry_time'] ?? ''));
         $qrisImageUrl = $this->extractQrisImageUrl($paymentPayload);
 
+        $rawOrderType = trim((string) ($order->order_type ?? ''));
+        $normalizedOrderType = $rawOrderType !== ''
+            ? strtolower($rawOrderType)
+            : (((int) ($order->table_number ?? 0)) > 0 ? 'dine_in' : 'pickup');
+
         return [
             'orderId' => (string) $order->_id,
             'customer' => $customerData,
-            'orderType' => (string) ($order->order_type ?? 'dine_in'),
+            'orderType' => $normalizedOrderType,
             'tableNumber' => $order->table_number,
             'bookingStartAt' => $order->booking_start_at,
             'durationHours' => $order->duration_hours,

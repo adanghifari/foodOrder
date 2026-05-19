@@ -17,6 +17,7 @@ class BookingController extends Controller
     public function indexPage()
     {
         $timezone = 'Asia/Jakarta';
+        $now = Carbon::now($timezone);
         $todayStart = Carbon::now($timezone)->startOfDay();
         $todayEnd = Carbon::now($timezone)->endOfDay();
 
@@ -90,16 +91,39 @@ class BookingController extends Controller
             return $bookingStart->lt($todayStart);
         })->values();
 
+        $runningNowCount = $bookings->filter(function (array $booking) use ($now, $timezone) {
+            $startAt = (string) ($booking['bookingStartAt'] ?? '');
+            $endAt = (string) ($booking['bookingEndAt'] ?? '');
+            if ($startAt === '' || $endAt === '') {
+                return false;
+            }
+
+            try {
+                $bookingStart = Carbon::parse($startAt)->setTimezone($timezone);
+                $bookingEnd = Carbon::parse($endAt)->setTimezone($timezone);
+            } catch (\Throwable $exception) {
+                return false;
+            }
+
+            return $now->betweenIncluded($bookingStart, $bookingEnd);
+        })->count();
+
+        $detailBookingId = (string) request()->query('detail', '');
+        $selectedBooking = null;
+        if ($detailBookingId !== '') {
+            $selectedBooking = $bookings->firstWhere('bookingId', $detailBookingId);
+        }
+
         return view('backoffice.booking.index', [
             'todayBookings' => $todayBookings,
             'upcomingBookings' => $upcomingBookings,
             'previousBookings' => $previousBookings,
-            'statusOptions' => $this->allowedStatuses,
+            'selectedBooking' => $selectedBooking,
             'bookingDateLabel' => $todayStart->translatedFormat('d M Y'),
             'summary' => [
                 'today' => $todayBookings->count(),
                 'upcoming' => $upcomingBookings->count(),
-                'seated' => $todayBookings->where('status', 'SEATED')->count(),
+                'running' => $runningNowCount,
                 'completed' => $todayBookings->where('status', 'COMPLETED')->count(),
             ],
         ]);
@@ -155,6 +179,7 @@ class BookingController extends Controller
             'totalBookingCharge' => (int) ($booking->total_booking_charge ?? 0),
             'bookingStartAt' => optional($booking->booking_start_at)?->toIso8601String(),
             'bookingEndAt' => optional($booking->booking_end_at)?->toIso8601String(),
+            'items' => [],
         ];
     }
 
@@ -164,13 +189,7 @@ class BookingController extends Controller
         $customerName = (string) ($customer?->name ?? $customer?->username ?? '-');
         $customerEmail = (string) ($customer?->email ?? $customer?->username ?? '-');
 
-        $mappedStatus = match (strtoupper((string) ($order->status ?? ''))) {
-            'PENDING_PAYMENT' => 'CONFIRMED',
-            'CONFIRMED' => 'CONFIRMED',
-            'IN_QUEUE', 'IN_PROGRESS' => 'SEATED',
-            'DELIVERED' => 'COMPLETED',
-            default => strtoupper((string) ($order->status ?? 'UNKNOWN')),
-        };
+        $mappedStatus = strtoupper((string) ($order->status ?? 'UNKNOWN'));
 
         $bookingStartAt = $order->booking_start_at;
         $durationHours = (int) ($order->duration_hours ?? 0);
@@ -199,6 +218,39 @@ class BookingController extends Controller
             'totalBookingCharge' => (int) ($order->total_price ?? 0),
             'bookingStartAt' => $bookingStartAt ? (is_string($bookingStartAt) ? $bookingStartAt : $bookingStartAt->toIso8601String()) : null,
             'bookingEndAt' => $bookingEndAt,
+            'items' => $this->summarizeOrderItems($order),
         ];
+    }
+
+    private function summarizeOrderItems(Order $order): array
+    {
+        $rawItems = is_array($order->items) ? $order->items : [];
+        $grouped = [];
+
+        foreach ($rawItems as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $name = trim((string) ($item['name'] ?? 'Item'));
+            if ($name === '') {
+                $name = 'Item';
+            }
+            $price = (int) ($item['price'] ?? 0);
+            $quantity = max(1, (int) ($item['quantity'] ?? 1));
+            $key = strtolower($name) . '|' . $price;
+
+            if (!isset($grouped[$key])) {
+                $grouped[$key] = [
+                    'name' => $name,
+                    'quantity' => 0,
+                    'price' => $price,
+                ];
+            }
+
+            $grouped[$key]['quantity'] += $quantity;
+        }
+
+        return array_values($grouped);
     }
 }

@@ -54,6 +54,7 @@ class OrderController extends Controller
 					'orderId' => 'BOOKING:' . $bookingId,
 					'displayId' => 'BKG-' . strtoupper(substr($bookingId, -6)),
 					'sourceType' => 'BOOKING',
+					'orderType' => 'booking_dine_in',
 					'customer' => [
 						'name' => $customerName,
 						'username' => $customerName,
@@ -63,6 +64,8 @@ class OrderController extends Controller
 					'status' => $mappedStatus,
 					'paymentStatus' => 'SUCCESS',
 					'paidAt' => optional($booking->booking_start_at)?->toDateTimeString(),
+					'bookingStartAt' => optional($booking->booking_start_at)?->toDateTimeString(),
+					'durationHours' => (int) ($booking->duration_hours ?? 1),
 					'queueNumber' => 0,
 					'totalPrice' => (int) ($booking->extra_charge ?? 0),
 				];
@@ -81,22 +84,49 @@ class OrderController extends Controller
 		$businessTimezone = 'Asia/Jakarta';
 		$todayStart = Carbon::now($businessTimezone)->startOfDay();
 		$todayEnd = Carbon::now($businessTimezone)->endOfDay();
+		$resolveEventAt = function (array $order) use ($businessTimezone): ?Carbon {
+			$sourceType = strtoupper((string) ($order['sourceType'] ?? 'ORDER'));
+			$orderType = strtolower((string) ($order['orderType'] ?? ''));
+			$isBookingDineIn = $sourceType === 'BOOKING' || $orderType === 'booking_dine_in';
+			$eventRaw = $isBookingDineIn
+				? (string) (($order['bookingStartAt'] ?? $order['booking_start_at'] ?? $order['paidAt'] ?? ''))
+				: (string) (($order['paidAt'] ?? ''));
 
-		$todayOrders = $orders->filter(function ($order) use ($todayStart, $todayEnd, $businessTimezone) {
-			$paidAt = (string) ($order['paidAt'] ?? '');
-
-			if ($paidAt === '') {
-				return false;
+			if ($eventRaw === '') {
+				return null;
 			}
 
 			try {
-				$paidAtDate = Carbon::parse($paidAt)->setTimezone($businessTimezone);
+				return Carbon::parse($eventRaw)->setTimezone($businessTimezone);
 			} catch (\Throwable $exception) {
+				return null;
+			}
+		};
+
+		$orders = $orders
+			->map(function (array $order) use ($resolveEventAt) {
+				$eventAt = $resolveEventAt($order);
+				$order['eventAt'] = $eventAt?->toDateTimeString();
+				$order['eventTs'] = $eventAt?->timestamp ?? 0;
+				return $order;
+			})
+			->values();
+
+		$todayOrders = $orders->filter(function ($order) use ($todayStart, $todayEnd, $resolveEventAt) {
+			$eventAt = $resolveEventAt($order);
+			if (!$eventAt) {
 				return false;
 			}
-
-			return $paidAtDate->between($todayStart, $todayEnd);
+			return $eventAt->between($todayStart, $todayEnd);
 		})->values();
+
+		$bookingTotalCount = $todayOrders
+			->filter(function ($order) {
+				$sourceType = strtoupper((string) ($order['sourceType'] ?? 'ORDER'));
+				$orderType = strtolower((string) ($order['orderType'] ?? ''));
+				return $sourceType === 'BOOKING' || $orderType === 'booking_dine_in';
+			})
+			->count();
 
 		$todayDeliveredOrders = $todayOrders
 			->filter(function ($order) {
@@ -108,6 +138,7 @@ class OrderController extends Controller
 			->reject(function ($order) {
 				return strtoupper((string) ($order['status'] ?? '')) === 'DELIVERED';
 			})
+			->sortBy('eventTs')
 			->values();
 
 		$previousOrders = $orders->reject(function ($order) use ($todayOrders) {
@@ -123,7 +154,9 @@ class OrderController extends Controller
 
 		$summary = [
 			'total' => $todayOrders->count(),
-			'waiting' => $todayQueueOrders->whereIn('status', ['CONFIRMED', 'IN_QUEUE'])->count(),
+			'booking_total' => $bookingTotalCount,
+			'confirmed' => $todayQueueOrders->where('status', 'CONFIRMED')->count(),
+			'in_queue' => $todayQueueOrders->where('status', 'IN_QUEUE')->count(),
 			'processing' => $todayQueueOrders->where('status', 'IN_PROGRESS')->count(),
 			'delivered' => $todayDeliveredOrders->count(),
 		];

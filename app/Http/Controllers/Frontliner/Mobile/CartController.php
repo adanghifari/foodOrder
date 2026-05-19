@@ -95,7 +95,7 @@ class CartController extends Controller
 	public function checkout(Request $request)
 	{
 		$validator = Validator::make($request->all(), [
-			'orderType' => 'required|string|in:booking_dine_in,dine_in,pickup',
+			'orderType' => 'required|string|in:booking_dine_in,dine_in,pickup,take_away',
 			'tableNumber' => 'nullable|integer|min:1',
 			'bookingStartAt' => 'nullable|string',
 			'durationHours' => 'nullable|integer|in:2,4,6,8',
@@ -110,7 +110,7 @@ class CartController extends Controller
 		}
 
 		$user = $request->user();
-		$orderType = (string) $request->input('orderType');
+		$orderType = strtolower((string) $request->input('orderType'));
 		$tableNumber = $request->filled('tableNumber')
 			? (int) $request->input('tableNumber')
 			: null;
