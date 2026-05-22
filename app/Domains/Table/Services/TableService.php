@@ -2,6 +2,7 @@
 
 namespace App\Domains\Table\Services;
 
+use Carbon\CarbonInterface;
 use App\Models\Booking;
 use App\Models\Order;
 use App\Models\TableOccupancy;
@@ -257,7 +258,7 @@ class TableService
         return $this->activeOccupancyWindowConstraint($query, $at ?? now());
     }
 
-    private function activeOccupancyWindowConstraint(Builder $query, Carbon $at): Builder
+    private function activeOccupancyWindowConstraint(Builder $query, CarbonInterface $at): Builder
     {
         return $query
             ->where('start_at', '<=', $at)
