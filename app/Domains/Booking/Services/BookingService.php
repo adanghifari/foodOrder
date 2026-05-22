@@ -4,19 +4,12 @@ namespace App\Domains\Booking\Services;
 
 use App\Models\Booking;
 use App\Models\Order;
-use App\Domains\Table\Services\TableService;
 use App\Support\TableGuard;
 use Illuminate\Support\Carbon;
 
 class BookingService
 {
     private const ACTIVE_BOOKING_STATUSES = ['PENDING', 'CONFIRMED', 'SEATED'];
-    private const ACTIVE_BOOKING_ORDER_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'IN_QUEUE', 'IN_PROGRESS'];
-
-    public function __construct(
-        private readonly TableService $tableService
-    ) {
-    }
 
     public function getAvailability(string $startAtRaw, int $durationHours): array
     {
@@ -30,8 +23,7 @@ class BookingService
         /** @var Carbon $endAt */
         $endAt = $timeWindow['end_at'];
         $preBlockHours = max(0, (int) config('booking.pre_block_hours', 2));
-        $expandedEndAt = $endAt->copy()->addHours($preBlockHours);
-
+        $postBlockHours = max(0, (int) config('booking.post_block_hours', 1));
         $knownTables = collect(config('tables.known_table_ids', []))
             ->map(fn ($id) => (int) $id)
             ->filter(fn ($id) => $id > 0)
@@ -44,12 +36,23 @@ class BookingService
             ));
         }
 
-        $startWithCooldownBoundary = $startAt->copy()->subHours($preBlockHours);
-
         $conflictingBookingTableIds = Booking::whereIn('table_number', $knownTables->toArray())
             ->whereIn('status', self::ACTIVE_BOOKING_STATUSES)
-            ->where('booking_start_at', '<', $expandedEndAt)
-            ->where('booking_end_at', '>', $startWithCooldownBoundary)
+            ->get(['table_number', 'booking_start_at', 'booking_end_at'])
+            ->filter(function (Booking $booking) use ($startAt, $endAt, $preBlockHours, $postBlockHours) {
+                if (! $booking->booking_start_at || ! $booking->booking_end_at) {
+                    return false;
+                }
+
+                try {
+                    $existingStart = Carbon::parse($booking->booking_start_at)->subHours($preBlockHours);
+                    $existingEnd = Carbon::parse($booking->booking_end_at)->addHours($postBlockHours);
+                } catch (\Throwable $exception) {
+                    return false;
+                }
+
+                return $existingStart->lt($endAt) && $existingEnd->gt($startAt);
+            })
             ->pluck('table_number')
             ->map(fn ($id) => (int) $id)
             ->unique()
@@ -57,24 +60,14 @@ class BookingService
 
         $conflictingBookingOrderTableIds = $this->getConflictingBookingOrderTableIds(
             $startAt,
-            $expandedEndAt,
+            $endAt,
+            $preBlockHours,
+            $postBlockHours,
             $knownTables->toArray()
         );
 
-        $onSpotBlockingTableIds = collect(
-            $this->tableService->blockingTableIdsForBookingSlot(
-                $startAt,
-                $endAt,
-                $knownTables->toArray()
-            )
-        )
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values();
-
         $unavailableTableIds = $conflictingBookingTableIds
             ->merge($conflictingBookingOrderTableIds)
-            ->merge($onSpotBlockingTableIds)
             ->unique()
             ->values();
 
@@ -115,19 +108,30 @@ class BookingService
         /** @var Carbon $endAt */
         $endAt = $timeWindow['end_at'];
         $preBlockHours = max(0, (int) config('booking.pre_block_hours', 2));
-        $expandedEndAt = $endAt->copy()->addHours($preBlockHours);
-
-        $startWithCooldownBoundary = $startAt->copy()->subHours($preBlockHours);
-
+        $postBlockHours = max(0, (int) config('booking.post_block_hours', 1));
         $hasBookingConflict = Booking::where('table_number', $tableNumber)
             ->whereIn('status', self::ACTIVE_BOOKING_STATUSES)
-            ->where('booking_start_at', '<', $expandedEndAt)
-            ->where('booking_end_at', '>', $startWithCooldownBoundary)
-            ->exists();
+            ->get(['booking_start_at', 'booking_end_at'])
+            ->contains(function (Booking $booking) use ($startAt, $endAt, $preBlockHours, $postBlockHours) {
+                if (! $booking->booking_start_at || ! $booking->booking_end_at) {
+                    return false;
+                }
+
+                try {
+                    $existingStart = Carbon::parse($booking->booking_start_at)->subHours($preBlockHours);
+                    $existingEnd = Carbon::parse($booking->booking_end_at)->addHours($postBlockHours);
+                } catch (\Throwable $exception) {
+                    return false;
+                }
+
+                return $existingStart->lt($endAt) && $existingEnd->gt($startAt);
+            });
 
         $hasBookingOrderConflict = $this->getConflictingBookingOrderTableIds(
             $startAt,
-            $expandedEndAt,
+            $endAt,
+            $preBlockHours,
+            $postBlockHours,
             [$tableNumber]
         )->isNotEmpty();
 
@@ -273,16 +277,27 @@ class BookingService
 
     private function getConflictingBookingOrderTableIds(
         Carbon $startAt,
-        Carbon $expandedEndAt,
+        Carbon $endAt,
+        int $preBlockHours,
+        int $postBlockHours,
         array $tableNumbers
     ) {
-        $preBlockHours = max(0, (int) config('booking.pre_block_hours', 2));
-        $startWithCooldownBoundary = $startAt->copy()->subHours($preBlockHours);
-
+        $pendingHoldMinutes = max(1, (int) config('booking.pending_payment_hold_minutes', 30));
+        $pendingCutoff = now()->subMinutes($pendingHoldMinutes);
         $candidateOrders = Order::whereIn('table_number', $tableNumbers)
             ->where('order_type', 'booking_dine_in')
             ->whereNull('order_deleted_at')
-            ->whereIn('status', self::ACTIVE_BOOKING_ORDER_STATUSES)
+            ->where(function ($query) use ($pendingCutoff) {
+                $query->where(function ($paidQuery) {
+                    $paidQuery->whereIn('status', ['CONFIRMED', 'IN_QUEUE', 'IN_PROGRESS'])
+                        ->whereIn('payment_status', ['PAID', 'SUCCESS', 'SETTLEMENT']);
+                })
+                    ->orWhere(function ($pendingQuery) use ($pendingCutoff) {
+                        $pendingQuery->where('status', 'PENDING_PAYMENT')
+                            ->where('payment_status', 'PENDING')
+                            ->where('created_at', '>=', $pendingCutoff);
+                    });
+            })
             ->whereNotNull('booking_start_at')
             ->get([
                 'table_number',
@@ -292,20 +307,23 @@ class BookingService
             ]);
 
         return $candidateOrders
-            ->filter(function (Order $order) use ($startWithCooldownBoundary, $expandedEndAt) {
+            ->filter(function (Order $order) use ($startAt, $endAt, $preBlockHours, $postBlockHours) {
                 $orderStartAt = $this->resolveBookingOrderStartAt($order);
                 if (! $orderStartAt) {
                     return false;
                 }
 
-                $endAt = $this->resolveBookingOrderEndAt($order);
-                if (! $endAt) {
+                $orderEndAt = $this->resolveBookingOrderEndAt($order);
+                if (! $orderEndAt) {
                     return false;
                 }
 
-                // Overlap + cooldown rule:
-                // existing.start < requested.end && existing.end > (requested.start - cooldown)
-                return $orderStartAt->lt($expandedEndAt) && $endAt->gt($startWithCooldownBoundary);
+                $existingStartWithBuffer = $orderStartAt->copy()->subHours($preBlockHours);
+                $existingEndWithBuffer = $orderEndAt->copy()->addHours($postBlockHours);
+
+                // booking-only hard block: 2h before start and 2h after end.
+                return $existingStartWithBuffer->lt($endAt)
+                    && $existingEndWithBuffer->gt($startAt);
             })
             ->pluck('table_number')
             ->map(fn ($id) => (int) $id)

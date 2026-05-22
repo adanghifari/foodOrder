@@ -2,6 +2,7 @@
 
 namespace App\Domains\Payment\Services;
 
+use App\Domains\Table\Services\TableService;
 use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\User;
@@ -166,6 +167,7 @@ class PaymentService
             'payment_url' => $snapData['redirect_url'] ?? null,
             'payment_payload' => $this->sanitizePaymentPayload($snapData),
         ]);
+        app(TableService::class)->syncTableOccupanciesFromOrders();
 
         return [
             'ok' => true,
@@ -626,6 +628,8 @@ class PaymentService
         if (!$wasPaid && in_array($paymentStatus, self::PAID_STATUSES, true)) {
             $this->sendReceiptEmailIfEligible($order);
         }
+
+        app(TableService::class)->syncTableOccupanciesFromOrders();
     }
 
     private function reserveStockForOrder(Order $order): array

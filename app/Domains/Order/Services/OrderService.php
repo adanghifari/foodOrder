@@ -2,6 +2,7 @@
 
 namespace App\Domains\Order\Services;
 
+use App\Domains\Table\Services\TableService;
 use App\Models\MenuItem;
 use App\Models\Order;
 
@@ -89,7 +90,7 @@ class OrderService
         $lastOrder = Order::orderBy('queue_number', 'desc')->first();
         $queueNumber = $lastOrder ? $lastOrder->queue_number + 1 : 1;
 
-        return Order::create([
+        $order = Order::create([
             'customer_id' => $userId,
             'order_type' => $orderType,
             'table_number' => $tableNumber,
@@ -102,6 +103,10 @@ class OrderService
             'total_price' => $totalPrice,
             'items' => $orderMenuItems,
         ]);
+
+        app(TableService::class)->syncTableOccupanciesFromOrders();
+
+        return $order;
     }
 
     public function myOrders(string $userId, $user)
@@ -139,6 +144,7 @@ class OrderService
         }
 
         $order->update($payload);
+        app(TableService::class)->syncTableOccupanciesFromOrders();
         return true;
     }
 

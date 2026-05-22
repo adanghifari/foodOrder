@@ -84,6 +84,7 @@
                     $occupyingOrders = collect($table['occupyingOrders'] ?? []);
                     $todaySectionItems = collect($table['todaySectionItems'] ?? []);
                     $upcomingSectionItems = collect($table['upcomingSectionItems'] ?? []);
+                    $canClearNow = (bool) ($table['canClearNow'] ?? false);
                     $cardClass = $isOccupied
                         ? 'border-red-200 bg-red-50'
                         : 'border-emerald-200 bg-emerald-50';
@@ -131,6 +132,9 @@
                             <p class="font-bold text-[var(--rich-black)]">{{ $currentOrder['displayId'] ?? '-' }}</p>
                             <p>Customer: {{ $currentOrder['customerName'] ?? '-' }}</p>
                             <p>Email: {{ $currentOrder['customerEmail'] ?? '-' }}</p>
+                            @if (!empty($currentOrder['bookingTimeRange']))
+                                <p>Jam Booking: {{ $currentOrder['bookingTimeRange'] }}</p>
+                            @endif
                             <p>Status: {{ $currentOrderStatusLabel }}</p>
                         </div>
 
@@ -145,6 +149,10 @@
                             method="POST"
                             action="/backoffice/kelola_meja/{{ $tableId }}/clear"
                             class="mt-3"
+                            @if (!$canClearNow)
+                                data-clear-guard="true"
+                                data-clear-guard-message="Pesanan belum diserahkan. Meja hanya bisa dikosongkan jika semua order aktif sudah berstatus Disajikan."
+                            @endif
                             data-notify-confirm
                             data-confirm-type="warning"
                             data-confirm-badge="Kosongkan Meja"
@@ -359,6 +367,15 @@
                 modalBackdrop.classList.add('hidden');
                 modalBackdrop.classList.remove('flex');
             }
+        });
+
+        document.querySelectorAll('form[data-clear-guard="true"]').forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                event.preventDefault();
+                const message = form.getAttribute('data-clear-guard-message')
+                    || 'Pesanan belum diserahkan.';
+                window.alert(message);
+            });
         });
     </script>
 

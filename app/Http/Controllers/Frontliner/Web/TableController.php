@@ -31,6 +31,22 @@ class TableController extends Controller
 		]);
 	}
 
+	public function onSpotAdvisory(int $tableId)
+	{
+		if (! $this->tableService->isKnownTable($tableId)) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Table not found'
+			], 404);
+		}
+
+		return response()->json([
+			'status' => 'success',
+			'message' => 'On-the-spot advisory retrieved',
+			'data' => $this->tableService->getOnSpotBookingAdvisory($tableId),
+		]);
+	}
+
 	public function clearTableSession(Request $request)
 	{
 		if (! $this->tableService->clearTableSession($request)) {

@@ -6,6 +6,7 @@ use App\Domains\Table\Services\TableService;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Order;
+use App\Models\TableOccupancy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -25,6 +26,7 @@ class TableController extends Controller
     public function indexPage()
     {
         $this->tableService->autoClearExpiredDeliveredAssignments();
+        $this->tableService->syncTableOccupanciesFromOrders();
         $now = now();
         $timezone = 'Asia/Jakarta';
         $todayStart = $now->copy()->timezone($timezone)->startOfDay();
@@ -39,25 +41,17 @@ class TableController extends Controller
             ));
         }
 
-        $occupyingOrders = $this->applyBookingDineInStartConstraint(
-            Order::with('customer')
-            ->where(function ($query) {
-                $query->where(function ($paidFlowQuery) {
-                    $paidFlowQuery->whereIn('payment_status', self::PAID_STATUSES)
-                        ->where(function ($paidStatusQuery) {
-                            $paidStatusQuery->whereIn('status', self::ACTIVE_ORDER_STATUSES)
-                                ->orWhere(function ($deliveredQuery) {
-                                    $deliveredQuery->where('status', 'DELIVERED')
-                                        ->whereNull('table_cleared_at');
-                                });
-                        });
-                })->orWhere(function ($pendingFlowQuery) {
-                    $pendingFlowQuery->whereIn('payment_status', self::HOLD_PAYMENT_STATUSES)
-                        ->whereIn('status', self::HOLD_ORDER_STATUSES)
-                        ->whereNull('table_cleared_at');
-                });
-            })
-        )
+        $activeOrderIds = $this->tableService->activeOccupancySlotsQuery()
+            ->pluck('order_id')
+            ->map(fn ($id) => (string) $id)
+            ->filter(fn ($id) => $id !== '')
+            ->unique()
+            ->values()
+            ->toArray();
+
+        $occupyingOrders = Order::with('customer')
+            ->whereIn('_id', $activeOrderIds)
+            ->where('table_number', '>', 0)
             ->orderBy('queue_number', 'asc')
             ->orderBy('_id', 'desc')
             ->get();
@@ -72,28 +66,36 @@ class TableController extends Controller
         $ordersByTable = $occupyingOrders->groupBy(function (Order $order) {
             return (int) $order->table_number;
         });
-        $activeBookingStatuses = ['PENDING', 'CONFIRMED', 'SEATED'];
-        $bookingRecords = Booking::with('customer')
-            ->whereIn('status', $activeBookingStatuses)
-            ->where('booking_end_at', '>', $now)
-            ->orderBy('booking_start_at', 'asc')
-            ->get();
-        $bookingOrderStatuses = ['PENDING_PAYMENT', 'CONFIRMED', 'IN_QUEUE', 'IN_PROGRESS'];
-        $bookingDineInOrders = Order::with('customer')
+        $bookingItemsByTable = TableOccupancy::query()
             ->where('order_type', 'booking_dine_in')
-            ->whereNull('order_deleted_at')
-            ->whereIn('status', $bookingOrderStatuses)
-            ->orderBy('booking_start_at', 'asc')
-            ->get();
-        $bookingItemsByTable = $bookingRecords
-            ->map(function (Booking $booking) {
-                return $this->buildBookingLitePayload($booking);
+            ->whereNotNull('start_at')
+            ->where('end_at', '>', $now)
+            ->orderBy('start_at', 'asc')
+            ->get()
+            ->map(function (TableOccupancy $slot) {
+                $startAt = $slot->start_at;
+                $endAt = $slot->end_at;
+                $durationHours = 0;
+                if ($startAt && $endAt) {
+                    try {
+                        $durationHours = max(0, (int) round($endAt->diffInMinutes($startAt) / 60));
+                    } catch (\Throwable $exception) {
+                        $durationHours = 0;
+                    }
+                }
+
+                return [
+                    'bookingId' => (string) ($slot->order_id ?? ''),
+                    'displayId' => (string) ($slot->display_id ?? '-'),
+                    'tableNumber' => (int) ($slot->table_number ?? 0),
+                    'status' => strtoupper((string) ($slot->status ?? 'UNKNOWN')),
+                    'customerName' => (string) ($slot->customer_name ?? '-'),
+                    'customerEmail' => (string) ($slot->customer_email ?? '-'),
+                    'durationHours' => $durationHours,
+                    'bookingStartAt' => optional($startAt)?->toIso8601String(),
+                    'bookingEndAt' => optional($endAt)?->toIso8601String(),
+                ];
             })
-            ->concat(
-                $bookingDineInOrders->map(function (Order $order) {
-                    return $this->buildBookingLitePayloadFromOrder($order);
-                })
-            )
             ->groupBy(function (array $item) {
                 return (int) ($item['tableNumber'] ?? 0);
             });
@@ -111,6 +113,8 @@ class TableController extends Controller
             $todaySectionItems = collect();
             $upcomingSectionItems = collect();
             $nowLocal = $now->copy()->setTimezone($timezone);
+            $hasRunningBookingNow = false;
+            $runningBookingNowItem = null;
 
             foreach ($bookingItems as $bookingItem) {
                 $startAtRaw = (string) ($bookingItem['bookingStartAt'] ?? '');
@@ -138,6 +142,11 @@ class TableController extends Controller
                     continue;
                 }
 
+                if ($startAtLocal->lte($nowLocal) && (!$endAtLocal || $endAtLocal->gt($nowLocal))) {
+                    $hasRunningBookingNow = true;
+                    $runningBookingNowItem ??= $bookingItem;
+                }
+
                 if ($startAtLocal->lt($todayStart)) {
                     continue;
                 }
@@ -153,6 +162,9 @@ class TableController extends Controller
             }
 
             $todaySectionItems = $occupyingOrderItems
+                ->reject(function (array $orderItem) {
+                    return strtolower((string) ($orderItem['orderType'] ?? '')) === 'booking_dine_in';
+                })
                 ->map(function (array $orderItem) {
                     return [
                         'entryType' => 'order',
@@ -178,11 +190,67 @@ class TableController extends Controller
                 })
                 ->values();
 
+            $fallbackCurrentOrder = null;
+            if ($primary === null && $runningBookingNowItem !== null) {
+                $startTimeLabel = null;
+                $endTimeLabel = null;
+                $startRaw = (string) ($runningBookingNowItem['bookingStartAt'] ?? '');
+                $endRaw = (string) ($runningBookingNowItem['bookingEndAt'] ?? '');
+                if ($startRaw !== '') {
+                    try {
+                        $startTimeLabel = Carbon::parse($startRaw)->setTimezone($timezone)->format('H.i');
+                    } catch (\Throwable $exception) {
+                        $startTimeLabel = null;
+                    }
+                }
+                if ($endRaw !== '') {
+                    try {
+                        $endTimeLabel = Carbon::parse($endRaw)->setTimezone($timezone)->format('H.i');
+                    } catch (\Throwable $exception) {
+                        $endTimeLabel = null;
+                    }
+                }
+                $timeRangeLabel = ($startTimeLabel !== null && $endTimeLabel !== null)
+                    ? $startTimeLabel . '-' . $endTimeLabel
+                    : null;
+
+                $fallbackCurrentOrder = [
+                    'orderId' => (string) ($runningBookingNowItem['bookingId'] ?? ''),
+                    'displayId' => (string) ($runningBookingNowItem['displayId'] ?? '-'),
+                    'tableNumber' => (int) ($runningBookingNowItem['tableNumber'] ?? $tableId),
+                    'status' => (string) ($runningBookingNowItem['status'] ?? 'CONFIRMED'),
+                    'queueNumber' => 0,
+                    'customerName' => (string) ($runningBookingNowItem['customerName'] ?? '-'),
+                    'customerEmail' => (string) ($runningBookingNowItem['customerEmail'] ?? '-'),
+                    'bookingTimeRange' => $timeRangeLabel,
+                ];
+            }
+
+            $activeOrderIds = collect($occupyingOrderItems)
+                ->pluck('orderId')
+                ->map(fn ($id) => (string) $id)
+                ->filter(fn ($id) => $id !== '')
+                ->values();
+            if ($hasRunningBookingNow && $runningBookingNowItem !== null) {
+                $activeOrderIds->push((string) ($runningBookingNowItem['bookingId'] ?? ''));
+            }
+            $activeStatuses = $occupyingOrderItems
+                ->pluck('status')
+                ->map(fn ($status) => strtoupper((string) $status))
+                ->filter(fn ($status) => $status !== '')
+                ->values();
+            if ($hasRunningBookingNow && $runningBookingNowItem !== null) {
+                $activeStatuses->push(strtoupper((string) ($runningBookingNowItem['status'] ?? 'UNKNOWN')));
+            }
+            $canClearNow = $activeStatuses->isNotEmpty()
+                && $activeStatuses->every(fn ($status) => $status === 'DELIVERED');
+
             return [
                 'tableId' => $tableId,
-                'isOccupied' => $occupants->isNotEmpty(),
-                'activeOrderCount' => $occupants->count(),
-                'currentOrder' => $primary ? $this->buildOrderLitePayload($primary) : null,
+                'isOccupied' => $occupants->isNotEmpty() || $hasRunningBookingNow,
+                'activeOrderCount' => $activeOrderIds->unique()->count(),
+                'canClearNow' => $canClearNow,
+                'currentOrder' => $primary ? $this->buildOrderLitePayload($primary) : $fallbackCurrentOrder,
                 'occupyingOrders' => $occupyingOrderItems,
                 'todaySectionItems' => $todaySectionItems,
                 'upcomingSectionItems' => $upcomingSectionItems,
@@ -244,26 +312,9 @@ class TableController extends Controller
         $sourceTable = (int) ($order->table_number ?? 0);
 
         if ($sourceTable !== $targetTable) {
-            $targetHasActiveOrders = $this->applyBookingDineInStartConstraint(
-                Order::where('table_number', $targetTable)
-                ->where(function ($query) {
-                    $query->where(function ($paidFlowQuery) {
-                        $paidFlowQuery->whereIn('payment_status', self::PAID_STATUSES)
-                            ->where(function ($paidStatusQuery) {
-                                $paidStatusQuery->whereIn('status', self::ACTIVE_ORDER_STATUSES)
-                                    ->orWhere(function ($deliveredQuery) {
-                                        $deliveredQuery->where('status', 'DELIVERED')
-                                            ->whereNull('table_cleared_at');
-                                    });
-                            });
-                    })->orWhere(function ($pendingFlowQuery) {
-                        $pendingFlowQuery->whereIn('payment_status', self::HOLD_PAYMENT_STATUSES)
-                            ->whereIn('status', self::HOLD_ORDER_STATUSES)
-                            ->whereNull('table_cleared_at');
-                    });
-                })
-                ->where('_id', '!=', $order->_id)
-            )
+            $this->tableService->syncTableOccupanciesFromOrders();
+            $targetHasActiveOrders = $this->tableService->activeOccupancySlotsQuery($targetTable)
+                ->where('order_id', '!=', (string) $order->_id)
                 ->exists();
 
             if ($targetHasActiveOrders) {
@@ -274,6 +325,7 @@ class TableController extends Controller
         $order->update([
             'table_number' => $targetTable,
         ]);
+        $this->tableService->syncTableOccupanciesFromOrders();
 
         return redirect('/backoffice/kelola_meja')->with(
             'success',
@@ -287,29 +339,29 @@ class TableController extends Controller
             return redirect('/backoffice/kelola_meja')->with('error', 'Nomor meja tidak terdaftar.');
         }
 
-        $occupyingOrders = $this->applyBookingDineInStartConstraint(
-            Order::where('table_number', $tableId)
-            ->where(function ($query) {
-                $query->where(function ($paidFlowQuery) {
-                    $paidFlowQuery->whereIn('payment_status', self::PAID_STATUSES)
-                        ->where(function ($paidStatusQuery) {
-                            $paidStatusQuery->whereIn('status', self::ACTIVE_ORDER_STATUSES)
-                                ->orWhere(function ($deliveredQuery) {
-                                    $deliveredQuery->where('status', 'DELIVERED')
-                                        ->whereNull('table_cleared_at');
-                                });
-                        });
-                })->orWhere(function ($pendingFlowQuery) {
-                    $pendingFlowQuery->whereIn('payment_status', self::HOLD_PAYMENT_STATUSES)
-                        ->whereIn('status', self::HOLD_ORDER_STATUSES)
-                        ->whereNull('table_cleared_at');
-                });
-            })
-        )
-            ->get();
+        $this->tableService->syncTableOccupanciesFromOrders();
+        $activeOrderIds = $this->tableService->activeOccupancySlotsQuery($tableId)
+            ->pluck('order_id')
+            ->map(fn ($id) => (string) $id)
+            ->filter(fn ($id) => $id !== '')
+            ->unique()
+            ->values()
+            ->toArray();
+
+        $occupyingOrders = Order::whereIn('_id', $activeOrderIds)->get();
 
         if ($occupyingOrders->isEmpty()) {
             return redirect('/backoffice/kelola_meja')->with('success', 'Meja ' . $tableId . ' sudah dalam kondisi kosong.');
+        }
+
+        $hasUndelivered = $occupyingOrders->contains(function (Order $order) {
+            return strtoupper((string) ($order->status ?? 'UNKNOWN')) !== 'DELIVERED';
+        });
+        if ($hasUndelivered) {
+            return redirect('/backoffice/kelola_meja')->with(
+                'error',
+                'Pesanan belum diserahkan. Meja hanya bisa dikosongkan jika semua order aktif sudah berstatus Disajikan.'
+            );
         }
 
         foreach ($occupyingOrders as $order) {
@@ -317,13 +369,9 @@ class TableController extends Controller
                 'table_cleared_at' => now(),
             ];
 
-            if (in_array((string) $order->status, self::ACTIVE_ORDER_STATUSES, true)) {
-                $payload['status'] = 'DELIVERED';
-                $payload['delivered_at'] = now();
-            }
-
             $order->update($payload);
         }
+        $this->tableService->syncTableOccupanciesFromOrders();
 
         return redirect('/backoffice/kelola_meja')->with(
             'success',
@@ -348,6 +396,7 @@ class TableController extends Controller
         return [
             'orderId' => (string) $order->_id,
             'displayId' => $this->displayOrderId($order),
+            'orderType' => strtolower((string) ($order->order_type ?? 'dine_in')),
             'tableNumber' => (int) ($order->table_number ?? 0),
             'status' => (string) ($order->status ?? 'UNKNOWN'),
             'queueNumber' => (int) ($order->queue_number ?? 0),

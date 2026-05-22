@@ -234,6 +234,7 @@ class OrderController extends Controller
 		$order->update([
 			'order_deleted_at' => now(),
 		]);
+		$this->tableService->syncTableOccupanciesFromOrders();
 
 		$displayId = 'ORD-' . strtoupper(substr((string) $order->_id, -6));
 

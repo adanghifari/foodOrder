@@ -52,6 +52,8 @@ Route::post('v1/table-session/clear', [FrontlinerTableController::class, 'clearT
 
 Route::get('v1/tables/{tableId}/availability', [FrontlinerTableController::class, 'checkTableAvailability'])
     ->whereNumber('tableId');
+Route::get('v1/tables/{tableId}/onspot-advisory', [FrontlinerTableController::class, 'onSpotAdvisory'])
+    ->whereNumber('tableId');
 
 Route::group(['prefix' => 'v1/orders', 'middleware' => 'auth:api'], function () {
     // Admin routes
