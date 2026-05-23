@@ -60,4 +60,9 @@ return [
         'service_account_json' => env('FCM_SERVICE_ACCOUNT_JSON'),
     ],
 
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-2.0-flash-lite'),
+    ],
+
 ];
