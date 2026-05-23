@@ -236,10 +236,12 @@
                 return;
             }
 
-            const shouldScan = window.confirm('Silahkan order dengan scan qr code pada meja terlebih dahulu.\n\nPilih OK untuk scan sekarang.');
-            if (shouldScan) {
-                saveCustomerDraft();
-                window.location.href = '/kedai/scan?return_to=' + encodeURIComponent('/keranjang');
+            if (window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
+                window.KedaiKlikNotify.show({
+                    type: 'warning',
+                    title: 'Nomor meja belum ada',
+                    message: 'Silahkan order dengan scan qr code pada meja terlebih dahulu',
+                });
             }
         }
 

@@ -99,6 +99,7 @@ class CartController extends Controller
 			'tableNumber' => 'nullable|integer|min:1',
 			'bookingStartAt' => 'nullable|string',
 			'durationHours' => 'nullable|integer|in:2,4,6,8',
+			'firstCustomerName' => 'nullable|string|max:120',
 		]);
 
 		if ($validator->fails()) {
@@ -120,13 +121,17 @@ class CartController extends Controller
 		$durationHours = $request->filled('durationHours')
 			? (int) $request->input('durationHours')
 			: null;
+		$firstCustomerName = $request->filled('firstCustomerName')
+			? trim((string) $request->input('firstCustomerName'))
+			: null;
 
 		$result = $this->cartService->checkout(
 			$user,
 			$orderType,
 			$tableNumber,
 			$bookingStartAt,
-			$durationHours
+			$durationHours,
+			$firstCustomerName
 		);
 		if (!$result['ok']) {
 			return response()->json([

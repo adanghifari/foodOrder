@@ -374,7 +374,16 @@
                 event.preventDefault();
                 const message = form.getAttribute('data-clear-guard-message')
                     || 'Pesanan belum diserahkan.';
-                window.alert(message);
+                if (window.KedaiKlikNotify && typeof window.KedaiKlikNotify.confirm === 'function') {
+                    window.KedaiKlikNotify.confirm({
+                        type: 'warning',
+                        badge: 'Perhatian',
+                        title: 'Meja belum bisa dikosongkan',
+                        message: message,
+                        confirmText: 'OK',
+                        singleButton: true,
+                    });
+                }
             });
         });
     </script>

@@ -106,14 +106,19 @@ class TableService
         }
 
         $normalizedCustomerName = $this->normalizeCustomerName($customerName);
+        $normalizedCustomerEmail = strtolower(trim((string) $customerEmail));
         $normalizedBrowserSessionId = trim((string) $browserSessionId);
 
-        $occupyingOrders = $this->occupyingOrdersQuery($tableId)->get([
-            'customer_name',
-            'browser_session_id',
-        ]);
+        $occupyingOrders = $this->occupyingOrdersQuery($tableId)
+            ->with('customer')
+            ->get([
+                'customer_id',
+                'customer_name',
+                'customer_email',
+                'browser_session_id',
+            ]);
 
-        return $occupyingOrders->contains(function ($order) use ($normalizedCustomerName, $normalizedBrowserSessionId) {
+        return $occupyingOrders->contains(function ($order) use ($normalizedCustomerName, $normalizedCustomerEmail, $normalizedBrowserSessionId) {
             if (!$order instanceof Order) {
                 return false;
             }
@@ -127,7 +132,25 @@ class TableService
                 return false;
             }
 
-            return $this->normalizeCustomerName((string) ($order->customer_name ?? '')) === $normalizedCustomerName;
+            $occupantName = collect([
+                (string) ($order->customer_name ?? ''),
+                (string) ($order->customer?->name ?? ''),
+                (string) ($order->customer?->username ?? ''),
+            ])->map(fn ($value) => trim($value))
+                ->first(fn ($value) => $value !== '');
+
+            if ($this->normalizeCustomerName((string) $occupantName) === $normalizedCustomerName) {
+                return true;
+            }
+
+            $resolvedCustomerEmail = collect([
+                (string) ($order->customer_email ?? ''),
+                (string) ($order->customer?->email ?? ''),
+                (string) ($order->customer?->username ?? ''),
+            ])->map(fn ($value) => strtolower(trim($value)))
+                ->first(fn ($value) => $value !== '');
+
+            return $normalizedCustomerEmail !== '' && $normalizedCustomerEmail === (string) $resolvedCustomerEmail;
         });
     }
 
@@ -418,13 +441,13 @@ class TableService
                 ->exists();
 
             if (!$hasAnyOrderSinceSession && now()->gte($sessionStart->copy()->addHour())) {
-                $this->clearSessionKeys($request);
+                $this->clearSessionKeys($request, false);
                 return true;
             }
         }
 
         if ($this->isTableAvailable((int) $tableId)) {
-            $this->clearSessionKeys($request);
+            $this->clearSessionKeys($request, false);
             return true;
         }
 
@@ -468,14 +491,16 @@ class TableService
         return mb_strtolower(trim((string) $email));
     }
 
-    private function clearSessionKeys(Request $request): void
+    private function clearSessionKeys(Request $request, bool $clearReceiptContext = true): void
     {
         $request->session()->forget('table_id');
         $request->session()->forget('order_type');
         $request->session()->forget('table_session_started_at');
-        $request->session()->forget('frontliner_receipt_order_id');
-        $request->session()->forget('frontliner_receipt_order_ids');
-        $request->session()->forget('frontliner_receipt_table_id');
-        $request->session()->forget('frontliner_receipt_bound_at');
+        if ($clearReceiptContext) {
+            $request->session()->forget('frontliner_receipt_order_id');
+            $request->session()->forget('frontliner_receipt_order_ids');
+            $request->session()->forget('frontliner_receipt_table_id');
+            $request->session()->forget('frontliner_receipt_bound_at');
+        }
     }
 }

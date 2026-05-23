@@ -243,7 +243,7 @@ class TableController extends Controller
                 $activeStatuses->push(strtoupper((string) ($runningBookingNowItem['status'] ?? 'UNKNOWN')));
             }
             $canClearNow = $activeStatuses->isNotEmpty()
-                && $activeStatuses->every(fn ($status) => $status === 'DELIVERED');
+                && $activeStatuses->every(fn ($status) => in_array($status, ['DELIVERED', 'PENDING_PAYMENT'], true));
 
             return [
                 'tableId' => $tableId,
@@ -355,12 +355,13 @@ class TableController extends Controller
         }
 
         $hasUndelivered = $occupyingOrders->contains(function (Order $order) {
-            return strtoupper((string) ($order->status ?? 'UNKNOWN')) !== 'DELIVERED';
+            $status = strtoupper((string) ($order->status ?? 'UNKNOWN'));
+            return ! in_array($status, ['DELIVERED', 'PENDING_PAYMENT'], true);
         });
         if ($hasUndelivered) {
             return redirect('/backoffice/kelola_meja')->with(
                 'error',
-                'Pesanan belum diserahkan. Meja hanya bisa dikosongkan jika semua order aktif sudah berstatus Disajikan.'
+                'Meja hanya bisa dikosongkan jika semua order aktif berstatus Disajikan atau Menunggu Pembayaran.'
             );
         }
 

@@ -7,6 +7,7 @@ use App\Models\CartItem;
 use App\Models\MenuItem;
 use App\Domains\Order\Services\OrderService;
 use App\Domains\Table\Services\TableService;
+use Illuminate\Support\Facades\Cache;
 
 class CartService
 {
@@ -126,7 +127,8 @@ class CartService
         string $orderType,
         ?int $tableNumber,
         ?string $bookingStartAt = null,
-        ?int $durationHours = null
+        ?int $durationHours = null,
+        ?string $firstCustomerName = null
     ): array
     {
         if ($orderType === 'booking_dine_in') {
@@ -193,12 +195,43 @@ class CartService
             }
 
             if (!$this->tableService->isTableAvailable($tableNumber)) {
+                $firstCustomerName = trim((string) ($firstCustomerName ?? ''));
+                if ($firstCustomerName === '') {
+                    return [
+                        'ok' => false,
+                        'status' => 409,
+                        'message' => 'Meja sedang dipakai! Jika anda bagian dari pemesan pertama, silahkan masukkan nama pemesan pertama.',
+                    ];
+                }
+
+                $canJoinOccupiedTable = $this->tableService->canPlaceOrderForSession(
+                    $tableNumber,
+                    $firstCustomerName,
+                    (string) ($user->email ?? ''),
+                    null,
+                    null,
+                    null
+                );
+                if (! $canJoinOccupiedTable) {
+                    return [
+                        'ok' => false,
+                        'status' => 409,
+                        'message' => 'Nama pemesan pertama salah',
+                    ];
+                }
+
                 $reason = $this->tableService->getTableUnavailableReason($tableNumber);
-                return [
-                    'ok' => false,
-                    'status' => 409,
-                    'message' => $reason ?? 'Selected table is not available',
-                ];
+                if ($reason === null || trim($reason) === '') {
+                    $reason = 'Selected table is not available';
+                }
+
+                if (trim($reason) !== 'Meja sedang dipakai.') {
+                    return [
+                        'ok' => false,
+                        'status' => 409,
+                        'message' => $reason,
+                    ];
+                }
             }
 
             $bookingStartAt = null;
@@ -273,15 +306,90 @@ class CartService
             }
         }
 
-        $order = $this->orderService->createConfirmedOrder(
-            (string) $user->_id,
-            $tableNumber,
-            $orderMenuItems,
-            $totalPrice,
-            $orderType,
-            $bookingStartAt,
-            $durationHours
-        );
+        if (($orderType === 'dine_in' || $orderType === 'booking_dine_in') && $tableNumber) {
+            $lock = Cache::lock('checkout:table:' . (int) $tableNumber, 10);
+            $lockAcquired = $lock->get();
+            if (! $lockAcquired) {
+                return [
+                    'ok' => false,
+                    'status' => 409,
+                    'message' => 'Meja sedang diproses oleh pesanan lain. Silakan coba lagi.',
+                ];
+            }
+
+            try {
+                if ($orderType === 'dine_in' && ! $this->tableService->isTableAvailable($tableNumber)) {
+                    $candidateName = trim((string) ($firstCustomerName ?? ''));
+                    if ($candidateName === '') {
+                        return [
+                            'ok' => false,
+                            'status' => 409,
+                            'message' => 'Meja sedang dipakai! Jika anda bagian dari pemesan pertama, silahkan masukkan nama pemesan pertama.',
+                        ];
+                    }
+
+                    if (! $this->tableService->canPlaceOrderForSession(
+                        $tableNumber,
+                        $candidateName,
+                        (string) ($user->email ?? ''),
+                        null,
+                        null,
+                        null
+                    )) {
+                        return [
+                            'ok' => false,
+                            'status' => 409,
+                            'message' => 'Nama pemesan pertama salah',
+                        ];
+                    }
+                }
+
+                if ($orderType === 'booking_dine_in') {
+                    $availability = $this->bookingService->getAvailability((string) $bookingStartAt, (int) $durationHours);
+                    if (! ($availability['ok'] ?? false)) {
+                        return [
+                            'ok' => false,
+                            'status' => (int) ($availability['status'] ?? 422),
+                            'message' => (string) ($availability['message'] ?? 'Gagal memeriksa ketersediaan meja.'),
+                        ];
+                    }
+
+                    $availableTables = collect($availability['data']['availableTables'] ?? [])
+                        ->map(fn ($id) => (int) $id)
+                        ->filter(fn ($id) => $id > 0)
+                        ->values();
+                    if (! $availableTables->contains($tableNumber)) {
+                        return [
+                            'ok' => false,
+                            'status' => 409,
+                            'message' => 'Meja tidak tersedia pada jam yang dipilih. Silakan muat ulang ketersediaan meja.',
+                        ];
+                    }
+                }
+
+                $order = $this->orderService->createConfirmedOrder(
+                    (string) $user->_id,
+                    $tableNumber,
+                    $orderMenuItems,
+                    $totalPrice,
+                    $orderType,
+                    $bookingStartAt,
+                    $durationHours
+                );
+            } finally {
+                optional($lock)->release();
+            }
+        } else {
+            $order = $this->orderService->createConfirmedOrder(
+                (string) $user->_id,
+                $tableNumber,
+                $orderMenuItems,
+                $totalPrice,
+                $orderType,
+                $bookingStartAt,
+                $durationHours
+            );
+        }
 
         CartItem::where('customer_id', $user->_id)->delete();
 

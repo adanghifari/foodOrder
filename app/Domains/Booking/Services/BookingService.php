@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\Order;
 use App\Support\TableGuard;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class BookingService
 {
@@ -109,53 +110,66 @@ class BookingService
         $endAt = $timeWindow['end_at'];
         $preBlockHours = max(0, (int) config('booking.pre_block_hours', 2));
         $postBlockHours = max(0, (int) config('booking.post_block_hours', 1));
-        $hasBookingConflict = Booking::where('table_number', $tableNumber)
-            ->whereIn('status', self::ACTIVE_BOOKING_STATUSES)
-            ->get(['booking_start_at', 'booking_end_at'])
-            ->contains(function (Booking $booking) use ($startAt, $endAt, $preBlockHours, $postBlockHours) {
-                if (! $booking->booking_start_at || ! $booking->booking_end_at) {
-                    return false;
-                }
-
-                try {
-                    $existingStart = Carbon::parse($booking->booking_start_at)->subHours($preBlockHours);
-                    $existingEnd = Carbon::parse($booking->booking_end_at)->addHours($postBlockHours);
-                } catch (\Throwable $exception) {
-                    return false;
-                }
-
-                return $existingStart->lt($endAt) && $existingEnd->gt($startAt);
-            });
-
-        $hasBookingOrderConflict = $this->getConflictingBookingOrderTableIds(
-            $startAt,
-            $endAt,
-            $preBlockHours,
-            $postBlockHours,
-            [$tableNumber]
-        )->isNotEmpty();
-
-        if ($hasBookingConflict || $hasBookingOrderConflict) {
+        $lock = Cache::lock('booking:create:table:' . $tableNumber, 10);
+        if (! $lock->get()) {
             return [
                 'ok' => false,
                 'status' => 409,
-                'message' => 'Meja tidak tersedia pada jam yang dipilih.',
+                'message' => 'Meja sedang diproses oleh booking lain. Silakan coba lagi.',
             ];
         }
 
-        $extraCharge = $this->calculateExtraCharge($durationHours);
+        try {
+            $hasBookingConflict = Booking::where('table_number', $tableNumber)
+                ->whereIn('status', self::ACTIVE_BOOKING_STATUSES)
+                ->get(['booking_start_at', 'booking_end_at'])
+                ->contains(function (Booking $booking) use ($startAt, $endAt, $preBlockHours, $postBlockHours) {
+                    if (! $booking->booking_start_at || ! $booking->booking_end_at) {
+                        return false;
+                    }
 
-        $booking = Booking::create([
-            'customer_id' => $customerId,
-            'table_number' => $tableNumber,
-            'booking_start_at' => $startAt,
-            'booking_end_at' => $endAt,
-            'duration_hours' => $durationHours,
-            'extra_charge' => $extraCharge,
-            'total_booking_charge' => $extraCharge,
-            'status' => 'CONFIRMED',
-            'notes' => trim((string) ($notes ?? '')),
-        ]);
+                    try {
+                        $existingStart = Carbon::parse($booking->booking_start_at)->subHours($preBlockHours);
+                        $existingEnd = Carbon::parse($booking->booking_end_at)->addHours($postBlockHours);
+                    } catch (\Throwable $exception) {
+                        return false;
+                    }
+
+                    return $existingStart->lt($endAt) && $existingEnd->gt($startAt);
+                });
+
+            $hasBookingOrderConflict = $this->getConflictingBookingOrderTableIds(
+                $startAt,
+                $endAt,
+                $preBlockHours,
+                $postBlockHours,
+                [$tableNumber]
+            )->isNotEmpty();
+
+            if ($hasBookingConflict || $hasBookingOrderConflict) {
+                return [
+                    'ok' => false,
+                    'status' => 409,
+                    'message' => 'Meja tidak tersedia pada jam yang dipilih.',
+                ];
+            }
+
+            $extraCharge = $this->calculateExtraCharge($durationHours);
+
+            $booking = Booking::create([
+                'customer_id' => $customerId,
+                'table_number' => $tableNumber,
+                'booking_start_at' => $startAt,
+                'booking_end_at' => $endAt,
+                'duration_hours' => $durationHours,
+                'extra_charge' => $extraCharge,
+                'total_booking_charge' => $extraCharge,
+                'status' => 'CONFIRMED',
+                'notes' => trim((string) ($notes ?? '')),
+            ]);
+        } finally {
+            optional($lock)->release();
+        }
 
         return [
             'ok' => true,

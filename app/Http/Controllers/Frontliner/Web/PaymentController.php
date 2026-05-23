@@ -500,13 +500,7 @@ class PaymentController extends Controller
 
     private function resolveReceiptData(Request $request): array
     {
-        $sessionCleared = $this->tableService->clearTableSessionIfInactive($request);
-        if ($sessionCleared) {
-            return [
-                'ok' => false,
-                'message' => 'Sesi struk sudah berakhir. Silakan scan ulang QR meja jika ingin memesan lagi.',
-            ];
-        }
+        $this->tableService->clearTableSessionIfInactive($request);
 
         $sessionOrderId = (string) $request->session()->get('frontliner_receipt_order_id', '');
         $sessionOrderIds = collect($request->session()->get('frontliner_receipt_order_ids', []))
@@ -527,15 +521,17 @@ class PaymentController extends Controller
             return ['ok' => false, 'message' => null];
         }
 
-        if (!$isTakeAwaySession && ($sessionTableId <= 0 || $sessionReceiptTableId <= 0)) {
+        if (!$isTakeAwaySession && $sessionReceiptTableId <= 0) {
             return ['ok' => false, 'message' => null];
         }
+
+        $effectiveSessionTableId = $sessionTableId > 0 ? $sessionTableId : $sessionReceiptTableId;
 
         $ordersById = Order::whereIn('_id', $sessionOrderIds->all())
             ->get()
             ->keyBy(fn ($order) => (string) $order->_id);
 
-        $validOrderIds = $sessionOrderIds->filter(function ($id) use ($ordersById, $sessionTableId, $sessionReceiptTableId, $isTakeAwaySession) {
+        $validOrderIds = $sessionOrderIds->filter(function ($id) use ($ordersById, $effectiveSessionTableId, $sessionReceiptTableId, $isTakeAwaySession) {
             $order = $ordersById->get($id);
             if (!$order) {
                 return false;
@@ -546,7 +542,7 @@ class PaymentController extends Controller
                 return $tableNumber === 0 && $sessionReceiptTableId === 0;
             }
 
-            return $tableNumber === $sessionTableId && $tableNumber === $sessionReceiptTableId;
+            return $tableNumber === $effectiveSessionTableId && $tableNumber === $sessionReceiptTableId;
         })->values();
 
         if ($validOrderIds->isEmpty()) {
