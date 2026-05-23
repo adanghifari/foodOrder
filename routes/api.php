@@ -12,6 +12,7 @@ use App\Http\Controllers\Frontliner\Mobile\BookingController as CustomerBookingC
 use App\Http\Controllers\Frontliner\Mobile\MenuController as MobileCustomerMenuController;
 use App\Http\Controllers\Frontliner\Mobile\OrderController as CustomerOrderController;
 use App\Http\Controllers\Frontliner\Mobile\PaymentController as MobilePaymentController;
+use App\Http\Controllers\Frontliner\Mobile\DeviceTokenController;
 use App\Http\Controllers\Frontliner\Web\TableController as FrontlinerTableController;
 use App\Http\Controllers\Integrations\MidtransWebhookController;
 
@@ -74,6 +75,10 @@ Route::group(['prefix' => 'v1/bookings', 'middleware' => ['auth:api', 'role:CUST
     Route::get('/availability', [CustomerBookingController::class, 'availability']);
     Route::post('/', [CustomerBookingController::class, 'create']);
     Route::get('/me', [CustomerBookingController::class, 'myBookings']);
+});
+
+Route::group(['prefix' => 'v1/notifications', 'middleware' => ['auth:api', 'role:CUSTOMER']], function () {
+    Route::post('/device-token', [DeviceTokenController::class, 'upsert']);
 });
 
 Route::group(['prefix' => 'v1/payments'], function () {

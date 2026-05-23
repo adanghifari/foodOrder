@@ -2,6 +2,7 @@
 
 namespace App\Domains\Order\Services;
 
+use App\Domains\Notification\Services\PushNotificationService;
 use App\Domains\Table\Services\TableService;
 use App\Models\MenuItem;
 use App\Models\Order;
@@ -136,6 +137,8 @@ class OrderService
             return false;
         }
 
+        $previousStatus = strtoupper((string) ($order->status ?? ''));
+
         $payload = ['status' => $status];
 
         if ($status === 'DELIVERED') {
@@ -144,6 +147,9 @@ class OrderService
         }
 
         $order->update($payload);
+        $order->refresh();
+        $nextStatus = strtoupper((string) ($order->status ?? ''));
+        app(PushNotificationService::class)->sendOrderStatusChanged($order, $previousStatus, $nextStatus);
         app(TableService::class)->syncTableOccupanciesFromOrders();
         return true;
     }

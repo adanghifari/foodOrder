@@ -19,6 +19,7 @@
 /public/storage
 /storage/*.key
 /storage/pail
+/kedaiklik-61a56-firebase-adminsdk-fbsvc-202fd081fa.json
 /vendor
 Homestead.json
 Homestead.yaml
