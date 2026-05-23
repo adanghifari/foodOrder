@@ -2,6 +2,8 @@
 
 namespace App\Domains\Payment\Services;
 
+use App\Domains\Notification\Services\PushNotificationService;
+use App\Domains\Table\Services\TableService;
 use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\User;
@@ -166,6 +168,7 @@ class PaymentService
             'payment_url' => $snapData['redirect_url'] ?? null,
             'payment_payload' => $this->sanitizePaymentPayload($snapData),
         ]);
+        app(TableService::class)->syncTableOccupanciesFromOrders();
 
         return [
             'ok' => true,
@@ -596,6 +599,7 @@ class PaymentService
 
     private function applyPaymentUpdate(Order $order, array $attributes): void
     {
+        $previousOrderStatus = strtoupper((string) ($order->status ?? ''));
         $previousPaymentStatus = strtoupper((string) ($order->payment_status ?? 'PENDING'));
         $wasPaid = in_array($previousPaymentStatus, self::PAID_STATUSES, true);
         $paymentStatus = strtoupper((string) ($attributes['payment_status'] ?? $order->payment_status ?? 'PENDING'));
@@ -617,6 +621,8 @@ class PaymentService
 
         $order->update($attributes);
         $order->refresh();
+        $currentOrderStatus = strtoupper((string) ($order->status ?? ''));
+        $currentPaymentStatus = strtoupper((string) ($order->payment_status ?? 'PENDING'));
 
         // Release stock for all terminal non-paid statuses.
         if (in_array($paymentStatus, self::FAILED_STATUSES, true)) {
@@ -626,6 +632,12 @@ class PaymentService
         if (!$wasPaid && in_array($paymentStatus, self::PAID_STATUSES, true)) {
             $this->sendReceiptEmailIfEligible($order);
         }
+
+        $pushService = app(PushNotificationService::class);
+        $pushService->sendPaymentStatusChanged($order, $previousPaymentStatus, $currentPaymentStatus);
+        $pushService->sendOrderStatusChanged($order, $previousOrderStatus, $currentOrderStatus);
+
+        app(TableService::class)->syncTableOccupanciesFromOrders();
     }
 
     private function reserveStockForOrder(Order $order): array

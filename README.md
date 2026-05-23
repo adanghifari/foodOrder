@@ -152,6 +152,13 @@ MIDTRANS_CALLBACK_URL=
 MIDTRANS_FINISH_REDIRECT_URL=
 ```
 
+## 🔁 Local Ngrok vs Railway
+
+Anda bisa langsung ubah `.env` lokal untuk kebutuhan ngrok saat development (`APP_URL`, `MIDTRANS_CALLBACK_URL`, dan `MIDTRANS_FINISH_REDIRECT_URL` bila dipakai).
+
+Catatan:
+- Deploy Railway tetap berjalan normal karena Railway memakai Environment Variables di dashboard Railway, bukan file `.env` lokal.
+
 ## 🧭 Main Route Structure
 
 ### Web Routes

@@ -1,6 +1,7 @@
 *.log
 .DS_Store
 .env
+.env.ngrok
 .env.backup
 .env.production
 .phpactor.json
@@ -18,6 +19,7 @@
 /public/storage
 /storage/*.key
 /storage/pail
+/kedaiklik-61a56-firebase-adminsdk-fbsvc-202fd081fa.json
 /vendor
 Homestead.json
 Homestead.yaml

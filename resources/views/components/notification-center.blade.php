@@ -137,11 +137,38 @@
                 return toneMap[String(type || 'info').toLowerCase()] || toneMap.info;
             }
 
+            function cleanMessage(rawMessage) {
+                let message = String(rawMessage || '').trim();
+                if (message === '') {
+                    return '';
+                }
+
+                const patterns = [
+                    /^Exception:\s*/i,
+                    /^Error:\s*/i,
+                    /^TypeError:\s*/i,
+                    /^SyntaxError:\s*/i,
+                    /^DioException(?:\s*\[[^\]]+\])?:\s*/i,
+                ];
+
+                patterns.forEach(function (pattern) {
+                    message = message.replace(pattern, '');
+                });
+
+                message = message
+                    .replace(/\bException:\s*/gi, '')
+                    .replace(/\bError:\s*/gi, '')
+                    .trim();
+
+                message = message.trim();
+                return message;
+            }
+
             function show(options) {
                 const settings = options || {};
                 const tone = resolveTone(settings.type);
                 const title = String(settings.title || '').trim();
-                const message = String(settings.message || '').trim();
+                const message = cleanMessage(settings.message);
                 const duration = Number(settings.duration || 4200);
 
                 if (message === '') {

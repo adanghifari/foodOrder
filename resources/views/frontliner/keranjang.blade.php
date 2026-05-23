@@ -236,10 +236,12 @@
                 return;
             }
 
-            const shouldScan = window.confirm('Silahkan order dengan scan qr code pada meja terlebih dahulu.\n\nPilih OK untuk scan sekarang.');
-            if (shouldScan) {
-                saveCustomerDraft();
-                window.location.href = '/kedai/scan?return_to=' + encodeURIComponent('/keranjang');
+            if (window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
+                window.KedaiKlikNotify.show({
+                    type: 'warning',
+                    title: 'Nomor meja belum ada',
+                    message: 'Silahkan order dengan scan qr code pada meja terlebih dahulu',
+                });
             }
         }
 
@@ -410,6 +412,46 @@
             }
         }
 
+        async function maybeShowOnSpotAdvisory() {
+            const tableNumber = (document.getElementById('table-number-input')?.value || '').trim();
+            const orderType = (document.getElementById('order-type-input')?.value || 'dine_in').trim();
+            if (orderType !== 'dine_in' || !tableNumber || tableNumber === '-') {
+                return;
+            }
+
+            const numericTable = Number(tableNumber);
+            if (!Number.isFinite(numericTable) || numericTable < 1) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/v1/tables/${numericTable}/onspot-advisory`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                    credentials: 'same-origin',
+                });
+                if (!response.ok) {
+                    return;
+                }
+
+                const payload = await response.json();
+                const data = payload?.data || {};
+                if (!data.hasAdvisory || String(data.level || 'none') === 'none') {
+                    return;
+                }
+
+                showNotification({
+                    type: String(data.level || 'warning') === 'blocked' ? 'error' : 'warning',
+                    title: String(data.level || 'warning') === 'blocked' ? 'Meja Terbatas' : 'Pengingat Booking',
+                    message: String(data.message || 'Perhatian untuk penggunaan meja ini.'),
+                });
+            } catch (error) {
+                // Ignore advisory fetch errors.
+            }
+        }
+
         // Jalankan saat halaman dimuat
         document.addEventListener('DOMContentLoaded', function () {
             hydrateCustomerDraft();
@@ -424,6 +466,7 @@
             }
 
             renderCart();
+            maybeShowOnSpotAdvisory();
         });
     </script>
 

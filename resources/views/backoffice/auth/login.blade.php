@@ -154,6 +154,21 @@
         const loginError = document.getElementById('login-error');
 
         if (loginForm && usernameInput && passwordInput && loginSubmit && loginError) {
+            const cleanMessage = function (raw) {
+                let message = String(raw || '').trim();
+                if (message === '') {
+                    return 'Terjadi kesalahan saat login.';
+                }
+
+                message = message
+                    .replace(/^Exception:\s*/i, '')
+                    .replace(/^Error:\s*/i, '')
+                    .replace(/^TypeError:\s*/i, '')
+                    .trim();
+
+                return message || 'Terjadi kesalahan saat login.';
+            };
+
             loginForm.addEventListener('submit', async function (event) {
                 event.preventDefault();
 
@@ -193,7 +208,7 @@
                         window.location.href = '/backoffice/dashboard';
                     }, 240);
                 } catch (error) {
-                    loginError.textContent = error.message || 'Terjadi kesalahan saat login.';
+                    loginError.textContent = cleanMessage(error?.message);
                     loginError.classList.remove('hidden');
                 } finally {
                     loginSubmit.classList.remove('is-loading');

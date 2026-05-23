@@ -2,6 +2,8 @@
 
 namespace App\Domains\Order\Services;
 
+use App\Domains\Notification\Services\PushNotificationService;
+use App\Domains\Table\Services\TableService;
 use App\Models\MenuItem;
 use App\Models\Order;
 
@@ -81,16 +83,20 @@ class OrderService
         ?int $tableNumber,
         array $orderMenuItems,
         float|int $totalPrice,
-        string $orderType = 'dine_in'
+        string $orderType = 'dine_in',
+        ?string $bookingStartAt = null,
+        ?int $durationHours = null
     ): Order
     {
         $lastOrder = Order::orderBy('queue_number', 'desc')->first();
         $queueNumber = $lastOrder ? $lastOrder->queue_number + 1 : 1;
 
-        return Order::create([
+        $order = Order::create([
             'customer_id' => $userId,
             'order_type' => $orderType,
             'table_number' => $tableNumber,
+            'booking_start_at' => $bookingStartAt,
+            'duration_hours' => $durationHours,
             'status' => self::INITIAL_UNPAID_ORDER_STATUS,
             'payment_status' => 'PENDING',
             'table_cleared_at' => null,
@@ -98,6 +104,10 @@ class OrderService
             'total_price' => $totalPrice,
             'items' => $orderMenuItems,
         ]);
+
+        app(TableService::class)->syncTableOccupanciesFromOrders();
+
+        return $order;
     }
 
     public function myOrders(string $userId, $user)
@@ -127,6 +137,8 @@ class OrderService
             return false;
         }
 
+        $previousStatus = strtoupper((string) ($order->status ?? ''));
+
         $payload = ['status' => $status];
 
         if ($status === 'DELIVERED') {
@@ -135,6 +147,10 @@ class OrderService
         }
 
         $order->update($payload);
+        $order->refresh();
+        $nextStatus = strtoupper((string) ($order->status ?? ''));
+        app(PushNotificationService::class)->sendOrderStatusChanged($order, $previousStatus, $nextStatus);
+        app(TableService::class)->syncTableOccupanciesFromOrders();
         return true;
     }
 
@@ -214,11 +230,18 @@ class OrderService
         $paymentExpiry = trim((string) ($paymentPayload['expiry_time'] ?? ''));
         $qrisImageUrl = $this->extractQrisImageUrl($paymentPayload);
 
+        $rawOrderType = trim((string) ($order->order_type ?? ''));
+        $normalizedOrderType = $rawOrderType !== ''
+            ? strtolower($rawOrderType)
+            : (((int) ($order->table_number ?? 0)) > 0 ? 'dine_in' : 'pickup');
+
         return [
             'orderId' => (string) $order->_id,
             'customer' => $customerData,
-            'orderType' => (string) ($order->order_type ?? 'dine_in'),
+            'orderType' => $normalizedOrderType,
             'tableNumber' => $order->table_number,
+            'bookingStartAt' => $order->booking_start_at,
+            'durationHours' => $order->duration_hours,
             'status' => $order->status,
             'paymentStatus' => $order->payment_status,
             'paymentType' => $order->payment_type,

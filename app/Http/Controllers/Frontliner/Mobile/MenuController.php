@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Frontliner\Mobile;
 use App\Http\Controllers\Controller;
 use App\Domains\Menu\Services\MenuService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
@@ -99,7 +100,19 @@ class MenuController extends Controller
 
 	public function topByCategory()
 	{
-		$items = $this->menuService->topByCategory();
+		try {
+			$items = $this->menuService->topByCategory();
+		} catch (\Throwable $exception) {
+			Log::error('topByCategory failed', [
+				'message' => $exception->getMessage(),
+			]);
+
+			return response()->json([
+				'status' => 'success',
+				'message' => 'Top menu fallback returned',
+				'data' => [],
+			]);
+		}
 
 		return response()->json([
 			'status' => 'success',

@@ -95,8 +95,11 @@ class CartController extends Controller
 	public function checkout(Request $request)
 	{
 		$validator = Validator::make($request->all(), [
-			'orderType' => 'required|string|in:dine_in,pickup',
+			'orderType' => 'required|string|in:booking_dine_in,dine_in,pickup,take_away',
 			'tableNumber' => 'nullable|integer|min:1',
+			'bookingStartAt' => 'nullable|string',
+			'durationHours' => 'nullable|integer|in:2,4,6,8',
+			'firstCustomerName' => 'nullable|string|max:120',
 		]);
 
 		if ($validator->fails()) {
@@ -108,12 +111,28 @@ class CartController extends Controller
 		}
 
 		$user = $request->user();
-		$orderType = (string) $request->input('orderType');
+		$orderType = strtolower((string) $request->input('orderType'));
 		$tableNumber = $request->filled('tableNumber')
 			? (int) $request->input('tableNumber')
 			: null;
+		$bookingStartAt = $request->filled('bookingStartAt')
+			? (string) $request->input('bookingStartAt')
+			: null;
+		$durationHours = $request->filled('durationHours')
+			? (int) $request->input('durationHours')
+			: null;
+		$firstCustomerName = $request->filled('firstCustomerName')
+			? trim((string) $request->input('firstCustomerName'))
+			: null;
 
-		$result = $this->cartService->checkout($user, $orderType, $tableNumber);
+		$result = $this->cartService->checkout(
+			$user,
+			$orderType,
+			$tableNumber,
+			$bookingStartAt,
+			$durationHours,
+			$firstCustomerName
+		);
 		if (!$result['ok']) {
 			return response()->json([
 				'status' => 'error',

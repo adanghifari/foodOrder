@@ -4,6 +4,7 @@ namespace App\Domains\Menu\Services;
 
 use App\Models\MenuItem;
 use App\Models\Order;
+use Illuminate\Support\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -87,9 +88,24 @@ class MenuService
 
     public function topByCategory(): array
     {
-        $orders = Order::whereIn('payment_status', ['PAID', 'SUCCESS'])
-            ->whereNull('order_deleted_at')
+        $supportedCategories = ['makanan utama', 'cemilan', 'minuman'];
+
+        $baseQuery = Order::whereIn('payment_status', ['PAID', 'SUCCESS'])
+            ->whereNull('order_deleted_at');
+
+        // Limit dataset to keep request time stable on large collections.
+        $orders = (clone $baseQuery)
+            ->where('created_at', '>=', Carbon::now()->subDays(30))
+            ->orderBy('_id', 'desc')
+            ->limit(500)
             ->get(['items']);
+
+        if ($orders->isEmpty()) {
+            $orders = (clone $baseQuery)
+                ->orderBy('_id', 'desc')
+                ->limit(500)
+                ->get(['items']);
+        }
 
         $quantityByMenuId = [];
         foreach ($orders as $order) {
@@ -99,19 +115,24 @@ class MenuService
                     continue;
                 }
 
+                $qty = is_array($item)
+                    ? (int) ($item['quantity'] ?? 1)
+                    : (int) ($item->quantity ?? 1);
+                if ($qty < 1) {
+                    $qty = 1;
+                }
+
                 if (!isset($quantityByMenuId[$menuId])) {
                     $quantityByMenuId[$menuId] = 0;
                 }
-                $quantityByMenuId[$menuId]++;
+                $quantityByMenuId[$menuId] += $qty;
             }
         }
 
-        $menus = MenuItem::orderBy('_id', 'asc')->get();
-        $grouped = [
-            'makanan utama' => [],
-            'cemilan' => [],
-            'minuman' => [],
-        ];
+        $menus = MenuItem::whereIn('category', $supportedCategories)
+            ->orderBy('_id', 'asc')
+            ->get(['name', 'description', 'price', 'stock', 'category', 'image_url']);
+        $grouped = array_fill_keys($supportedCategories, []);
 
         foreach ($menus as $menu) {
             $category = strtolower((string) ($menu->category ?? ''));
