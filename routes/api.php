@@ -85,6 +85,7 @@ Route::group(['prefix' => 'v1/notifications', 'middleware' => ['auth:api', 'role
 Route::group(['prefix' => 'v1/chatbot', 'middleware' => ['auth:api', 'role:CUSTOMER']], function () {
     Route::post('/message', [ChatbotController::class, 'message']);
     Route::post('/message-debug', [ChatbotController::class, 'messageDebug']);
+    Route::get('/health', [ChatbotController::class, 'health']);
 });
 
 Route::group(['prefix' => 'v1/payments'], function () {

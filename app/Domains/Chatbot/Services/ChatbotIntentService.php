@@ -33,7 +33,17 @@ class ChatbotIntentService
             return ['intent' => 'cancel_order_request', 'entities' => []];
         }
 
-        if ($this->containsAny($text, ['rekomendasi', 'saran menu', 'cocok', 'yang enak', 'pedas murah', 'ringan'])) {
+        if ($this->containsAny($text, [
+            'rekomendasi',
+            'saran menu',
+            'cocok',
+            'yang enak',
+            'pedas murah',
+            'ringan',
+            'murah',
+            'termurah',
+            'paling murah',
+        ])) {
             return [
                 'intent' => 'menu_recommendation',
                 'entities' => $this->extractRecommendationEntities($text),

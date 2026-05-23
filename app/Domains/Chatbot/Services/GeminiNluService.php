@@ -22,23 +22,47 @@ class GeminiNluService
 
         $prompt = $this->buildPrompt($message);
 
-        $response = Http::timeout(8)->acceptJson()->post($url, [
-            'contents' => [
-                [
-                    'role' => 'user',
-                    'parts' => [
-                        ['text' => $prompt],
+        try {
+            $response = Http::timeout(8)->acceptJson()->post($url, [
+                'contents' => [
+                    [
+                        'role' => 'user',
+                        'parts' => [
+                            ['text' => $prompt],
+                        ],
                     ],
                 ],
-            ],
-            'generationConfig' => [
-                'temperature' => 0.1,
-                'responseMimeType' => 'application/json',
-            ],
-        ]);
+                'generationConfig' => [
+                    'temperature' => 0.1,
+                    'responseMimeType' => 'application/json',
+                ],
+            ]);
+        } catch (\Throwable) {
+            return [
+                'error_reason' => 'network_error',
+            ];
+        }
 
         if (!$response->successful()) {
-            return null;
+            $statusCode = (int) $response->status();
+            $statusText = strtoupper((string) data_get($response->json(), 'error.status', ''));
+            $messageText = strtoupper((string) data_get($response->json(), 'error.message', ''));
+
+            if ($statusCode === 429 || str_contains($statusText, 'RESOURCE_EXHAUSTED') || str_contains($messageText, 'QUOTA')) {
+                return [
+                    'error_reason' => 'quota_exhausted',
+                ];
+            }
+
+            if ($statusCode === 401 || $statusCode === 403) {
+                return [
+                    'error_reason' => 'auth_error',
+                ];
+            }
+
+            return [
+                'error_reason' => 'upstream_error',
+            ];
         }
 
         $text = (string) data_get($response->json(), 'candidates.0.content.parts.0.text', '');
@@ -48,7 +72,9 @@ class GeminiNluService
 
         $decoded = json_decode($text, true);
         if (!is_array($decoded)) {
-            return null;
+            return [
+                'error_reason' => 'invalid_ai_payload',
+            ];
         }
 
         return [

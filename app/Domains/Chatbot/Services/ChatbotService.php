@@ -4,10 +4,12 @@ namespace App\Domains\Chatbot\Services;
 
 use App\Domains\Cart\Services\CartService;
 use App\Domains\Payment\Services\PaymentService;
+use App\Models\ChatbotMetric;
 use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class ChatbotService
 {
@@ -22,6 +24,15 @@ class ChatbotService
         'checkout_request',
         'cancel_order_request',
     ];
+    private const AI_MIN_CONFIDENCE_BY_INTENT = [
+        'greeting' => 0.7,
+        'order_menu' => 0.75,
+        'tracking_order' => 0.7,
+        'menu_recommendation' => 0.65,
+        'view_cart' => 0.75,
+        'checkout_request' => 0.75,
+        'cancel_order_request' => 0.8,
+    ];
 
     public function __construct(
         private readonly ChatbotIntentService $intentService,
@@ -33,9 +44,13 @@ class ChatbotService
 
     public function handleMessage(User $user, string $message, string $action = ''): array
     {
+        $startedAt = microtime(true);
         $intentPayload = $this->intentService->detect($message, $action);
         $intent = (string) ($intentPayload['intent'] ?? 'unknown_or_ambiguous');
         $entities = (array) ($intentPayload['entities'] ?? []);
+        $source = 'rule_based';
+        $aiConfidence = null;
+        $aiDecision = 'not_used';
 
         $response = match ($intent) {
             'greeting' => $this->greetingResponse(),
@@ -48,26 +63,68 @@ class ChatbotService
             'checkout_type_select' => $this->checkoutTypeSelectedResponse((string) ($entities['checkout_type'] ?? '')),
             'cancel_order_request' => $this->cancelPromptResponse($user),
             'confirm_cancel' => $this->cancelConfirmResponse($user, (string) ($entities['order_id'] ?? '')),
-            default => $this->fallbackWithGemini($user, $message),
+            default => $this->fallbackWithGemini($user, $message, $source, $aiConfidence, $aiDecision),
         };
 
-        return $this->normalizeResponse($response);
+        $normalized = $this->normalizeResponse($response);
+        $this->logTelemetry(
+            userId: (string) ($user->_id ?? ''),
+            source: $source,
+            intentRuleBased: $intent,
+            intentResolved: (string) ($normalized['intent'] ?? 'unknown_or_ambiguous'),
+            aiDecision: $aiDecision,
+            aiConfidence: $aiConfidence,
+            action: $action,
+            latencyMs: (int) round((microtime(true) - $startedAt) * 1000)
+        );
+
+        return $normalized;
     }
 
-    private function fallbackWithGemini(User $user, string $message): array
+    private function fallbackWithGemini(User $user, string $message, string &$source, ?float &$aiConfidence, string &$aiDecision): array
     {
-        $aiPayload = $this->geminiNluService?->detectIntent($message);
+        $geminiService = $this->geminiNluService;
+        if ($geminiService === null) {
+            try {
+                $geminiService = app(GeminiNluService::class);
+            } catch (\Throwable) {
+                $geminiService = null;
+            }
+        }
+
+        $aiPayload = $geminiService?->detectIntent($message);
         if (!is_array($aiPayload)) {
-            return $this->fallbackResponse();
+            $aiDecision = 'no_ai_payload';
+            return $this->fallbackResponse('no_ai_payload');
+        }
+
+        $errorReason = trim((string) ($aiPayload['error_reason'] ?? ''));
+        if ($errorReason !== '') {
+            $aiDecision = $errorReason;
+            return $this->fallbackResponse($errorReason);
         }
 
         $intent = strtolower(trim((string) ($aiPayload['intent'] ?? '')));
         $confidence = (float) ($aiPayload['confidence'] ?? 0);
-        $entities = is_array($aiPayload['entities'] ?? null) ? $aiPayload['entities'] : [];
+        $entities = $this->sanitizeAiEntities(
+            $intent,
+            is_array($aiPayload['entities'] ?? null) ? $aiPayload['entities'] : []
+        );
+        $aiConfidence = $confidence;
 
-        if ($confidence < 0.6 || !in_array($intent, self::AI_ALLOWED_INTENTS, true)) {
+        if (!in_array($intent, self::AI_ALLOWED_INTENTS, true)) {
+            $aiDecision = 'intent_not_allowed';
             return $this->fallbackResponse();
         }
+
+        $minConfidence = self::AI_MIN_CONFIDENCE_BY_INTENT[$intent] ?? 0.8;
+        if ($confidence < $minConfidence) {
+            $aiDecision = 'below_threshold';
+            return $this->fallbackResponse();
+        }
+
+        $source = 'gemini_fallback';
+        $aiDecision = 'used';
 
         return match ($intent) {
             'greeting' => $this->greetingResponse(),
@@ -79,6 +136,31 @@ class ChatbotService
             'cancel_order_request' => $this->cancelPromptResponse($user),
             default => $this->fallbackResponse(),
         };
+    }
+
+    private function sanitizeAiEntities(string $intent, array $entities): array
+    {
+        if ($intent === 'order_menu') {
+            $menuName = trim((string) ($entities['menu_name'] ?? ''));
+            $quantity = (int) ($entities['quantity'] ?? 0);
+            return [
+                'menu_name' => $menuName,
+                'quantity' => $quantity > 0 && $quantity <= 20 ? $quantity : null,
+            ];
+        }
+
+        if ($intent === 'menu_recommendation') {
+            $taste = trim((string) ($entities['taste'] ?? ''));
+            $maxPrice = (int) ($entities['max_price'] ?? 0);
+            return [
+                'taste' => in_array($taste, ['spicy'], true) ? $taste : null,
+                'light' => (bool) ($entities['light'] ?? false),
+                'filling' => (bool) ($entities['filling'] ?? false),
+                'max_price' => $maxPrice > 0 && $maxPrice <= 500000 ? $maxPrice : null,
+            ];
+        }
+
+        return [];
     }
 
     private function greetingResponse(): array
@@ -453,12 +535,19 @@ class ChatbotService
         ];
     }
 
-    private function fallbackResponse(): array
+    private function fallbackResponse(?string $fallbackReason = null): array
     {
+        $data = null;
+        if ($fallbackReason !== null && trim($fallbackReason) !== '') {
+            $data = [
+                'fallback_reason' => trim($fallbackReason),
+            ];
+        }
+
         return [
             'reply' => 'Maksud kamu belum terbaca jelas. Coba pilih aksi cepat di bawah ini.',
             'intent' => 'unknown_or_ambiguous',
-            'data' => null,
+            'data' => $data,
             'actions' => [
                 ['type' => 'quick_reply', 'label' => 'Pesan Makanan', 'value' => 'greeting_order'],
                 ['type' => 'quick_reply', 'label' => 'Tracking Pesanan', 'value' => 'greeting_tracking'],
@@ -537,5 +626,43 @@ class ChatbotService
             'actions' => array_values($normalizedActions),
             'cards' => array_values($normalizedCards),
         ];
+    }
+
+    private function logTelemetry(
+        string $userId,
+        string $source,
+        string $intentRuleBased,
+        string $intentResolved,
+        string $aiDecision,
+        ?float $aiConfidence,
+        string $action,
+        int $latencyMs
+    ): void {
+        try {
+            ChatbotMetric::create([
+                'user_id' => $userId,
+                'source' => $source,
+                'intent_rule_based' => $intentRuleBased,
+                'intent_resolved' => $intentResolved,
+                'ai_decision' => $aiDecision,
+                'ai_confidence' => $aiConfidence,
+                'action' => $action,
+                'latency_ms' => $latencyMs,
+                'channel' => 'mobile_chatbot',
+            ]);
+
+            Log::info('chatbot.message.resolved', [
+                'user_id' => $userId,
+                'source' => $source,
+                'intent_rule_based' => $intentRuleBased,
+                'intent_resolved' => $intentResolved,
+                'ai_decision' => $aiDecision,
+                'ai_confidence' => $aiConfidence,
+                'action' => $action,
+                'latency_ms' => $latencyMs,
+            ]);
+        } catch (\Throwable) {
+            // Skip telemetry logging when container/facade is unavailable in pure unit tests.
+        }
     }
 }

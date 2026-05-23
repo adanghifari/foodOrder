@@ -3,13 +3,17 @@
 namespace App\Http\Controllers\Frontliner\Mobile;
 
 use App\Domains\Chatbot\Services\ChatbotService;
+use App\Domains\Chatbot\Services\GeminiNluService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class ChatbotController extends Controller
 {
-    public function __construct(private readonly ChatbotService $chatbotService)
+    public function __construct(
+        private readonly ChatbotService $chatbotService,
+        private readonly GeminiNluService $geminiNluService
+    )
     {
     }
 
@@ -81,6 +85,46 @@ class ChatbotController extends Controller
                 'rule_based' => $ruleBased,
                 'gemini' => $aiFallback,
                 'resolved_response' => $response,
+            ],
+        ]);
+    }
+
+    public function health(Request $request)
+    {
+        if (app()->environment('production')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Not found',
+            ], 404);
+        }
+
+        $configured = trim((string) config('services.gemini.api_key')) !== '';
+        $model = trim((string) config('services.gemini.model', ''));
+        $runInference = $request->boolean('run_inference', false);
+
+        $result = null;
+        if ($configured && $runInference) {
+            $probeMessage = trim((string) $request->query('probe', 'yang pedes murah ada ga?'));
+            $startedAt = microtime(true);
+            $ai = $this->geminiNluService->detectIntent($probeMessage);
+            $latencyMs = (int) round((microtime(true) - $startedAt) * 1000);
+
+            $result = [
+                'ok' => is_array($ai),
+                'latency_ms' => $latencyMs,
+                'probe' => $probeMessage,
+                'response' => $ai,
+            ];
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Chatbot health checked',
+            'data' => [
+                'gemini_configured' => $configured,
+                'gemini_model' => $model,
+                'run_inference' => $runInference,
+                'inference_result' => $result,
             ],
         ]);
     }

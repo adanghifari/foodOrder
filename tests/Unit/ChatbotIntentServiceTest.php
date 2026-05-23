@@ -53,6 +53,15 @@ class ChatbotIntentServiceTest extends TestCase
         $this->assertSame(20000, $result['entities']['max_price']);
     }
 
+    public function test_detects_recommendation_for_cheapest_phrase(): void
+    {
+        $service = new ChatbotIntentService();
+        $result = $service->detect('makanan yang paling murah apa?');
+
+        $this->assertSame('menu_recommendation', $result['intent']);
+        $this->assertSame(20000, $result['entities']['max_price']);
+    }
+
     public function test_maps_quick_reply_quantity_action_to_order_intent(): void
     {
         $service = new ChatbotIntentService();
