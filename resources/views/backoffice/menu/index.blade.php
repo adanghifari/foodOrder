@@ -63,7 +63,7 @@
                         </div>
                         <p class="text-sm font-semibold text-[var(--philippine-bronze)]">Rp {{ number_format((float) $menu->price, 0, ',', '.') }}</p>
                         <div class="flex items-center gap-2">
-                            <a href="/backoffice/daftar_menu?edit={{ urlencode((string) $menu->_id) }}" data-modal-link data-modal-hard-reload class="inline-flex items-center rounded-lg bg-[var(--rajah)] hover:brightness-95 text-[var(--philippine-bronze)] text-sm font-bold px-3.5 py-2 transition">Edit Menu</a>
+                            <a href="/backoffice/daftar_menu?edit={{ urlencode((string) $menu->_id) }}" data-modal-link class="inline-flex items-center rounded-lg bg-[var(--rajah)] hover:brightness-95 text-[var(--philippine-bronze)] text-sm font-bold px-3.5 py-2 transition">Edit Menu</a>
                             <form action="/backoffice/daftar_menu/{{ urlencode((string) $menu->_id) }}" method="POST" class="menu-delete-form" data-menu-name="{{ $menu->name }}">
                                 @csrf
                                 @method('DELETE')
@@ -249,7 +249,7 @@
                         </div>
                         <p class="text-sm font-semibold text-[var(--philippine-bronze)]">Rp ${formatNumber(price)}</p>
                         <div class="flex items-center gap-2">
-                            <a href="/backoffice/daftar_menu?edit=${encodeURIComponent(id)}" data-modal-link data-modal-hard-reload class="inline-flex items-center rounded-lg bg-[var(--rajah)] hover:brightness-95 text-[var(--philippine-bronze)] text-sm font-bold px-3.5 py-2 transition">Edit Menu</a>
+                            <a href="/backoffice/daftar_menu?edit=${encodeURIComponent(id)}" data-modal-link class="inline-flex items-center rounded-lg bg-[var(--rajah)] hover:brightness-95 text-[var(--philippine-bronze)] text-sm font-bold px-3.5 py-2 transition">Edit Menu</a>
                             <form action="/backoffice/daftar_menu/${encodeURIComponent(id)}" method="POST" class="menu-delete-form" data-menu-name="${escapeHtml(name)}">
                                 @csrf
                                 @method('DELETE')
@@ -273,12 +273,15 @@
 
             function closeAnyMenuModal() {
                 document.querySelectorAll('[data-modal-root]').forEach(function (modal) {
-                    modal.classList.add('hidden');
+                    modal.classList.remove('is-open');
+                    modal.remove();
                 });
 
+                document.body.style.overflow = '';
                 const url = new URL(window.location.href);
                 url.searchParams.delete('create');
                 url.searchParams.delete('edit');
+                url.searchParams.delete('detail');
                 window.history.replaceState({}, '', url.pathname + url.search);
             }
 
@@ -320,6 +323,16 @@
                     const fromErrors = firstValidationMessage(payload && (payload.errors || payload.data));
                     const fallback = payload && payload.message ? String(payload.message) : 'Gagal menyimpan menu.';
                     throw new Error(fromErrors || fallback);
+                }
+
+                const isValidPayload = payload.status === 'success'
+                    && payload.data
+                    && String(payload.data.id || '').trim() !== '';
+
+                if (!isValidPayload) {
+                    const error = new Error('Respons server tidak lengkap. Halaman akan dimuat ulang.');
+                    error.shouldReload = true;
+                    throw error;
                 }
 
                 return payload;
@@ -462,6 +475,16 @@
 
                 form.addEventListener('submit', async function (event) {
                     event.preventDefault();
+                    if (form.dataset.submitting === '1') {
+                        return;
+                    }
+
+                    form.dataset.submitting = '1';
+                    const submitButtons = Array.from(document.querySelectorAll('button[form="' + form.id + '"][type="submit"]'));
+                    submitButtons.forEach(function (button) {
+                        button.disabled = true;
+                        button.classList.add('opacity-60', 'cursor-not-allowed');
+                    });
 
                     try {
                         const payload = await submitMenuFormAjax(form);
@@ -476,6 +499,11 @@
                             });
                         }
                     } catch (error) {
+                        if (error && error.shouldReload) {
+                            window.location.reload();
+                            return;
+                        }
+
                         if (window.KedaiKlikNotify && typeof window.KedaiKlikNotify.show === 'function') {
                             window.KedaiKlikNotify.show({
                                 type: 'error',
@@ -483,6 +511,12 @@
                                 message: error.message || 'Terjadi kesalahan saat menyimpan menu.',
                             });
                         }
+                    } finally {
+                        form.dataset.submitting = '0';
+                        submitButtons.forEach(function (button) {
+                            button.disabled = false;
+                            button.classList.remove('opacity-60', 'cursor-not-allowed');
+                        });
                     }
                 });
             });

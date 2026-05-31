@@ -102,15 +102,7 @@
         <input id="image" name="image" type="file" accept="image/jpeg,image/png,image/jpg,image/gif,image/webp" class="hidden">
     </form>
 
-    <x-slot:footer>
-        <div class="w-full flex items-center justify-end gap-3">
-            <a href="/backoffice/daftar_menu" class="inline-flex items-center rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-bold px-4 py-2.5 transition">Batal</a>
-            <button type="submit" form="edit-menu-form" class="inline-flex items-center rounded-xl bg-[var(--alloy-orange)] hover:bg-[var(--philippine-bronze)] text-white text-sm font-bold px-4 py-2.5 transition">Simpan Perubahan</button>
-        </div>
-    </x-slot:footer>
-</x-backoffice.menu.modal>
-
-<script>
+    <script>
     (function () {
         const removeInput = document.getElementById('remove_image');
         const removeCornerButton = document.getElementById('remove-image-corner');
@@ -285,3 +277,11 @@
         renderTags();
     })();
 </script>
+
+    <x-slot:footer>
+        <div class="w-full flex items-center justify-end gap-3">
+            <a href="/backoffice/daftar_menu" class="inline-flex items-center rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-bold px-4 py-2.5 transition">Batal</a>
+            <button type="submit" form="edit-menu-form" class="inline-flex items-center rounded-xl bg-[var(--alloy-orange)] hover:bg-[var(--philippine-bronze)] text-white text-sm font-bold px-4 py-2.5 transition">Simpan Perubahan</button>
+        </div>
+    </x-slot:footer>
+</x-backoffice.menu.modal>
