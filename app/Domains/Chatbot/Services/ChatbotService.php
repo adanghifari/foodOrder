@@ -1401,7 +1401,10 @@ class ChatbotService
             ];
         })->values()->all();
 
-        $topScore = (int) (($scoredWithPercent->first()['score_percent'] ?? 0));
+        $firstScored = $scoredWithPercent->first();
+        $topScore = is_array($firstScored)
+            ? (int) ($firstScored['score_percent'] ?? 0)
+            : 0;
         $reply = $aiConversationalReply !== '' ? $aiConversationalReply : 'Ini rekomendasi menu yang cocok untuk kamu.';
         if ($topScore >= 60) {
             $reply = 'Aku menemukan rekomendasi yang cocok dengan kriteria kamu.';
