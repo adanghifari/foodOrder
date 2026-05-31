@@ -43,13 +43,13 @@
         ->values();
 @endphp
 
-<div id="kk-notification-root" class="fixed inset-x-0 top-0 z-[120] pointer-events-none">
+<div id="kk-notification-root" class="fixed inset-x-0 top-0 z-[220] pointer-events-none">
     <div id="kk-notification-stack" class="mx-auto flex max-w-md flex-col gap-3 px-4 pt-4 sm:mr-4 sm:ml-auto"></div>
 </div>
 
 <div
     id="kk-confirm-overlay"
-    class="fixed inset-0 z-[130] hidden bg-slate-950/45 px-4 py-6"
+    class="fixed inset-0 z-[230] hidden bg-slate-950/45 px-4 py-6"
     aria-hidden="true"
 >
     <div class="flex min-h-full items-center justify-center">

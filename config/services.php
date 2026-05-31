@@ -63,6 +63,8 @@ return [
     'gemini' => [
         'api_key' => env('GEMINI_API_KEY'),
         'model' => env('GEMINI_MODEL', 'gemini-2.0-flash-lite'),
+        'fallback_model' => env('GEMINI_FALLBACK_MODEL', ''),
+        'nlu_cache_ttl_seconds' => (int) env('GEMINI_NLU_CACHE_TTL_SECONDS', 900),
     ],
 
 ];

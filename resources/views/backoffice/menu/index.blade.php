@@ -89,11 +89,22 @@
         @endif
 
         @if (!empty($selectedEditMenu))
-            @include('backoffice.menu.edit.edit', ['menu' => $selectedEditMenu, 'allowedCategories' => $allowedCategories])
+            @include('backoffice.menu.edit.edit', [
+                'menu' => $selectedEditMenu,
+                'allowedCategories' => $allowedCategories,
+                'categoryTagMap' => $categoryTagMap,
+                'categoryMetadataMap' => $categoryMetadataMap,
+                'calorieLevels' => $calorieLevels,
+            ])
         @endif
 
         @if (!empty($showCreateModal))
-            @include('backoffice.menu.create.create', ['allowedCategories' => $allowedCategories])
+            @include('backoffice.menu.create.create', [
+                'allowedCategories' => $allowedCategories,
+                'categoryTagMap' => $categoryTagMap,
+                'categoryMetadataMap' => $categoryMetadataMap,
+                'calorieLevels' => $calorieLevels,
+            ])
         @endif
 
         <section id="delete-confirm-modal" class="hidden fixed top-0 left-0 w-screen h-screen z-[130]">
@@ -286,8 +297,29 @@
                     return null;
                 });
 
+                function firstValidationMessage(errors) {
+                    if (!errors || typeof errors !== 'object') {
+                        return '';
+                    }
+
+                    const keys = Object.keys(errors);
+                    for (let i = 0; i < keys.length; i += 1) {
+                        const value = errors[keys[i]];
+                        if (Array.isArray(value) && value.length > 0) {
+                            return String(value[0] || '').trim();
+                        }
+                        if (typeof value === 'string' && value.trim() !== '') {
+                            return value.trim();
+                        }
+                    }
+
+                    return '';
+                }
+
                 if (!response.ok || !payload) {
-                    throw new Error((payload && payload.message) || 'Gagal menyimpan menu.');
+                    const fromErrors = firstValidationMessage(payload && (payload.errors || payload.data));
+                    const fallback = payload && payload.message ? String(payload.message) : 'Gagal menyimpan menu.';
+                    throw new Error(fromErrors || fallback);
                 }
 
                 return payload;

@@ -21,5 +21,11 @@ class MenuItem extends Model
         'stock',
         'category',
         'image_url',
+        'tags',
+        'spice_level',
+        'sweet_level',
+        'fresh_level',
+        'calorie_level',
+        'recommendation_note',
     ];
 }

@@ -3,6 +3,9 @@
         $detailStatus = strtoupper((string) ($selectedBooking['status'] ?? 'UNKNOWN'));
         $detailStatusLabel = match ($detailStatus) {
             'CONFIRMED' => 'Terkonfirmasi',
+            'SEATED' => 'Sedang Diproses',
+            'COMPLETED' => 'Disajikan',
+            'NO_SHOW' => 'Tidak Hadir',
             'IN_QUEUE' => 'Dalam Antrean',
             'IN_PROGRESS' => 'Sedang Diproses',
             'DELIVERED' => 'Disajikan',
@@ -10,6 +13,9 @@
         };
         $detailStatusClass = match ($detailStatus) {
             'CONFIRMED' => 'bg-amber-100 text-amber-700',
+            'SEATED' => 'bg-blue-100 text-blue-700',
+            'COMPLETED' => 'bg-emerald-100 text-emerald-700',
+            'NO_SHOW' => 'bg-rose-100 text-rose-700',
             'IN_QUEUE' => 'bg-orange-100 text-orange-700',
             'IN_PROGRESS' => 'bg-blue-100 text-blue-700',
             'DELIVERED' => 'bg-emerald-100 text-emerald-700',
