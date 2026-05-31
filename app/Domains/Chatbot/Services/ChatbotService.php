@@ -55,6 +55,7 @@ class ChatbotService
     public function handleMessage(User $user, string $message, string $action = ''): array
     {
         $startedAt = microtime(true);
+        $aiPayload = null;
         $intentPayload = $this->intentService->detect($message, $action);
         $intent = (string) ($intentPayload['intent'] ?? 'unknown_or_ambiguous');
         $entities = (array) ($intentPayload['entities'] ?? []);
@@ -65,7 +66,7 @@ class ChatbotService
         $aiConfidence = null;
         $aiDecision = 'not_used';
 
-        $contextGateResponse = $this->contextGateWithGemini($message, $action, $source, $aiConfidence, $aiDecision);
+        $contextGateResponse = $this->contextGateWithGemini($message, $action, $source, $aiConfidence, $aiDecision, $aiPayload);
         if (is_array($contextGateResponse)) {
             $normalized = $this->normalizeResponse($contextGateResponse);
             $this->logTelemetry(
@@ -87,7 +88,8 @@ class ChatbotService
                 $entities,
                 $source,
                 $aiConfidence,
-                $aiDecision
+                $aiDecision,
+                $aiPayload
             );
         }
 
@@ -106,7 +108,7 @@ class ChatbotService
             'checkout_type_select' => $this->checkoutTypeSelectedResponse((string) ($entities['checkout_type'] ?? '')),
             'cancel_order_request' => $this->cancelPromptResponse($user),
             'confirm_cancel' => $this->cancelConfirmResponse($user, (string) ($entities['order_id'] ?? '')),
-            default => $this->fallbackWithGemini($user, $message, $source, $aiConfidence, $aiDecision),
+            default => $this->fallbackWithGemini($user, $message, $source, $aiConfidence, $aiDecision, $aiPayload),
         };
 
         $normalized = $this->normalizeResponse($response);
@@ -129,7 +131,8 @@ class ChatbotService
         string $action,
         string &$source,
         ?float &$aiConfidence,
-        string &$aiDecision
+        string &$aiDecision,
+        ?array &$aiPayload
     ): ?array {
         if (trim($action) !== '' || trim($message) === '') {
             return null;
@@ -144,7 +147,9 @@ class ChatbotService
             }
         }
 
-        $aiPayload = $geminiService?->detectIntent($message);
+        if (!is_array($aiPayload)) {
+            $aiPayload = $geminiService?->detectIntent($message);
+        }
         if (!is_array($aiPayload)) {
             return null;
         }
@@ -175,7 +180,8 @@ class ChatbotService
         array $baseEntities,
         string &$source,
         ?float &$aiConfidence,
-        string &$aiDecision
+        string &$aiDecision,
+        ?array &$aiPayload
     ): array {
         $text = trim($message);
         if ($text === '') {
@@ -192,7 +198,9 @@ class ChatbotService
             }
         }
 
-        $aiPayload = $geminiService?->detectIntent($text);
+        if (!is_array($aiPayload)) {
+            $aiPayload = $geminiService?->detectIntent($text);
+        }
         if (!is_array($aiPayload)) {
             $aiDecision = 'recommendation_no_ai_payload';
             return $baseEntities;
@@ -257,7 +265,14 @@ class ChatbotService
         return $merged;
     }
 
-    private function fallbackWithGemini(User $user, string $message, string &$source, ?float &$aiConfidence, string &$aiDecision): array
+    private function fallbackWithGemini(
+        User $user,
+        string $message,
+        string &$source,
+        ?float &$aiConfidence,
+        string &$aiDecision,
+        ?array &$aiPayload
+    ): array
     {
         $geminiService = $this->geminiNluService;
         if ($geminiService === null) {
@@ -268,7 +283,9 @@ class ChatbotService
             }
         }
 
-        $aiPayload = $geminiService?->detectIntent($message);
+        if (!is_array($aiPayload)) {
+            $aiPayload = $geminiService?->detectIntent($message);
+        }
         if (!is_array($aiPayload)) {
             $aiDecision = 'no_ai_payload';
             return $this->fallbackResponse('no_ai_payload');
@@ -340,7 +357,7 @@ class ChatbotService
             $conversationalReply = trim((string) ($entities['conversational_reply'] ?? ''));
             $needsClarification = (bool) ($entities['needs_clarification'] ?? false);
             $requiredTags = is_array($entities['required_tags'] ?? null) ? $entities['required_tags'] : [];
-            $allowedTags = config('menu_taxonomy.allowed_tags', []);
+            $allowedTags = $this->getAllowedMenuTags();
             return [
                 'taste' => in_array($taste, ['spicy', 'sweet', 'fresh'], true) ? $taste : null,
                 'taste_intensity' => in_array($tasteIntensity, ['normal', 'high'], true) ? $tasteIntensity : 'normal',
@@ -360,6 +377,16 @@ class ChatbotService
         }
 
         return [];
+    }
+
+    private function getAllowedMenuTags(): array
+    {
+        try {
+            $tags = config('menu_taxonomy.allowed_tags', []);
+            return is_array($tags) ? $tags : [];
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     private function greetingResponse(): array
