@@ -431,14 +431,22 @@ class TableService
             return false;
         }
 
+        $hasAnyOrderSinceSession = false;
+        if ($sessionStartedAt) {
+            try {
+                $sessionStart = Carbon::parse($sessionStartedAt);
+                $hasAnyOrderSinceSession = Order::where('table_number', (int) $tableId)
+                    ->where('created_at', '>=', $sessionStart)
+                    ->exists();
+            } catch (\Throwable) {
+                $hasAnyOrderSinceSession = false;
+            }
+        }
+
         // If user scanned a table but did not place any order within 1 hour,
         // expire the table session automatically.
         if ($sessionStartedAt) {
             $sessionStart = Carbon::parse($sessionStartedAt);
-
-            $hasAnyOrderSinceSession = Order::where('table_number', (int) $tableId)
-                ->where('created_at', '>=', $sessionStart)
-                ->exists();
 
             if (!$hasAnyOrderSinceSession && now()->gte($sessionStart->copy()->addHour())) {
                 $this->clearSessionKeys($request, false);
@@ -446,7 +454,12 @@ class TableService
             }
         }
 
-        if ($this->isTableAvailable((int) $tableId)) {
+        // Important:
+        // Do not clear immediately after first scan when table is still available
+        // and user has not placed any order yet.
+        // Only clear available table sessions when there has been at least one
+        // order in this session window (e.g. order finished / table released).
+        if ($hasAnyOrderSinceSession && $this->isTableAvailable((int) $tableId)) {
             $this->clearSessionKeys($request, false);
             return true;
         }

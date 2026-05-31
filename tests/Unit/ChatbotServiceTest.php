@@ -185,4 +185,35 @@ class ChatbotServiceTest extends TestCase
 
         $this->assertSame('unknown_or_ambiguous', $response['intent']);
     }
+
+    public function test_short_ambiguous_message_uses_cheap_clarification_without_gemini(): void
+    {
+        $intent = Mockery::mock(ChatbotIntentService::class);
+        $intent->shouldReceive('detect')
+            ->once()
+            ->with('yang enak dong', '')
+            ->andReturn([
+                'intent' => 'unknown_or_ambiguous',
+                'entities' => [],
+            ]);
+
+        $cart = Mockery::mock(CartService::class);
+        $payment = Mockery::mock(PaymentService::class);
+        $gemini = Mockery::mock(GeminiNluService::class);
+        $gemini->shouldNotReceive('detectIntent');
+
+        $service = new ChatbotService($intent, $cart, $payment, $gemini);
+        $user = new User([
+            'username' => 'tester',
+            'email' => 'tester@example.com',
+            'name' => 'Tester',
+            'role' => 'CUSTOMER',
+        ]);
+        $user->setAttribute('_id', 'user-1');
+
+        $response = $service->handleMessage($user, 'yang enak dong', '');
+
+        $this->assertSame('unknown_or_ambiguous', $response['intent']);
+        $this->assertSame(true, $response['data']['clarification_required'] ?? false);
+    }
 }

@@ -18,6 +18,7 @@ class ChatbotService
     private const AI_ALLOWED_INTENTS = [
         'greeting',
         'small_talk',
+        'best_seller',
         'out_of_scope',
         'order_menu',
         'tracking_order',
@@ -32,6 +33,7 @@ class ChatbotService
     private const AI_MIN_CONFIDENCE_BY_INTENT = [
         'greeting' => 0.7,
         'small_talk' => 0.65,
+        'best_seller' => 0.75,
         'out_of_scope' => 0.75,
         'order_menu' => 0.75,
         'tracking_order' => 0.7,
@@ -56,6 +58,7 @@ class ChatbotService
     {
         $startedAt = microtime(true);
         $aiPayload = null;
+        $normalizedMessage = strtolower(trim($message));
         $intentPayload = $this->intentService->detect($message, $action);
         $intent = (string) ($intentPayload['intent'] ?? 'unknown_or_ambiguous');
         $entities = (array) ($intentPayload['entities'] ?? []);
@@ -66,23 +69,46 @@ class ChatbotService
         $aiConfidence = null;
         $aiDecision = 'not_used';
 
-        $contextGateResponse = $this->contextGateWithGemini($message, $action, $source, $aiConfidence, $aiDecision, $aiPayload);
-        if (is_array($contextGateResponse)) {
-            $normalized = $this->normalizeResponse($contextGateResponse);
-            $this->logTelemetry(
-                userId: (string) ($user->_id ?? ''),
-                source: $source,
-                intentRuleBased: $intent,
-                intentResolved: (string) ($normalized['intent'] ?? 'unknown_or_ambiguous'),
-                aiDecision: $aiDecision,
-                aiConfidence: $aiConfidence,
-                action: $action,
-                latencyMs: (int) round((microtime(true) - $startedAt) * 1000)
-            );
-            return $normalized;
+        if ($this->shouldUseGeminiContextGate($intent, $action, $normalizedMessage)) {
+            $contextGateResponse = $this->contextGateWithGemini($message, $action, $source, $aiConfidence, $aiDecision, $aiPayload);
+            if (is_array($contextGateResponse)) {
+                $normalized = $this->normalizeResponse($contextGateResponse);
+                $this->logTelemetry(
+                    userId: (string) ($user->_id ?? ''),
+                    source: $source,
+                    intentRuleBased: $intent,
+                    intentResolved: (string) ($normalized['intent'] ?? 'unknown_or_ambiguous'),
+                    aiDecision: $aiDecision,
+                    aiConfidence: $aiConfidence,
+                    action: $action,
+                    latencyMs: (int) round((microtime(true) - $startedAt) * 1000)
+                );
+                return $normalized;
+            }
+        } else {
+            $aiDecision = 'context_gate_skipped';
         }
 
         if ($intent === 'menu_recommendation') {
+            if ($this->shouldReturnCheapClarificationForRecommendation($normalizedMessage, $entities)) {
+                $response = $this->cheapRecommendationClarificationResponse();
+                $normalized = $this->normalizeResponse($response);
+                $this->logTelemetry(
+                    userId: (string) ($user->_id ?? ''),
+                    source: $source,
+                    intentRuleBased: $intent,
+                    intentResolved: (string) ($normalized['intent'] ?? 'unknown_or_ambiguous'),
+                    aiDecision: 'cheap_clarification',
+                    aiConfidence: null,
+                    action: $action,
+                    latencyMs: (int) round((microtime(true) - $startedAt) * 1000)
+                );
+                return $normalized;
+            }
+
+            if (!$this->shouldUseGeminiRecommendationEnrichment($normalizedMessage, $entities)) {
+                $aiDecision = 'recommendation_enrichment_skipped';
+            } else {
             $entities = $this->enrichRecommendationEntitiesFromGemini(
                 $message,
                 $entities,
@@ -91,11 +117,29 @@ class ChatbotService
                 $aiDecision,
                 $aiPayload
             );
+            }
+        }
+
+        if ($intent === 'unknown_or_ambiguous' && $this->shouldReturnCheapClarificationForUnknown($normalizedMessage)) {
+            $response = $this->cheapClarificationResponse();
+            $normalized = $this->normalizeResponse($response);
+            $this->logTelemetry(
+                userId: (string) ($user->_id ?? ''),
+                source: $source,
+                intentRuleBased: $intent,
+                intentResolved: (string) ($normalized['intent'] ?? 'unknown_or_ambiguous'),
+                aiDecision: 'cheap_clarification',
+                aiConfidence: null,
+                action: $action,
+                latencyMs: (int) round((microtime(true) - $startedAt) * 1000)
+            );
+            return $normalized;
         }
 
         $response = match ($intent) {
             'greeting' => $this->greetingResponse(),
             'small_talk' => $this->smallTalkResponse(),
+            'best_seller' => $this->bestSellerResponse(),
             'tracking_order' => $this->trackingResponse($user),
             'view_cart' => $this->cartResponse($user),
             'cart_increase_qty' => $this->cartAdjustResponse($user, $entities, true),
@@ -108,7 +152,7 @@ class ChatbotService
             'checkout_type_select' => $this->checkoutTypeSelectedResponse((string) ($entities['checkout_type'] ?? '')),
             'cancel_order_request' => $this->cancelPromptResponse($user),
             'confirm_cancel' => $this->cancelConfirmResponse($user, (string) ($entities['order_id'] ?? '')),
-            default => $this->fallbackWithGemini($user, $message, $source, $aiConfidence, $aiDecision, $aiPayload),
+            default => $this->fallbackOrClarify($user, $message, $normalizedMessage, $source, $aiConfidence, $aiDecision, $aiPayload),
         };
 
         $normalized = $this->normalizeResponse($response);
@@ -124,6 +168,186 @@ class ChatbotService
         );
 
         return $normalized;
+    }
+
+    private function fallbackOrClarify(
+        User $user,
+        string $message,
+        string $normalizedMessage,
+        string &$source,
+        ?float &$aiConfidence,
+        string &$aiDecision,
+        ?array &$aiPayload
+    ): array {
+        if (!$this->shouldUseGeminiFallback($normalizedMessage)) {
+            $aiDecision = 'fallback_cheap_clarification';
+            return $this->cheapClarificationResponse();
+        }
+
+        return $this->fallbackWithGemini($user, $message, $source, $aiConfidence, $aiDecision, $aiPayload);
+    }
+
+    private function shouldUseGeminiContextGate(string $intent, string $action, string $normalizedMessage): bool
+    {
+        if (trim($action) !== '' || $intent !== 'unknown_or_ambiguous') {
+            return false;
+        }
+
+        if ($this->isShortOrGenericMessage($normalizedMessage)) {
+            return false;
+        }
+
+        if ($this->hasStrongFoodOrderingSignal($normalizedMessage)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function shouldUseGeminiFallback(string $normalizedMessage): bool
+    {
+        if ($this->isShortOrGenericMessage($normalizedMessage)) {
+            return false;
+        }
+
+        if ($this->hasStrongFoodOrderingSignal($normalizedMessage)) {
+            return true;
+        }
+
+        return $this->looksLikeNaturalSentence($normalizedMessage);
+    }
+
+    private function shouldUseGeminiRecommendationEnrichment(string $normalizedMessage, array $entities): bool
+    {
+        if ($this->isShortOrGenericMessage($normalizedMessage)) {
+            return false;
+        }
+
+        if (!$this->looksLikeNaturalSentence($normalizedMessage)) {
+            return false;
+        }
+
+        return $this->hasInsufficientRecommendationSignals($entities);
+    }
+
+    private function shouldReturnCheapClarificationForUnknown(string $normalizedMessage): bool
+    {
+        return $this->isShortOrGenericMessage($normalizedMessage);
+    }
+
+    private function shouldReturnCheapClarificationForRecommendation(string $normalizedMessage, array $entities): bool
+    {
+        if (!$this->hasInsufficientRecommendationSignals($entities)) {
+            return false;
+        }
+
+        return $this->isShortOrGenericMessage($normalizedMessage);
+    }
+
+    private function hasInsufficientRecommendationSignals(array $entities): bool
+    {
+        $hasSignal = trim((string) ($entities['taste'] ?? '')) !== ''
+            || trim((string) ($entities['category'] ?? '')) !== ''
+            || trim((string) ($entities['calorie_level'] ?? '')) !== ''
+            || ((int) ($entities['max_price'] ?? 0)) > 0
+            || ((int) ($entities['min_price'] ?? 0)) > 0
+            || ((int) ($entities['target_price'] ?? 0)) > 0
+            || trim((string) ($entities['price_mode'] ?? '')) !== ''
+            || (($entities['light'] ?? false) === true)
+            || (($entities['filling'] ?? false) === true)
+            || !empty($entities['required_tags'] ?? [])
+            || count($this->extractQueryKeywords((string) ($entities['query_text'] ?? ''))) >= 2;
+
+        return !$hasSignal;
+    }
+
+    private function isShortOrGenericMessage(string $normalizedMessage): bool
+    {
+        $text = trim($normalizedMessage);
+        if ($text === '') {
+            return true;
+        }
+
+        $parts = preg_split('/\s+/', $text) ?: [];
+        if (count($parts) <= 2) {
+            return true;
+        }
+
+        return $this->containsAnyPhrase($text, [
+            'terserah',
+            'yang enak',
+            'enaknya apa',
+            'makan apa ya',
+            'rekomendasi dong',
+            'bingung',
+        ]);
+    }
+
+    private function hasStrongFoodOrderingSignal(string $normalizedMessage): bool
+    {
+        return $this->containsAnyPhrase($normalizedMessage, [
+            'menu',
+            'makanan',
+            'minuman',
+            'cemilan',
+            'keranjang',
+            'checkout',
+            'pesan',
+            'order',
+            'tracking',
+            'lacak',
+            'bayar',
+            'rekomendasi',
+            'harga',
+            'budget',
+            'maksimal',
+            'sekitar',
+            'di bawah',
+            'murah',
+            'pedas',
+            'manis',
+            'segar',
+        ]);
+    }
+
+    private function looksLikeNaturalSentence(string $normalizedMessage): bool
+    {
+        $parts = preg_split('/\s+/', trim($normalizedMessage)) ?: [];
+        return count($parts) >= 4;
+    }
+
+    private function cheapClarificationResponse(): array
+    {
+        return [
+            'reply' => 'Maksud kamu masih agak umum. Kamu mau bantu yang mana dulu?',
+            'intent' => 'unknown_or_ambiguous',
+            'data' => ['clarification_required' => true],
+            'actions' => [
+                ['type' => 'quick_reply', 'label' => 'Pesan Makanan', 'value' => 'greeting_order'],
+                ['type' => 'quick_reply', 'label' => 'Lihat Keranjang', 'value' => 'greeting_view_cart'],
+                ['type' => 'quick_reply', 'label' => 'Tracking Pesanan', 'value' => 'greeting_tracking'],
+                ['type' => 'quick_reply', 'label' => 'Rekomendasi Menu', 'value' => 'greeting_recommendation'],
+            ],
+        ];
+    }
+
+    private function cheapRecommendationClarificationResponse(): array
+    {
+        return [
+            'reply' => 'Kamu mau rekomendasi yang seperti apa? Pilih dulu preferensinya ya.',
+            'intent' => 'menu_recommendation',
+            'data' => ['clarification_required' => true],
+            'actions' => [
+                ['type' => 'quick_reply', 'label' => 'Makanan Utama', 'value' => 'recommend_category:MAKANAN_UTAMA'],
+                ['type' => 'quick_reply', 'label' => 'Minuman', 'value' => 'minuman'],
+                ['type' => 'quick_reply', 'label' => 'Cemilan', 'value' => 'cemilan'],
+                ['type' => 'quick_reply', 'label' => 'Pedas', 'value' => 'pedas'],
+                ['type' => 'quick_reply', 'label' => 'Manis', 'value' => 'manis'],
+                ['type' => 'quick_reply', 'label' => 'Segar', 'value' => 'segar'],
+                ['type' => 'quick_reply', 'label' => 'Mengenyangkan', 'value' => 'mengenyangkan'],
+                ['type' => 'quick_reply', 'label' => 'Harga di bawah 20rb', 'value' => 'di bawah 20000'],
+            ],
+        ];
     }
 
     private function contextGateWithGemini(
@@ -231,7 +455,7 @@ class ChatbotService
         );
 
         $merged = $baseEntities;
-        foreach (['taste', 'taste_intensity', 'category', 'calorie_level', 'query_text'] as $key) {
+        foreach (['taste', 'taste_intensity', 'category', 'calorie_level', 'query_text', 'price_mode'] as $key) {
             $value = trim((string) ($sanitized[$key] ?? ''));
             if ($value !== '') {
                 $merged[$key] = $value;
@@ -240,6 +464,12 @@ class ChatbotService
 
         if (isset($sanitized['max_price']) && (int) $sanitized['max_price'] > 0) {
             $merged['max_price'] = (int) $sanitized['max_price'];
+        }
+        if (isset($sanitized['min_price']) && (int) $sanitized['min_price'] > 0) {
+            $merged['min_price'] = (int) $sanitized['min_price'];
+        }
+        if (isset($sanitized['target_price']) && (int) $sanitized['target_price'] > 0) {
+            $merged['target_price'] = (int) $sanitized['target_price'];
         }
         if (($sanitized['light'] ?? false) === true) {
             $merged['light'] = true;
@@ -322,6 +552,7 @@ class ChatbotService
         return match ($intent) {
             'greeting' => $this->greetingResponse(),
             'small_talk' => $this->smallTalkResponse(),
+            'best_seller' => $this->bestSellerResponse(),
             'out_of_scope' => $this->outOfScopeResponse(),
             'tracking_order' => $this->trackingResponse($user),
             'view_cart' => $this->cartResponse($user),
@@ -350,6 +581,9 @@ class ChatbotService
         if ($intent === 'menu_recommendation') {
             $taste = trim((string) ($entities['taste'] ?? ''));
             $maxPrice = (int) ($entities['max_price'] ?? 0);
+            $minPrice = (int) ($entities['min_price'] ?? 0);
+            $targetPrice = (int) ($entities['target_price'] ?? 0);
+            $priceMode = trim(strtolower((string) ($entities['price_mode'] ?? '')));
             $calorieLevel = trim((string) ($entities['calorie_level'] ?? ''));
             $queryText = trim((string) ($entities['query_text'] ?? ''));
             $category = trim((string) ($entities['category'] ?? ''));
@@ -357,6 +591,7 @@ class ChatbotService
             $conversationalReply = trim((string) ($entities['conversational_reply'] ?? ''));
             $needsClarification = (bool) ($entities['needs_clarification'] ?? false);
             $requiredTags = is_array($entities['required_tags'] ?? null) ? $entities['required_tags'] : [];
+            $preferredTags = is_array($entities['preferred_tags'] ?? null) ? $entities['preferred_tags'] : [];
             $allowedTags = $this->getAllowedMenuTags();
             return [
                 'taste' => in_array($taste, ['spicy', 'sweet', 'fresh'], true) ? $taste : null,
@@ -370,7 +605,14 @@ class ChatbotService
                     fn ($tag) => trim(strtolower((string) $tag)),
                     $requiredTags
                 ), fn ($tag) => in_array($tag, $allowedTags, true))),
+                'preferred_tags' => array_values(array_filter(array_map(
+                    fn ($tag) => trim(strtolower((string) $tag)),
+                    $preferredTags
+                ))),
                 'calorie_level' => in_array($calorieLevel, ['low', 'medium', 'high'], true) ? $calorieLevel : null,
+                'price_mode' => in_array($priceMode, ['max', 'around', 'cheap', 'min', 'range'], true) ? $priceMode : null,
+                'target_price' => $targetPrice > 0 && $targetPrice <= 500000 ? $targetPrice : null,
+                'min_price' => $minPrice > 0 && $minPrice <= 500000 ? $minPrice : null,
                 'max_price' => $maxPrice > 0 && $maxPrice <= 500000 ? $maxPrice : null,
                 'query_text' => $queryText,
             ];
@@ -433,6 +675,104 @@ class ChatbotService
                 ['type' => 'quick_reply', 'label' => 'Rekomendasi Menu', 'value' => 'greeting_recommendation'],
                 ['type' => 'quick_reply', 'label' => 'Lihat Keranjang', 'value' => 'greeting_view_cart'],
             ],
+        ];
+    }
+
+    private function bestSellerResponse(): array
+    {
+        $supportedCategories = ['makanan utama', 'cemilan', 'minuman'];
+        $orders = Order::whereIn('payment_status', ['PAID', 'SUCCESS', 'SETTLEMENT'])
+            ->whereNull('order_deleted_at')
+            ->orderBy('_id', 'desc')
+            ->limit(700)
+            ->get(['items']);
+
+        $quantityByMenuId = [];
+        foreach ($orders as $order) {
+            foreach ((array) ($order->items ?? []) as $item) {
+                $menuId = (string) (is_array($item) ? ($item['menu_id'] ?? '') : ($item->menu_id ?? ''));
+                if ($menuId === '') {
+                    continue;
+                }
+                $qty = is_array($item)
+                    ? (int) ($item['quantity'] ?? 1)
+                    : (int) ($item->quantity ?? 1);
+                $qty = max(1, $qty);
+                if (!isset($quantityByMenuId[$menuId])) {
+                    $quantityByMenuId[$menuId] = 0;
+                }
+                $quantityByMenuId[$menuId] += $qty;
+            }
+        }
+
+        $menus = MenuItem::whereIn('category', $supportedCategories)
+            ->where('stock', '>', 0)
+            ->orderBy('_id', 'asc')
+            ->get();
+
+        $grouped = [
+            'makanan utama' => [],
+            'minuman' => [],
+            'cemilan' => [],
+        ];
+
+        foreach ($menus as $menu) {
+            $category = strtolower(trim((string) ($menu->category ?? '')));
+            if (!array_key_exists($category, $grouped)) {
+                continue;
+            }
+            $menuId = (string) $menu->_id;
+            $grouped[$category][] = [
+                'item' => $menu,
+                'total_ordered' => (int) ($quantityByMenuId[$menuId] ?? 0),
+            ];
+        }
+
+        $bestItems = collect();
+        foreach ($grouped as $rows) {
+            if (empty($rows)) {
+                continue;
+            }
+            usort($rows, function (array $a, array $b): int {
+                if ($a['total_ordered'] === $b['total_ordered']) {
+                    return ((float) ($a['item']->price ?? 0)) <=> ((float) ($b['item']->price ?? 0));
+                }
+                return $b['total_ordered'] <=> $a['total_ordered'];
+            });
+            $bestItems->push($rows[0]['item']);
+        }
+
+        if ($bestItems->isEmpty()) {
+            return [
+                'reply' => 'Belum ada data best seller saat ini. Mau saya bantu rekomendasi berdasarkan kategori?',
+                'intent' => 'best_seller',
+                'data' => ['items' => []],
+                'actions' => [
+                    ['type' => 'quick_reply', 'label' => 'Makanan Utama', 'value' => 'recommend_category:MAKANAN_UTAMA'],
+                    ['type' => 'quick_reply', 'label' => 'Minuman', 'value' => 'recommend_category:MINUMAN'],
+                    ['type' => 'quick_reply', 'label' => 'Cemilan', 'value' => 'recommend_category:CEMILAN'],
+                ],
+            ];
+        }
+
+        $actions = $bestItems->take(3)->map(function (MenuItem $item) {
+            return [
+                'type' => 'quick_reply',
+                'label' => 'Pesan ' . (string) ($item->name ?? 'Menu'),
+                'value' => 'suggest_menu:' . (string) $item->_id,
+            ];
+        })->values()->all();
+
+        return [
+            'reply' => 'Ini best seller yang paling sering dibeli dari tiap kategori.',
+            'intent' => 'best_seller',
+            'data' => [
+                'items' => $bestItems->map(fn (MenuItem $item) => $this->mapMenuCard($item))->values()->all(),
+            ],
+            'actions' => array_merge($actions, [
+                ['type' => 'quick_reply', 'label' => 'Lihat Keranjang', 'value' => 'greeting_view_cart'],
+            ]),
+            'cards' => $bestItems->map(fn (MenuItem $item) => ['type' => 'menu_card', 'menu' => $this->mapMenuCard($item)])->values()->all(),
         ];
     }
 
@@ -700,8 +1040,12 @@ class ChatbotService
         $queryKeywords = $this->extractQueryKeywords((string) ($entities['query_text'] ?? ''));
         $queryText = strtolower(trim((string) ($entities['query_text'] ?? '')));
         $maxPrice = isset($entities['max_price']) ? (int) $entities['max_price'] : null;
+        $minPrice = isset($entities['min_price']) ? (int) $entities['min_price'] : null;
+        $targetPrice = isset($entities['target_price']) ? (int) $entities['target_price'] : null;
+        $priceMode = strtolower(trim((string) ($entities['price_mode'] ?? '')));
         $calorieLevel = (string) ($entities['calorie_level'] ?? '');
         $requiredTags = is_array($entities['required_tags'] ?? null) ? $entities['required_tags'] : [];
+        $preferredTags = is_array($entities['preferred_tags'] ?? null) ? $entities['preferred_tags'] : [];
         $aiConversationalReply = trim((string) ($entities['conversational_reply'] ?? ''));
         $needsClarification = (bool) ($entities['needs_clarification'] ?? false);
         $hasUncertaintySignal = $this->containsAnyPhrase($queryText, [
@@ -719,8 +1063,24 @@ class ChatbotService
             || $lightRequested
             || $fillingRequested
             || !empty($requiredTags)
+            || !empty($preferredTags)
             || ($maxPrice !== null && $maxPrice > 0)
             || $calorieLevel !== '';
+
+        $looksAmbiguousLightFood = $this->containsAnyPhrase($queryText, ['makanan ringan']);
+        if ($looksAmbiguousLightFood && !$needsClarification) {
+            return [
+                'reply' => 'Aku belum yakin maksud kamu. Maksudnya makanan utama yang ringan, cemilan, atau menu rendah kalori?',
+                'intent' => 'menu_recommendation',
+                'data' => ['clarification_required' => true],
+                'actions' => [
+                    ['type' => 'quick_reply', 'label' => 'Makanan utama ringan', 'value' => 'recommend_tag:MAKANAN_UTAMA:ringan'],
+                    ['type' => 'quick_reply', 'label' => 'Cemilan', 'value' => 'recommend_category:CEMILAN'],
+                    ['type' => 'quick_reply', 'label' => 'Kalori rendah', 'value' => 'kalori rendah'],
+                    ['type' => 'quick_reply', 'label' => 'Lihat semua makanan', 'value' => 'recommend_category:MAKANAN_UTAMA'],
+                ],
+            ];
+        }
 
         $hasFreeTextSignal = !empty($queryKeywords);
         if ($needsClarification || $hasUncertaintySignal || (!$hasStructuredSignal && !$hasFreeTextSignal)) {
@@ -752,7 +1112,13 @@ class ChatbotService
 
         $query = MenuItem::query();
 
-        if ($maxPrice !== null && $maxPrice > 0) {
+        if ($priceMode === 'range' && $minPrice !== null && $minPrice > 0 && $maxPrice !== null && $maxPrice > 0) {
+            $query->whereBetween('price', [min($minPrice, $maxPrice), max($minPrice, $maxPrice)]);
+        } elseif ($priceMode === 'around' && $targetPrice !== null && $targetPrice > 0) {
+            $aroundMin = $minPrice !== null && $minPrice > 0 ? $minPrice : (int) floor($targetPrice * 0.8);
+            $aroundMax = $maxPrice !== null && $maxPrice > 0 ? $maxPrice : (int) ceil($targetPrice * 1.2);
+            $query->whereBetween('price', [$aroundMin, $aroundMax]);
+        } elseif ($maxPrice !== null && $maxPrice > 0) {
             $query->where('price', '<=', $maxPrice);
         }
 
@@ -812,7 +1178,7 @@ class ChatbotService
 
         $menus = $query->where('stock', '>', 0)->limit(80)->get();
         $scored = $menus
-            ->map(function (MenuItem $item) use ($lightRequested, $fillingRequested, $taste, $queryKeywords, $tasteIntensity) {
+            ->map(function (MenuItem $item) use ($lightRequested, $fillingRequested, $taste, $queryKeywords, $tasteIntensity, $preferredTags, $calorieLevel) {
                 $score = 0;
                 $tags = $this->normalizeMenuTags($item);
 
@@ -849,9 +1215,32 @@ class ChatbotService
                 if ($lightRequested && in_array('ringan', $tags, true)) {
                     $score += 3;
                 }
+                if ($lightRequested && in_array((string) ($item->calorie_level ?? ''), ['low', 'medium'], true)) {
+                    $score += 2;
+                }
+                if ($calorieLevel !== '' && strtolower((string) ($item->calorie_level ?? '')) === strtolower($calorieLevel)) {
+                    $score += 3;
+                }
 
                 if ($fillingRequested && in_array('mengenyangkan', $tags, true)) {
                     $score += 3;
+                }
+
+                foreach ($preferredTags as $tag) {
+                    $t = strtolower(trim((string) $tag));
+                    if ($t === '') {
+                        continue;
+                    }
+                    if (in_array($t, $tags, true)) {
+                        $score += 4;
+                        continue;
+                    }
+                    if ($t === 'asin') {
+                        $text = strtolower(trim((string) ($item->description ?? '') . ' ' . (string) ($item->recommendation_note ?? '')));
+                        if (str_contains($text, 'asin')) {
+                            $score += 3;
+                        }
+                    }
                 }
 
                 $score += $this->scoreKeywordOverlap($item, $queryKeywords, $tags);
@@ -875,21 +1264,131 @@ class ChatbotService
             })
             ->values();
 
-        $minScore = ($taste !== '' || $category !== '' || $lightRequested || $fillingRequested || !empty($requiredTags) || $calorieLevel !== '')
-            ? 3
-            : 1;
+        $scoredWithPercent = $scored->map(function (array $row): array {
+            $scorePercent = min(100, max(0, (int) round(((float) ($row['score'] ?? 0)) * 10)));
+            return array_merge($row, ['score_percent' => $scorePercent]);
+        });
 
-        $menus = $scored
-            ->filter(fn (array $row) => $row['score'] >= $minScore)
+        $menus = $scoredWithPercent
+            ->filter(fn (array $row) => ((int) ($row['score_percent'] ?? 0)) >= 35)
             ->pluck('item')
             ->take(5);
 
+        if ($menus->isEmpty() && $priceMode === 'around' && $targetPrice !== null && $targetPrice > 0) {
+            $relaxedMin = max(0, (int) floor($targetPrice * 0.7));
+            $relaxedMax = (int) ceil($targetPrice * 1.3);
+            $relaxedQuery = MenuItem::query()->where('stock', '>', 0)->whereBetween('price', [$relaxedMin, $relaxedMax]);
+            if ($category !== '') {
+                $relaxedQuery->where('category', $category);
+            }
+            $relaxedMenus = $relaxedQuery->limit(5)->get();
+            if ($relaxedMenus->isNotEmpty()) {
+                return [
+                    'reply' => 'Aku longgarkan sedikit budgetnya (sekitar ±30%). Ini opsi yang paling mendekati.',
+                    'intent' => 'menu_recommendation',
+                    'data' => [
+                        'items' => $relaxedMenus->map(fn ($item) => $this->mapMenuCard($item))->values()->all(),
+                        'fallback_reason' => 'recommendation_relaxed_filter',
+                    ],
+                    'actions' => $relaxedMenus->take(3)->map(fn (MenuItem $item) => [
+                        'type' => 'quick_reply',
+                        'label' => 'Pesan ' . (string) ($item->name ?? 'Menu'),
+                        'value' => 'suggest_menu:' . (string) $item->_id,
+                    ])->values()->all(),
+                    'cards' => $relaxedMenus->map(fn ($item) => ['type' => 'menu_card', 'menu' => $this->mapMenuCard($item)])->values()->all(),
+                ];
+            }
+
+            $nearestQuery = MenuItem::query()->where('stock', '>', 0);
+            if ($category !== '') {
+                $nearestQuery->where('category', $category);
+            }
+            $nearestMenus = $nearestQuery->limit(50)->get()
+                ->sortBy(fn (MenuItem $item) => abs(((float) ($item->price ?? 0)) - $targetPrice))
+                ->take(5)
+                ->values();
+
+            if ($nearestMenus->isNotEmpty()) {
+                return [
+                    'reply' => 'Aku belum menemukan yang pas banget, tapi ini menu dengan harga paling dekat ke budget kamu.',
+                    'intent' => 'menu_recommendation',
+                    'data' => [
+                        'items' => $nearestMenus->map(fn ($item) => $this->mapMenuCard($item))->values()->all(),
+                        'fallback_reason' => 'recommendation_nearest_price',
+                    ],
+                    'actions' => $nearestMenus->take(3)->map(fn (MenuItem $item) => [
+                        'type' => 'quick_reply',
+                        'label' => 'Pesan ' . (string) ($item->name ?? 'Menu'),
+                        'value' => 'suggest_menu:' . (string) $item->_id,
+                    ])->values()->all(),
+                    'cards' => $nearestMenus->map(fn ($item) => ['type' => 'menu_card', 'menu' => $this->mapMenuCard($item)])->values()->all(),
+                ];
+            }
+        }
+
+        if ($menus->isEmpty() && $priceMode === 'range' && $minPrice !== null && $minPrice > 0 && $maxPrice !== null && $maxPrice > 0) {
+            $relaxedMin = max(0, (int) ($minPrice - 5000));
+            $relaxedMax = (int) ($maxPrice + 5000);
+            $relaxedQuery = MenuItem::query()->where('stock', '>', 0)->whereBetween('price', [$relaxedMin, $relaxedMax]);
+            if ($category !== '') {
+                $relaxedQuery->where('category', $category);
+            }
+            $relaxedMenus = $relaxedQuery->limit(5)->get();
+            if ($relaxedMenus->isNotEmpty()) {
+                return [
+                    'reply' => 'Aku belum menemukan ' . ($category !== '' ? $category : 'menu') . ' di range ' . $this->formatCurrency($minPrice) . '-' . $this->formatCurrency($maxPrice) . ', tapi ini yang paling dekat dari budget kamu.',
+                    'intent' => 'menu_recommendation',
+                    'data' => [
+                        'items' => $relaxedMenus->map(fn ($item) => $this->mapMenuCard($item))->values()->all(),
+                        'fallback_reason' => 'recommendation_relaxed_filter',
+                    ],
+                    'actions' => $relaxedMenus->take(3)->map(fn (MenuItem $item) => [
+                        'type' => 'quick_reply',
+                        'label' => 'Pesan ' . (string) ($item->name ?? 'Menu'),
+                        'value' => 'suggest_menu:' . (string) $item->_id,
+                    ])->values()->all(),
+                    'cards' => $relaxedMenus->map(fn ($item) => ['type' => 'menu_card', 'menu' => $this->mapMenuCard($item)])->values()->all(),
+                ];
+            }
+
+            $midpoint = (int) floor(($minPrice + $maxPrice) / 2);
+            $nearestQuery = MenuItem::query()->where('stock', '>', 0);
+            if ($category !== '') {
+                $nearestQuery->where('category', $category);
+            }
+            $nearestMenus = $nearestQuery->limit(50)->get()
+                ->sortBy(fn (MenuItem $item) => abs(((float) ($item->price ?? 0)) - $midpoint))
+                ->take(5)
+                ->values();
+
+            if ($nearestMenus->isNotEmpty()) {
+                return [
+                    'reply' => 'Aku belum menemukan ' . ($category !== '' ? $category : 'menu') . ' di range ' . $this->formatCurrency($minPrice) . '-' . $this->formatCurrency($maxPrice) . ', tapi ini yang paling dekat dari budget kamu.',
+                    'intent' => 'menu_recommendation',
+                    'data' => [
+                        'items' => $nearestMenus->map(fn ($item) => $this->mapMenuCard($item))->values()->all(),
+                        'fallback_reason' => 'recommendation_nearest_price',
+                    ],
+                    'actions' => $nearestMenus->take(3)->map(fn (MenuItem $item) => [
+                        'type' => 'quick_reply',
+                        'label' => 'Pesan ' . (string) ($item->name ?? 'Menu'),
+                        'value' => 'suggest_menu:' . (string) $item->_id,
+                    ])->values()->all(),
+                    'cards' => $nearestMenus->map(fn ($item) => ['type' => 'menu_card', 'menu' => $this->mapMenuCard($item)])->values()->all(),
+                ];
+            }
+        }
+
         if ($menus->isEmpty()) {
+            $followupActions = $this->buildRecommendationFollowupActions($category, $minPrice, $maxPrice, $targetPrice, $maxPrice);
             return [
-                'reply' => 'Menu yang anda inginkan belum tersedia, silahkan explore menu agar sesuai dengan yang anda mau.',
+                'reply' => 'Aku belum menemukan menu yang cocok dengan kriteria itu. Mau aku carikan alternatif yang paling dekat?',
                 'intent' => 'menu_recommendation',
-                'data' => ['items' => []],
-                'actions' => [],
+                'data' => [
+                    'items' => [],
+                    'fallback_reason' => 'recommendation_no_result',
+                ],
+                'actions' => $followupActions,
             ];
         }
 
@@ -902,8 +1401,22 @@ class ChatbotService
             ];
         })->values()->all();
 
+        $topScore = (int) (($scoredWithPercent->first()['score_percent'] ?? 0));
+        $reply = $aiConversationalReply !== '' ? $aiConversationalReply : 'Ini rekomendasi menu yang cocok untuk kamu.';
+        if ($topScore >= 60) {
+            $reply = 'Aku menemukan rekomendasi yang cocok dengan kriteria kamu.';
+        } elseif ($topScore >= 35) {
+            $missing = [];
+            if (in_array('asin', array_map(fn ($x) => strtolower((string) $x), $preferredTags), true)) {
+                $missing[] = 'asin';
+            }
+            $reply = empty($missing)
+                ? 'Aku belum menemukan yang persis, tapi ini alternatif paling dekat.'
+                : 'Aku menemukan menu yang sesuai sebagian kriteria kamu. Untuk kriteria ' . implode(', ', $missing) . ', datanya belum tersedia atau belum ada menu yang cocok.';
+        }
+
         return [
-            'reply' => $aiConversationalReply !== '' ? $aiConversationalReply : 'Ini rekomendasi menu yang cocok untuk kamu.',
+            'reply' => $reply,
             'intent' => 'menu_recommendation',
             'data' => [
                 'items' => $menus->map(fn ($item) => $this->mapMenuCard($item))->values()->all(),
@@ -1337,5 +1850,42 @@ class ChatbotService
         } catch (\Throwable) {
             // Skip telemetry logging when container/facade is unavailable in pure unit tests.
         }
+    }
+
+    private function buildRecommendationFollowupActions(string $category, ?int $minPrice, ?int $maxPrice, ?int $targetPrice, ?int $fallbackMaxPrice): array
+    {
+        $token = $this->toCategoryToken($category);
+        $resolvedMin = $minPrice ?? 0;
+        $resolvedMax = $maxPrice ?? ($fallbackMaxPrice ?? ($targetPrice !== null && $targetPrice > 0 ? (int) ceil($targetPrice * 1.2) : 30000));
+
+        if ($resolvedMin <= 0 && $targetPrice !== null && $targetPrice > 0) {
+            $resolvedMin = max(0, (int) floor($targetPrice * 0.8));
+        }
+        if ($resolvedMax <= 0) {
+            $resolvedMax = 30000;
+        }
+
+        return [
+            ['type' => 'quick_reply', 'label' => 'Cari yang paling dekat', 'value' => 'recommend_nearest_price:' . $token . ':' . $resolvedMin . ':' . $resolvedMax],
+            ['type' => 'quick_reply', 'label' => 'Naikkan budget', 'value' => 'recommend_relax_price:' . $token . ':' . $resolvedMin . ':' . $resolvedMax],
+            ['type' => 'quick_reply', 'label' => 'Lihat makanan utama', 'value' => 'recommend_category:MAKANAN_UTAMA'],
+            ['type' => 'quick_reply', 'label' => 'Lihat minuman', 'value' => 'recommend_category:MINUMAN'],
+            ['type' => 'quick_reply', 'label' => 'Lihat cemilan', 'value' => 'recommend_category:CEMILAN'],
+        ];
+    }
+
+    private function toCategoryToken(string $category): string
+    {
+        return match (strtolower(trim($category))) {
+            'makanan utama' => 'MAKANAN_UTAMA',
+            'minuman' => 'MINUMAN',
+            'cemilan' => 'CEMILAN',
+            default => 'MAKANAN_UTAMA',
+        };
+    }
+
+    private function formatCurrency(int $value): string
+    {
+        return 'Rp' . number_format(max(0, $value), 0, ',', '.');
     }
 }
