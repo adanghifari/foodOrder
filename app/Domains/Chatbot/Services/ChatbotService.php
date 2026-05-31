@@ -1758,7 +1758,7 @@ class ChatbotService
         };
     }
 
-    private function mapMenuCard(MenuItem $item): array
+    private function mapMenuCard(object $item): array
     {
         return [
             'menu_id' => (string) $item->_id,
