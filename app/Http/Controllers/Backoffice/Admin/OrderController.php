@@ -200,7 +200,10 @@ class OrderController extends Controller
 			return redirect()->back()->withErrors($validator)->withInput();
 		}
 
-		$updated = $this->orderService->updateStatus((string) $id, (string) $request->input('status'));
+		$targetId = (string) $id;
+		$nextStatus = (string) $request->input('status');
+		$updated = $this->updateBookingStatusIfNeeded($targetId, $nextStatus)
+			|| $this->orderService->updateStatus($targetId, $nextStatus);
 
 		if (!$updated) {
 			if ($request->expectsJson() || $request->ajax()) {
@@ -269,7 +272,10 @@ class OrderController extends Controller
 			], 422);
 		}
 
-		$updated = $this->orderService->updateStatus((string) $id, (string) $request->input('status'));
+		$targetId = (string) $id;
+		$nextStatus = (string) $request->input('status');
+		$updated = $this->updateBookingStatusIfNeeded($targetId, $nextStatus)
+			|| $this->orderService->updateStatus($targetId, $nextStatus);
 		if (!$updated) {
 			return response()->json(['status' => 'error', 'message' => 'Order not found'], 404);
 		}
@@ -288,5 +294,37 @@ class OrderController extends Controller
 			'message' => 'Order count retrieved',
 			'data' => ['count' => $this->orderService->count()]
 		]);
+	}
+
+	private function updateBookingStatusIfNeeded(string $id, string $nextOrderStatus): bool
+	{
+		if (!str_starts_with($id, 'BOOKING:')) {
+			return false;
+		}
+
+		$bookingId = substr($id, strlen('BOOKING:'));
+		if ($bookingId === '') {
+			return false;
+		}
+
+		$booking = Booking::find($bookingId);
+		if (!$booking) {
+			return false;
+		}
+
+		$mappedStatus = match (strtoupper($nextOrderStatus)) {
+			'CONFIRMED' => 'CONFIRMED',
+			'IN_QUEUE' => 'CONFIRMED',
+			'IN_PROGRESS' => 'SEATED',
+			'DELIVERED' => 'COMPLETED',
+			default => null,
+		};
+
+		if ($mappedStatus === null) {
+			return false;
+		}
+
+		$booking->update(['status' => $mappedStatus]);
+		return true;
 	}
 }

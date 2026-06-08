@@ -49,6 +49,9 @@ class MenuController extends Controller
 			'selectedEditMenu' => $selectedEditMenu,
 			'showCreateModal' => $showCreateModal,
 			'allowedCategories' => $this->allowedCategories,
+			'categoryTagMap' => config('menu_taxonomy.category_tags', []),
+			'categoryMetadataMap' => config('menu_taxonomy.category_metadata', []),
+			'calorieLevels' => config('menu_taxonomy.calorie_levels', []),
 		]);
 	}
 
@@ -59,15 +62,9 @@ class MenuController extends Controller
 
 	public function storePage(Request $request)
 	{
-		$validator = Validator::make($request->all(), [
-			'name' => 'required|string|max:255',
-			'description' => 'nullable|string',
-			'price' => 'required|numeric|min:0',
-			'stock' => 'required|integer|min:0',
-			'category' => 'required|string|in:' . implode(',', $this->allowedCategories),
-			'image' => 'nullable|file|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
-		]);
-
+		$this->normalizeIncomingMetadataKeys($request);
+		$this->normalizeIncomingCategory($request);
+		$validator = Validator::make($request->all(), $this->menuValidationRules(false, true));
 		if ($validator->fails()) {
 			if ($request->expectsJson() || $request->ajax()) {
 				return response()->json([
@@ -84,6 +81,7 @@ class MenuController extends Controller
 
 		$validated = $validator->safe()->except('image');
 		$validated['stock'] = (int) ($validated['stock'] ?? 0);
+		$validated = $this->normalizeMetadataFields($validated);
 
 		$item = $this->menuService->create($validated);
 
@@ -129,21 +127,15 @@ class MenuController extends Controller
 
 	public function updatePage(Request $request, string $id)
 	{
+		$this->normalizeIncomingMetadataKeys($request);
+		$this->normalizeIncomingCategory($request);
 		$item = $this->menuService->findById($id);
 
 		if (!$item) {
 			abort(404);
 		}
 
-		$validator = Validator::make($request->all(), [
-			'name' => 'required|string|max:255',
-			'description' => 'nullable|string',
-			'price' => 'required|numeric|min:0',
-			'stock' => 'required|integer|min:0',
-			'category' => 'required|string|in:' . implode(',', $this->allowedCategories),
-			'image' => 'nullable|file|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
-			'remove_image' => 'nullable|boolean',
-		]);
+		$validator = Validator::make($request->all(), $this->menuValidationRules(false, true, true));
 
 		if ($validator->fails()) {
 			if ($request->expectsJson() || $request->ajax()) {
@@ -161,6 +153,7 @@ class MenuController extends Controller
 
 		$validated = $validator->safe()->except(['image', 'remove_image']);
 		$validated['stock'] = (int) ($validated['stock'] ?? 0);
+		$validated = $this->normalizeMetadataFields($validated);
 		$removeImage = $request->boolean('remove_image');
 
 		$this->menuService->update($item, $validated);
@@ -206,14 +199,9 @@ class MenuController extends Controller
 
 	public function create(Request $request)
 	{
-		$validator = Validator::make($request->all(), [
-			'name' => 'required|string|max:255',
-			'description' => 'nullable|string',
-			'price' => 'required|numeric|min:0',
-			'stock' => 'sometimes|integer|min:0',
-			'category' => 'required|string|in:' . implode(',', $this->allowedCategories),
-			'image_url' => 'nullable|string|max:500',
-		]);
+		$this->normalizeIncomingMetadataKeys($request);
+		$this->normalizeIncomingCategory($request);
+		$validator = Validator::make($request->all(), $this->menuValidationRules(false, false));
 
 		if ($validator->fails()) {
 			return response()->json([
@@ -225,6 +213,7 @@ class MenuController extends Controller
 
 		$validated = $validator->validated();
 		$validated['stock'] = (int) ($validated['stock'] ?? 0);
+		$validated = $this->normalizeMetadataFields($validated);
 		$item = $this->menuService->create($validated);
 
 		return response()->json([
@@ -236,6 +225,8 @@ class MenuController extends Controller
 
 	public function update(Request $request, $id)
 	{
+		$this->normalizeIncomingMetadataKeys($request);
+		$this->normalizeIncomingCategory($request);
 		$item = $this->menuService->findById((string) $id);
 
 		if (!$item) {
@@ -245,14 +236,7 @@ class MenuController extends Controller
 			], 404);
 		}
 
-		$validator = Validator::make($request->all(), [
-			'name' => 'sometimes|required|string|max:255',
-			'description' => 'sometimes|nullable|string',
-			'price' => 'sometimes|required|numeric|min:0',
-			'stock' => 'sometimes|required|integer|min:0',
-			'category' => 'sometimes|required|string|in:' . implode(',', $this->allowedCategories),
-			'image_url' => 'sometimes|nullable|string|max:500',
-		]);
+		$validator = Validator::make($request->all(), $this->menuValidationRules(true, false));
 
 		if ($validator->fails()) {
 			return response()->json([
@@ -263,6 +247,7 @@ class MenuController extends Controller
 		}
 
 		$validated = $validator->validated();
+		$validated = $this->normalizeMetadataFields($validated);
 
 		if (count($validated) === 0) {
 			return response()->json([
@@ -278,6 +263,144 @@ class MenuController extends Controller
 			'message' => 'Menu item updated',
 			'data' => $item
 		]);
+	}
+
+	private function menuValidationRules(bool $isPartialUpdate = false, bool $isBackofficePage = false, bool $allowRemoveImage = false): array
+	{
+		$categoryTagMap = (array) config('menu_taxonomy.category_tags', []);
+		$allowedTags = collect($categoryTagMap)->flatten()->unique()->values()->all();
+		$calorieLevels = config('menu_taxonomy.calorie_levels', []);
+
+		$requiredPrefix = $isPartialUpdate ? 'sometimes|required' : 'required';
+		$nullablePrefix = $isPartialUpdate ? 'sometimes|nullable' : 'nullable';
+		$stockPrefix = $isPartialUpdate ? 'sometimes|required' : ($isBackofficePage ? 'required' : 'sometimes');
+
+		$rules = [
+			'name' => 'required|string|max:255',
+			'description' => 'nullable|string',
+			'price' => 'required|numeric|min:0',
+			'stock' => 'required|integer|min:0',
+			'category' => 'required|string|in:' . implode(',', $this->allowedCategories),
+			'image_url' => 'nullable|string|max:500',
+			'tags' => ['sometimes', 'array', 'min:1', 'max:25'],
+			'tags.*' => 'string|in:' . implode(',', $allowedTags),
+			'spice_level' => $nullablePrefix . '|integer|between:0,5',
+			'sweet_level' => $nullablePrefix . '|integer|between:0,5',
+			'fresh_level' => $nullablePrefix . '|integer|between:0,5',
+			'calorie_level' => $nullablePrefix . '|string|in:' . implode(',', $calorieLevels),
+			'recommendation_note' => $nullablePrefix . '|string|max:500',
+		];
+
+		if ($isBackofficePage) {
+			$rules['name'] = $requiredPrefix . '|string|max:255';
+			$rules['description'] = 'nullable|string';
+			$rules['price'] = $requiredPrefix . '|numeric|min:0';
+			$rules['stock'] = $stockPrefix . '|integer|min:0';
+			$rules['category'] = $requiredPrefix . '|string|in:' . implode(',', $this->allowedCategories);
+			$rules['image'] = 'nullable|file|image|mimes:jpeg,png,jpg,gif,webp|max:2048';
+		} else {
+			$rules['name'] = $requiredPrefix . '|string|max:255';
+			$rules['description'] = $nullablePrefix . '|string';
+			$rules['price'] = $requiredPrefix . '|numeric|min:0';
+			$rules['stock'] = $stockPrefix . '|integer|min:0';
+			$rules['category'] = $requiredPrefix . '|string|in:' . implode(',', $this->allowedCategories);
+			$rules['image_url'] = $nullablePrefix . '|string|max:500';
+		}
+
+		if ($allowRemoveImage) {
+			$rules['remove_image'] = 'nullable|boolean';
+		}
+
+		$rules['tags'][] = function (string $attribute, mixed $value, \Closure $fail) use ($categoryTagMap) {
+			$category = strtolower(trim((string) request()->input('category', '')));
+			$allowedForCategory = (array) ($categoryTagMap[$category] ?? []);
+			$selected = is_array($value) ? $value : [];
+
+			foreach ($selected as $tag) {
+				$normalizedTag = trim((string) $tag);
+				if ($normalizedTag !== '' && !in_array($normalizedTag, $allowedForCategory, true)) {
+					$fail('Tag "' . $normalizedTag . '" tidak valid untuk kategori ' . $category . '.');
+					return;
+				}
+			}
+		};
+
+		return $rules;
+	}
+
+	private function normalizeMetadataFields(array $validated): array
+	{
+		if (array_key_exists('calorie_level', $validated) && $validated['calorie_level'] !== null && $validated['calorie_level'] !== '') {
+			$validated['calorie_level'] = strtolower((string) $validated['calorie_level']);
+		}
+
+		if (array_key_exists('tags', $validated)) {
+			$validated['tags'] = collect((array) $validated['tags'])
+				->map(fn ($value) => trim((string) $value))
+				->filter(fn ($value) => $value !== '')
+				->unique()
+				->values()
+				->all();
+		}
+
+		if (array_key_exists('spice_level', $validated) && $validated['spice_level'] !== null && $validated['spice_level'] !== '') {
+			$validated['spice_level'] = (int) $validated['spice_level'];
+		}
+
+		if (array_key_exists('sweet_level', $validated) && $validated['sweet_level'] !== null && $validated['sweet_level'] !== '') {
+			$validated['sweet_level'] = (int) $validated['sweet_level'];
+		}
+
+		if (array_key_exists('fresh_level', $validated) && $validated['fresh_level'] !== null && $validated['fresh_level'] !== '') {
+			$validated['fresh_level'] = (int) $validated['fresh_level'];
+		}
+
+		$category = strtolower(trim((string) ($validated['category'] ?? '')));
+		if ($category === 'minuman') {
+			$validated['spice_level'] = null;
+		} else {
+			$validated['fresh_level'] = null;
+		}
+
+		return $validated;
+	}
+
+	private function normalizeIncomingCategory(Request $request): void
+	{
+		$rawCategory = trim((string) $request->input('category', ''));
+		if ($rawCategory === '') {
+			return;
+		}
+
+		$normalized = strtolower(str_replace('_', ' ', $rawCategory));
+		if (in_array($normalized, $this->allowedCategories, true)) {
+			$request->merge(['category' => $normalized]);
+		}
+	}
+
+	private function normalizeIncomingMetadataKeys(Request $request): void
+	{
+		$camelToSnake = [
+			'spicyLevel' => 'spice_level',
+			'sweetLevel' => 'sweet_level',
+			'freshLevel' => 'fresh_level',
+			'calorieLevel' => 'calorie_level',
+		];
+
+		$merged = [];
+		foreach ($camelToSnake as $camel => $snake) {
+			if ($request->has($camel) && !$request->has($snake)) {
+				$merged[$snake] = $request->input($camel);
+			}
+		}
+
+		if ($request->has('calorie_level')) {
+			$merged['calorie_level'] = strtolower(trim((string) $request->input('calorie_level')));
+		}
+
+		if (!empty($merged)) {
+			$request->merge($merged);
+		}
 	}
 
 	public function remove($id)

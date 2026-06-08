@@ -91,6 +91,13 @@ class OrderService
         $lastOrder = Order::orderBy('queue_number', 'desc')->first();
         $queueNumber = $lastOrder ? $lastOrder->queue_number + 1 : 1;
 
+        $extraCharge = 0;
+        if ($orderType === 'booking_dine_in' && $durationHours) {
+            $extraCharge = app(\App\Domains\Booking\Services\BookingService::class)->calculateExtraCharge($durationHours);
+        }
+
+        $totalPrice += $extraCharge;
+
         $order = Order::create([
             'customer_id' => $userId,
             'order_type' => $orderType,
@@ -102,6 +109,7 @@ class OrderService
             'table_cleared_at' => null,
             'queue_number' => $queueNumber,
             'total_price' => $totalPrice,
+            'extra_charge' => $extraCharge,
             'items' => $orderMenuItems,
         ]);
 
@@ -256,6 +264,7 @@ class OrderService
             'orderDeletedAt' => optional($order->order_deleted_at)?->toDateTimeString(),
             'queueNumber' => $order->queue_number,
             'totalPrice' => $order->total_price,
+            'extraCharge' => (int) ($order->extra_charge ?? 0),
             'items' => $itemsResponse,
         ];
     }

@@ -235,6 +235,12 @@
                         <span>Biaya Layanan</span>
                         <span class="font-semibold">Rp {{ number_format($serviceFee, 0, ',', '.') }}</span>
                     </div>
+                    @if (isset($extraCharge) && $extraCharge > 0)
+                        <div class="flex items-center justify-between text-sm text-gray-600">
+                            <span>Biaya Booking</span>
+                            <span class="font-semibold">Rp {{ number_format($extraCharge, 0, ',', '.') }}</span>
+                        </div>
+                    @endif
                     <div class="border-t border-gray-200 pt-2 flex items-center justify-between">
                         <span class="font-bold text-gray-800">Total Pembayaran</span>
                         <span class="font-black text-[#C8641E]">Rp {{ number_format($total, 0, ',', '.') }}</span>

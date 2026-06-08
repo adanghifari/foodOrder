@@ -118,6 +118,9 @@
                 <table class="summary-row">
                     <tr><td class="summary-label">Subtotal</td><td class="summary-value">Rp {{ number_format($subtotal, 0, ',', '.') }}</td></tr>
                     <tr><td class="summary-label">Biaya Layanan</td><td class="summary-value">Rp {{ number_format($serviceFee, 0, ',', '.') }}</td></tr>
+                    @if (isset($extraCharge) && $extraCharge > 0)
+                        <tr><td class="summary-label">Biaya Booking</td><td class="summary-value">Rp {{ number_format($extraCharge, 0, ',', '.') }}</td></tr>
+                    @endif
                 </table>
                 <div class="summary-total">
                     <table class="summary-row">

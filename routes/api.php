@@ -13,6 +13,7 @@ use App\Http\Controllers\Frontliner\Mobile\MenuController as MobileCustomerMenuC
 use App\Http\Controllers\Frontliner\Mobile\OrderController as CustomerOrderController;
 use App\Http\Controllers\Frontliner\Mobile\PaymentController as MobilePaymentController;
 use App\Http\Controllers\Frontliner\Mobile\DeviceTokenController;
+use App\Http\Controllers\Frontliner\Mobile\ChatbotController;
 use App\Http\Controllers\Frontliner\Web\TableController as FrontlinerTableController;
 use App\Http\Controllers\Integrations\MidtransWebhookController;
 
@@ -22,6 +23,8 @@ Route::group(['prefix' => 'v1/auth'], function ($router) {
     Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:api');
     Route::post('refresh', [AuthController::class, 'refresh'])->middleware('auth:api');
     Route::get('me', [AuthController::class, 'me'])->middleware('auth:api');
+    Route::put('update', [AuthController::class, 'updateProfile'])->middleware('auth:api');
+    Route::put('change-password', [AuthController::class, 'changePassword'])->middleware('auth:api');
 });
 
 Route::group(['prefix' => 'v1/menus'], function ($router) {
@@ -79,6 +82,12 @@ Route::group(['prefix' => 'v1/bookings', 'middleware' => ['auth:api', 'role:CUST
 
 Route::group(['prefix' => 'v1/notifications', 'middleware' => ['auth:api', 'role:CUSTOMER']], function () {
     Route::post('/device-token', [DeviceTokenController::class, 'upsert']);
+});
+
+Route::group(['prefix' => 'v1/chatbot', 'middleware' => ['auth:api', 'role:CUSTOMER']], function () {
+    Route::post('/message', [ChatbotController::class, 'message']);
+    Route::post('/message-debug', [ChatbotController::class, 'messageDebug']);
+    Route::get('/health', [ChatbotController::class, 'health']);
 });
 
 Route::group(['prefix' => 'v1/payments'], function () {

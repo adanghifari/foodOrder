@@ -147,30 +147,26 @@
                                 <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format($totalPrice, 0, ',', '.') }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex items-center gap-2">
-                                        @if ($isBookingRow)
-                                            <a href="/backoffice/booking" class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Kelola Booking</a>
-                                        @else
-                                            <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2" data-order-status-form>
-                                                @csrf
-                                                @method('PATCH')
-                                                <select name="status" class="min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
-                                                    @foreach (($statusOptions ?? []) as $statusOption)
-                                                        @php
-                                                            $optionLabel = match ($statusOption) {
-                                                                'CONFIRMED' => 'Terkonfirmasi',
-                                                                'IN_QUEUE' => 'Dalam Antrean',
-                                                                'IN_PROGRESS' => 'Sedang Diproses',
-                                                                'DELIVERED' => 'Disajikan',
-                                                                default => $statusOption,
-                                                            };
-                                                        @endphp
-                                                        <option value="{{ $statusOption }}" {{ $status === $statusOption ? 'selected' : '' }}>{{ $optionLabel }}</option>
-                                                    @endforeach
-                                                </select>
-                                                <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>
-                                            </form>
-                                            <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
-                                        @endif
+                                        <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2" data-order-status-form>
+                                            @csrf
+                                            @method('PATCH')
+                                            <select name="status" class="min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
+                                                @foreach (($statusOptions ?? []) as $statusOption)
+                                                    @php
+                                                        $optionLabel = match ($statusOption) {
+                                                            'CONFIRMED' => 'Terkonfirmasi',
+                                                            'IN_QUEUE' => 'Dalam Antrean',
+                                                            'IN_PROGRESS' => 'Sedang Diproses',
+                                                            'DELIVERED' => 'Disajikan',
+                                                            default => $statusOption,
+                                                        };
+                                                    @endphp
+                                                    <option value="{{ $statusOption }}" {{ $status === $statusOption ? 'selected' : '' }}>{{ $optionLabel }}</option>
+                                                @endforeach
+                                            </select>
+                                            <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>
+                                        </form>
+                                        <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
                                     </div>
                                 </td>
                             </tr>
@@ -267,30 +263,26 @@
                                 <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format($totalPrice, 0, ',', '.') }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex items-center gap-2">
-                                        @if ($isBookingRow)
-                                            <a href="/backoffice/booking" class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Kelola Booking</a>
-                                        @else
-                                            <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2" data-order-status-form>
-                                                @csrf
-                                                @method('PATCH')
-                                                <select name="status" class="min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
-                                                    @foreach (($statusOptions ?? []) as $statusOption)
-                                                        @php
-                                                            $optionLabel = match ($statusOption) {
-                                                                'CONFIRMED' => 'Terkonfirmasi',
-                                                                'IN_QUEUE' => 'Dalam Antrean',
-                                                                'IN_PROGRESS' => 'Sedang Diproses',
-                                                                'DELIVERED' => 'Disajikan',
-                                                                default => $statusOption,
-                                                            };
-                                                        @endphp
-                                                        <option value="{{ $statusOption }}" {{ $status === $statusOption ? 'selected' : '' }}>{{ $optionLabel }}</option>
-                                                    @endforeach
-                                                </select>
-                                                <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>
-                                            </form>
-                                            <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
-                                        @endif
+                                        <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2" data-order-status-form>
+                                            @csrf
+                                            @method('PATCH')
+                                            <select name="status" class="min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
+                                                @foreach (($statusOptions ?? []) as $statusOption)
+                                                    @php
+                                                        $optionLabel = match ($statusOption) {
+                                                            'CONFIRMED' => 'Terkonfirmasi',
+                                                            'IN_QUEUE' => 'Dalam Antrean',
+                                                            'IN_PROGRESS' => 'Sedang Diproses',
+                                                            'DELIVERED' => 'Disajikan',
+                                                            default => $statusOption,
+                                                        };
+                                                    @endphp
+                                                    <option value="{{ $statusOption }}" {{ $status === $statusOption ? 'selected' : '' }}>{{ $optionLabel }}</option>
+                                                @endforeach
+                                            </select>
+                                            <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>
+                                        </form>
+                                        <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
                                     </div>
                                 </td>
                             </tr>
@@ -393,30 +385,26 @@
                                     <td class="px-4 py-3 text-sm font-extrabold text-[var(--philippine-bronze)]">Rp {{ number_format($totalPrice, 0, ',', '.') }}</td>
                                     <td class="px-4 py-3">
                                         <div class="flex items-center gap-2">
-                                            @if ($isBookingRow)
-                                                <a href="/backoffice/booking" class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Kelola Booking</a>
-                                            @else
-                                                <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2" data-order-status-form>
-                                                    @csrf
-                                                    @method('PATCH')
-                                                    <select name="status" class="min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
-                                                        @foreach (($statusOptions ?? []) as $statusOption)
-                                                            @php
-                                                                $optionLabel = match ($statusOption) {
-                                                                    'CONFIRMED' => 'Terkonfirmasi',
-                                                                    'IN_QUEUE' => 'Dalam Antrean',
-                                                                    'IN_PROGRESS' => 'Sedang Diproses',
-                                                                    'DELIVERED' => 'Disajikan',
-                                                                    default => $statusOption,
-                                                                };
-                                                            @endphp
-                                                            <option value="{{ $statusOption }}" {{ $status === $statusOption ? 'selected' : '' }}>{{ $optionLabel }}</option>
-                                                        @endforeach
-                                                    </select>
-                                                    <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>
-                                                </form>
-                                                <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
-                                            @endif
+                                            <form method="POST" action="/backoffice/daftar_pesanan/{{ urlencode($orderId) }}/status" class="flex items-center gap-2" data-order-status-form>
+                                                @csrf
+                                                @method('PATCH')
+                                                <select name="status" class="min-w-40 rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[var(--rajah)]/70 focus:border-[var(--rajah)]">
+                                                    @foreach (($statusOptions ?? []) as $statusOption)
+                                                        @php
+                                                            $optionLabel = match ($statusOption) {
+                                                                'CONFIRMED' => 'Terkonfirmasi',
+                                                                'IN_QUEUE' => 'Dalam Antrean',
+                                                                'IN_PROGRESS' => 'Sedang Diproses',
+                                                                'DELIVERED' => 'Disajikan',
+                                                                default => $statusOption,
+                                                            };
+                                                        @endphp
+                                                        <option value="{{ $statusOption }}" {{ $status === $statusOption ? 'selected' : '' }}>{{ $optionLabel }}</option>
+                                                    @endforeach
+                                                </select>
+                                                <button type="submit" class="inline-flex items-center rounded-lg bg-[var(--alloy-orange)] px-3 py-2 text-xs font-extrabold text-white transition hover:bg-[var(--philippine-bronze)]">Update</button>
+                                            </form>
+                                            <a href="/backoffice/daftar_pesanan?detail={{ urlencode($orderId) }}" data-modal-link class="inline-flex items-center rounded-lg border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-xs font-extrabold px-3 py-2 transition">Lihat Detail</a>
                                         </div>
                                     </td>
                                 </tr>

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Domains\Auth\Services\AuthService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
@@ -114,6 +115,94 @@ class AuthController extends Controller
 				'token' => $token,
 				'user' => $this->authService->userPayload($user)
 			]
+		]);
+	}
+
+	public function updateProfile(Request $request)
+	{
+		$user = $this->authService->currentUser();
+		if (!$user) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Unauthorized'
+			], 401);
+		}
+
+		$request->merge([
+			'username' => strtolower(trim((string) $request->input('username'))),
+		]);
+
+		$validator = Validator::make($request->all(), [
+			'username' => 'required|string|max:255|unique:users,username,' . $user->id . ',_id',
+			'name'     => 'required|string|max:255',
+			'no_telp'  => 'required|string|max:20',
+			'avatar_url' => 'nullable|string|max:2048',
+		]);
+
+		if ($validator->fails()) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Validation error',
+				'data' => $validator->errors()
+			], 422);
+		}
+
+		$validated = $validator->validated();
+		$user->update([
+			'username' => $validated['username'],
+			'name' => $validated['name'],
+			'no_telp' => $validated['no_telp'],
+		]);
+
+		if (array_key_exists('avatar_url', $validated)) {
+			$user->update(['avatar_url' => $validated['avatar_url']]);
+		}
+
+		return response()->json([
+			'status' => 'success',
+			'message' => 'Profile updated successfully',
+			'data' => $this->authService->userPayload($user)
+		]);
+	}
+
+	public function changePassword(Request $request)
+	{
+		$user = $this->authService->currentUser();
+		if (!$user) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Unauthorized'
+			], 401);
+		}
+
+		$validator = Validator::make($request->all(), [
+			'current_password' => 'required|string|min:6',
+			'new_password'     => 'required|string|min:6|different:current_password',
+			'new_password_confirmation' => 'required|string|same:new_password',
+		]);
+
+		if ($validator->fails()) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Validation error',
+				'data' => $validator->errors()
+			], 422);
+		}
+
+		if (!Hash::check($request->input('current_password'), $user->password)) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Password sekarang yang Anda masukkan salah.'
+			], 400);
+		}
+
+		$user->update([
+			'password' => Hash::make($request->input('new_password')),
+		]);
+
+		return response()->json([
+			'status' => 'success',
+			'message' => 'Password berhasil diubah.'
 		]);
 	}
 }

@@ -157,6 +157,15 @@
                                         <td class="px-4 py-3 font-semibold text-slate-600">Durasi Booking</td>
                                         <td class="px-4 py-3 text-slate-800">{{ $detailBookingDuration > 0 ? $detailBookingDuration . ' jam' : '-' }}</td>
                                     </tr>
+                                    @php
+                                        $detailExtraCharge = (int) ($selectedOrder['extraCharge'] ?? $selectedOrder['extra_charge'] ?? 0);
+                                    @endphp
+                                    @if ($detailExtraCharge > 0)
+                                        <tr>
+                                            <td class="px-4 py-3 font-semibold text-slate-600">Biaya Tambahan Booking</td>
+                                            <td class="px-4 py-3 text-rose-600 font-bold">Rp {{ number_format($detailExtraCharge, 0, ',', '.') }}</td>
+                                        </tr>
+                                    @endif
                                 @endif
                                 <tr>
                                     <td class="px-4 py-3 font-semibold text-slate-600">Total Pesanan</td>

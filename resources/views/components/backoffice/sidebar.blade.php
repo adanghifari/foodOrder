@@ -45,6 +45,11 @@
             <span class="sidebar-label">Pembayaran</span>
         </a>
 
+        <a href="/backoffice/chatbot-analytics" class="sidebar-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition {{ request()->is('backoffice/chatbot-analytics') ? 'bg-[#6A2B09] text-[#FCB861]' : 'text-[#6A2B09] hover:bg-white/45' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="sidebar-icon w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h.01M15 12h.01M8 16h8"/><path d="M4 7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H9l-4 4V7z"/></svg>
+            <span class="sidebar-label">Chatbot Analytics</span>
+        </a>
+
         <a href="/backoffice/pengguna" class="sidebar-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition {{ request()->is('backoffice/pengguna') ? 'bg-[#6A2B09] text-[#FCB861]' : 'text-[#6A2B09] hover:bg-white/45' }}">
             <svg xmlns="http://www.w3.org/2000/svg" class="sidebar-icon w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>
             <span class="sidebar-label">Pengguna</span>

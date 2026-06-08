@@ -189,7 +189,13 @@ class BookingController extends Controller
         $customerName = (string) ($customer?->name ?? $customer?->username ?? '-');
         $customerEmail = (string) ($customer?->email ?? $customer?->username ?? '-');
 
-        $mappedStatus = strtoupper((string) ($order->status ?? 'UNKNOWN'));
+        $mappedStatus = match (strtoupper((string) ($order->status ?? 'UNKNOWN'))) {
+            'CONFIRMED' => 'CONFIRMED',
+            'IN_QUEUE' => 'CONFIRMED',
+            'IN_PROGRESS' => 'SEATED',
+            'DELIVERED' => 'COMPLETED',
+            default => strtoupper((string) ($order->status ?? 'UNKNOWN')),
+        };
 
         $bookingStartAt = $order->booking_start_at;
         $durationHours = (int) ($order->duration_hours ?? 0);

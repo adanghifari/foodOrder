@@ -1,5 +1,7 @@
 @php
     $hasUploadError = $errors->has('image');
+    $selectedCategory = old('category', $allowedCategories[0] ?? 'makanan utama');
+    $selectedTags = old('tags', []);
 @endphp
 
 <x-backoffice.menu.modal
@@ -46,9 +48,9 @@
         </x-backoffice.menu.field>
 
         <x-backoffice.menu.field label="Kategori">
-            <select id="category" name="category" class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm" required>
+            <select id="create-category" name="category" class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm" required>
                 @foreach ($allowedCategories as $category)
-                    <option value="{{ $category }}" {{ old('category') === $category ? 'selected' : '' }}>{{ $category }}</option>
+                    <option value="{{ $category }}" {{ $selectedCategory === $category ? 'selected' : '' }}>{{ ucwords($category) }}</option>
                 @endforeach
             </select>
         </x-backoffice.menu.field>
@@ -64,7 +66,187 @@
         <x-backoffice.menu.field label="Deskripsi" :colSpan="true">
             <textarea id="description" name="description" rows="3" class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm">{{ old('description') }}</textarea>
         </x-backoffice.menu.field>
+
+        <x-backoffice.menu.field label="Level Pedas (0-5)" :colSpan="true" id="create-spice-wrap">
+            <input id="create-spice-level" name="spice_level" type="number" min="0" max="5" value="{{ old('spice_level') }}" class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm" placeholder="Kosongkan jika tidak relevan">
+        </x-backoffice.menu.field>
+
+        <x-backoffice.menu.field label="Level Manis (0-5)" :colSpan="true" id="create-sweet-wrap">
+            <input id="create-sweet-level" name="sweet_level" type="number" min="0" max="5" value="{{ old('sweet_level') }}" class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm" placeholder="Kosongkan jika tidak relevan">
+        </x-backoffice.menu.field>
+
+        <x-backoffice.menu.field label="Level Fresh (0-5)" :colSpan="true" id="create-fresh-wrap">
+            <input id="create-fresh-level" name="fresh_level" type="number" min="0" max="5" value="{{ old('fresh_level') }}" class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm" placeholder="Khusus kategori minuman">
+        </x-backoffice.menu.field>
+
+        <x-backoffice.menu.field label="Kalori" :colSpan="true" id="create-calorie-wrap">
+            <select id="create-calorie-level" name="calorie_level" class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm">
+                <option value="">Pilih level kalori</option>
+                @foreach ($calorieLevels as $level)
+                    <option value="{{ $level }}" {{ old('calorie_level') === $level ? 'selected' : '' }}>{{ strtoupper($level) }}</option>
+                @endforeach
+            </select>
+        </x-backoffice.menu.field>
+
+        <x-backoffice.menu.field label="Tag Menu" :colSpan="true" id="create-tags-wrap">
+            <div id="create-tags-list" class="grid grid-cols-1 md:grid-cols-3 gap-2"></div>
+        </x-backoffice.menu.field>
+
+        <x-backoffice.menu.field label="Catatan Rekomendasi Admin" :colSpan="true">
+            <textarea id="recommendation_note" name="recommendation_note" rows="2" maxlength="500" class="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm" placeholder="Opsional. Contoh: cocok untuk jam sarapan, best seller hari kerja, dll.">{{ old('recommendation_note') }}</textarea>
+        </x-backoffice.menu.field>
+
+        <x-backoffice.menu.field label="Catatan Rasa" :colSpan="true">
+            <p class="text-xs text-slate-500">Metadata rasa menyesuaikan kategori menu.</p>
+        </x-backoffice.menu.field>
     </form>
+
+    <script>
+        (function () {
+            const fileInput = document.getElementById('create-image');
+            const preview = document.getElementById('create-image-preview');
+            const addCenter = document.getElementById('create-add-image-center');
+            const removeButton = document.getElementById('create-remove-image-corner');
+            let currentPreviewUrl = '';
+
+            if (!fileInput || !preview || !addCenter || !removeButton) {
+                return;
+            }
+
+            function clearObjectUrl() {
+                if (currentPreviewUrl && currentPreviewUrl.indexOf('blob:') === 0) {
+                    URL.revokeObjectURL(currentPreviewUrl);
+                }
+                currentPreviewUrl = '';
+            }
+
+            function showPreviewFromFile(file) {
+                if (!file) {
+                    return;
+                }
+
+                clearObjectUrl();
+
+                if (window.URL && typeof window.URL.createObjectURL === 'function') {
+                    currentPreviewUrl = window.URL.createObjectURL(file);
+                    preview.src = currentPreviewUrl;
+                    preview.classList.remove('hidden');
+                    addCenter.classList.add('hidden');
+                    removeButton.classList.remove('hidden');
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = function (event) {
+                    const result = event && event.target ? event.target.result : '';
+                    preview.src = String(result || '');
+                    preview.classList.remove('hidden');
+                    addCenter.classList.add('hidden');
+                    removeButton.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+
+            fileInput.addEventListener('change', function () {
+                const selectedFile = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+                showPreviewFromFile(selectedFile);
+            });
+
+            removeButton.addEventListener('click', function () {
+                clearObjectUrl();
+                fileInput.value = '';
+                preview.src = '';
+                preview.classList.add('hidden');
+                addCenter.classList.remove('hidden');
+                removeButton.classList.add('hidden');
+            });
+
+            window.addEventListener('beforeunload', clearObjectUrl);
+        })();
+
+        (function () {
+            const categoryTagMap = @json($categoryTagMap);
+            const categoryMetadataMap = @json($categoryMetadataMap);
+            const selectedTags = @json(array_values($selectedTags));
+            const categorySelect = document.getElementById('create-category');
+            const tagsList = document.getElementById('create-tags-list');
+            const spiceWrap = document.getElementById('create-spice-wrap');
+            const sweetWrap = document.getElementById('create-sweet-wrap');
+            const freshWrap = document.getElementById('create-fresh-wrap');
+            const calorieWrap = document.getElementById('create-calorie-wrap');
+            const spiceInput = document.getElementById('create-spice-level');
+            const sweetInput = document.getElementById('create-sweet-level');
+            const freshInput = document.getElementById('create-fresh-level');
+
+            if (!categorySelect || !tagsList || !spiceWrap || !sweetWrap || !freshWrap || !calorieWrap || !spiceInput || !sweetInput || !freshInput) {
+                return;
+            }
+
+            const selectedTagSet = new Set(selectedTags.map((tag) => String(tag)));
+
+            function normalizeCategory(value) {
+                return String(value || '').toLowerCase().trim();
+            }
+
+            function visibleFields(category) {
+                return Array.isArray(categoryMetadataMap[category]) ? categoryMetadataMap[category] : [];
+            }
+
+            function setVisible(fieldWrap, visible) {
+                fieldWrap.classList.toggle('hidden', !visible);
+            }
+
+            function syncMetadataVisibility() {
+                const category = normalizeCategory(categorySelect.value);
+                const fields = visibleFields(category);
+                const hasField = (name) => fields.includes(name);
+
+                setVisible(spiceWrap, hasField('spice_level'));
+                setVisible(sweetWrap, hasField('sweet_level'));
+                setVisible(freshWrap, hasField('fresh_level'));
+                setVisible(calorieWrap, hasField('calorie_level'));
+
+                if (!hasField('spice_level')) spiceInput.value = '';
+                if (!hasField('sweet_level')) sweetInput.value = '';
+                if (!hasField('fresh_level')) freshInput.value = '';
+            }
+
+            function renderTags() {
+                const category = normalizeCategory(categorySelect.value);
+                const tags = Array.isArray(categoryTagMap[category]) ? categoryTagMap[category] : [];
+                tagsList.innerHTML = '';
+
+                selectedTagSet.forEach((tag) => {
+                    if (!tags.includes(tag)) {
+                        selectedTagSet.delete(tag);
+                    }
+                });
+
+                tags.forEach((tag) => {
+                    const label = document.createElement('label');
+                    label.className = 'inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm';
+                    const checked = selectedTagSet.has(tag) ? 'checked' : '';
+                    label.innerHTML = `<input type="checkbox" name="tags[]" value="${tag}" ${checked}><span>${tag}</span>`;
+                    const input = label.querySelector('input');
+                    if (input) {
+                        input.addEventListener('change', function () {
+                            if (input.checked) selectedTagSet.add(tag);
+                            else selectedTagSet.delete(tag);
+                        });
+                    }
+                    tagsList.appendChild(label);
+                });
+            }
+
+            categorySelect.addEventListener('change', function () {
+                syncMetadataVisibility();
+                renderTags();
+            });
+
+            syncMetadataVisibility();
+            renderTags();
+        })();
+    </script>
 
     <x-slot:footer>
         <div class="w-full flex items-center justify-end gap-3">
@@ -73,39 +255,3 @@
         </div>
     </x-slot:footer>
 </x-backoffice.menu.modal>
-
-<script>
-    (function () {
-        const fileInput = document.getElementById('create-image');
-        const preview = document.getElementById('create-image-preview');
-        const addCenter = document.getElementById('create-add-image-center');
-        const removeButton = document.getElementById('create-remove-image-corner');
-
-        if (!fileInput || !preview || !addCenter || !removeButton) {
-            return;
-        }
-
-        fileInput.addEventListener('change', function () {
-            if (!fileInput.files || fileInput.files.length === 0) {
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = function (event) {
-                preview.src = String(event.target?.result || '');
-                preview.classList.remove('hidden');
-                addCenter.classList.add('hidden');
-                removeButton.classList.remove('hidden');
-            };
-            reader.readAsDataURL(fileInput.files[0]);
-        });
-
-        removeButton.addEventListener('click', function () {
-            fileInput.value = '';
-            preview.src = '';
-            preview.classList.add('hidden');
-            addCenter.classList.remove('hidden');
-            removeButton.classList.add('hidden');
-        });
-    })();
-</script>
