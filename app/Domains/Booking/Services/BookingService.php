@@ -281,12 +281,18 @@ class BookingService
         ];
     }
 
-    private function calculateExtraCharge(int $durationHours): int
+    public function calculateExtraCharge(int $durationHours): int
     {
-        $threshold = max(1, (int) config('booking.extra_charge_threshold_hours', 4));
-        $amount = max(0, (int) config('booking.extra_charge_amount', 40000));
-
-        return $durationHours >= $threshold ? $amount : 0;
+        if ($durationHours >= 8) {
+            return 75000;
+        }
+        if ($durationHours >= 6) {
+            return 50000;
+        }
+        if ($durationHours >= 4) {
+            return 25000;
+        }
+        return 0;
     }
 
     private function getConflictingBookingOrderTableIds(

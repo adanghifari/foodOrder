@@ -320,6 +320,7 @@ class PaymentController extends Controller
             'items' => $receiptData['items'],
             'subtotal' => $receiptData['subtotal'],
             'serviceFee' => $receiptData['serviceFee'],
+            'extraCharge' => $receiptData['extraCharge'] ?? 0,
             'total' => $receiptData['total'],
             'emptyReceiptMessage' => null,
             'invoiceCount' => $receiptData['invoiceCount'],
@@ -347,6 +348,7 @@ class PaymentController extends Controller
             'items' => $payload['items'],
             'subtotal' => $payload['subtotal'],
             'serviceFee' => $payload['serviceFee'],
+            'extraCharge' => $payload['extraCharge'] ?? 0,
             'total' => $payload['total'],
             'emptyReceiptMessage' => null,
             'invoiceCount' => 1,
@@ -367,6 +369,7 @@ class PaymentController extends Controller
         $items = $receiptData['items'];
         $subtotal = $receiptData['subtotal'];
         $serviceFee = $receiptData['serviceFee'];
+        $extraCharge = $receiptData['extraCharge'] ?? 0;
         $total = $receiptData['total'];
 
         $paymentStatus = strtoupper((string) ($order->payment_status ?? 'PENDING'));
@@ -432,6 +435,7 @@ class PaymentController extends Controller
             'items' => $items,
             'subtotal' => $subtotal,
             'serviceFee' => $serviceFee,
+            'extraCharge' => $extraCharge,
             'total' => $total,
             'displayOrderId' => $displayOrderId,
             'paymentTypeLabel' => $paymentTypeLabel,
@@ -585,6 +589,7 @@ class PaymentController extends Controller
             'items' => $receiptPayload['items'],
             'subtotal' => $receiptPayload['subtotal'],
             'serviceFee' => $receiptPayload['serviceFee'],
+            'extraCharge' => $receiptPayload['extraCharge'],
             'total' => $receiptPayload['total'],
             'invoiceCount' => $validOrderIds->count(),
             'invoiceIndex' => $index,
@@ -610,12 +615,14 @@ class PaymentController extends Controller
 
         $subtotal = (float) $items->sum('line_total');
         $total = (float) ($order->total_price ?? 0);
-        $serviceFee = max(0, $total - $subtotal);
+        $extraCharge = (float) ($order->extra_charge ?? 0);
+        $serviceFee = max(0, $total - $subtotal - $extraCharge);
 
         return [
             'items' => $items,
             'subtotal' => $subtotal,
             'serviceFee' => $serviceFee,
+            'extraCharge' => $extraCharge,
             'total' => $total,
         ];
     }
