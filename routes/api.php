@@ -23,6 +23,8 @@ Route::group(['prefix' => 'v1/auth'], function ($router) {
     Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:api');
     Route::post('refresh', [AuthController::class, 'refresh'])->middleware('auth:api');
     Route::get('me', [AuthController::class, 'me'])->middleware('auth:api');
+    Route::put('update', [AuthController::class, 'updateProfile'])->middleware('auth:api');
+    Route::put('change-password', [AuthController::class, 'changePassword'])->middleware('auth:api');
 });
 
 Route::group(['prefix' => 'v1/menus'], function ($router) {

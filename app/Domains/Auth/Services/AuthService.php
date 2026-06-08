@@ -56,6 +56,7 @@ class AuthService
             'name' => $user->name,
             'no_telp' => $user->no_telp,
             'role' => $user->role,
+            'avatar_url' => $user->avatar_url,
         ];
     }
 }
