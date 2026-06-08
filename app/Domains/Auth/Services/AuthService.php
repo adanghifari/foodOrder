@@ -49,6 +49,10 @@ class AuthService
 
     public function userPayload($user): array
     {
+        $avatarUrl = $user->avatar_url;
+        if ($avatarUrl && !str_starts_with($avatarUrl, 'http://') && !str_starts_with($avatarUrl, 'https://')) {
+            $avatarUrl = url($avatarUrl);
+        }
         return [
             'id' => $user->_id,
             'username' => $user->username,
@@ -56,7 +60,7 @@ class AuthService
             'name' => $user->name,
             'no_telp' => $user->no_telp,
             'role' => $user->role,
-            'avatar_url' => $user->avatar_url,
+            'avatar_url' => $avatarUrl,
         ];
     }
 }

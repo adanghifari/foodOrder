@@ -179,6 +179,17 @@ class ChatbotService
         string &$aiDecision,
         ?array &$aiPayload
     ): array {
+        $apiKey = null;
+        try {
+            $apiKey = config('services.gemini.api_key');
+        } catch (\Throwable $e) {
+            $apiKey = null;
+        }
+
+        if (!empty($apiKey)) {
+            return $this->fallbackWithGemini($user, $message, $source, $aiConfidence, $aiDecision, $aiPayload);
+        }
+
         if (!$this->shouldUseGeminiFallback($normalizedMessage)) {
             $aiDecision = 'fallback_cheap_clarification';
             return $this->cheapClarificationResponse();
@@ -256,7 +267,7 @@ class ChatbotService
             || (($entities['light'] ?? false) === true)
             || (($entities['filling'] ?? false) === true)
             || !empty($entities['required_tags'] ?? [])
-            || count($this->extractQueryKeywords((string) ($entities['query_text'] ?? ''))) >= 2;
+            || count($this->extractQueryKeywords((string) ($entities['query_text'] ?? ''))) >= 1;
 
         return !$hasSignal;
     }
@@ -268,19 +279,25 @@ class ChatbotService
             return true;
         }
 
-        $parts = preg_split('/\s+/', $text) ?: [];
-        if (count($parts) <= 2) {
-            return true;
-        }
-
-        return $this->containsAnyPhrase($text, [
+        if ($this->containsAnyPhrase($text, [
             'terserah',
             'yang enak',
             'enaknya apa',
             'makan apa ya',
             'rekomendasi dong',
             'bingung',
-        ]);
+        ])) {
+            return true;
+        }
+
+        // If there are no valid query keywords (after stripping stopwords), it is generic/short.
+        // But if there is at least one non-stopword keyword (e.g. "mi", "seafood", "ayam"), it is NOT generic.
+        $keywords = $this->extractQueryKeywords($text);
+        if (empty($keywords)) {
+            return true;
+        }
+
+        return false;
     }
 
     private function hasStrongFoodOrderingSignal(string $normalizedMessage): bool
@@ -529,6 +546,7 @@ class ChatbotService
 
         $intent = strtolower(trim((string) ($aiPayload['intent'] ?? '')));
         $confidence = (float) ($aiPayload['confidence'] ?? 0);
+        $conversationalReply = trim((string) ($aiPayload['conversational_reply'] ?? ''));
         $entities = $this->sanitizeAiEntities(
             $intent,
             is_array($aiPayload['entities'] ?? null) ? $aiPayload['entities'] : []
@@ -537,13 +555,49 @@ class ChatbotService
 
         if (!in_array($intent, self::AI_ALLOWED_INTENTS, true)) {
             $aiDecision = 'intent_not_allowed';
-            return $this->fallbackResponse();
+            if ($conversationalReply !== '') {
+                $source = 'gemini_fallback_conversational';
+                $aiDecision = 'conversational_reply_used';
+                return [
+                    'reply' => $conversationalReply,
+                    'intent' => 'unknown_or_ambiguous',
+                    'data' => [
+                        'fallback_reason' => 'intent_not_allowed',
+                        'ai_intent' => $intent,
+                        'ai_confidence' => $confidence,
+                    ],
+                    'actions' => [
+                        ['type' => 'quick_reply', 'label' => 'Pesan Makanan', 'value' => 'greeting_order'],
+                        ['type' => 'quick_reply', 'label' => 'Rekomendasi Menu', 'value' => 'greeting_recommendation'],
+                        ['type' => 'quick_reply', 'label' => 'Lihat Keranjang', 'value' => 'greeting_view_cart'],
+                    ],
+                ];
+            }
+            return $this->fallbackResponse('intent_not_allowed');
         }
 
         $minConfidence = self::AI_MIN_CONFIDENCE_BY_INTENT[$intent] ?? 0.8;
         if ($confidence < $minConfidence) {
             $aiDecision = 'below_threshold';
-            return $this->fallbackResponse();
+            if ($conversationalReply !== '') {
+                $source = 'gemini_fallback_conversational';
+                $aiDecision = 'conversational_reply_used';
+                return [
+                    'reply' => $conversationalReply,
+                    'intent' => 'unknown_or_ambiguous',
+                    'data' => [
+                        'fallback_reason' => 'below_threshold',
+                        'ai_intent' => $intent,
+                        'ai_confidence' => $confidence,
+                    ],
+                    'actions' => [
+                        ['type' => 'quick_reply', 'label' => 'Pesan Makanan', 'value' => 'greeting_order'],
+                        ['type' => 'quick_reply', 'label' => 'Rekomendasi Menu', 'value' => 'greeting_recommendation'],
+                        ['type' => 'quick_reply', 'label' => 'Lihat Keranjang', 'value' => 'greeting_view_cart'],
+                    ],
+                ];
+            }
+            return $this->fallbackResponse('below_threshold');
         }
 
         $source = 'gemini_fallback';
@@ -1270,7 +1324,7 @@ class ChatbotService
         });
 
         $menus = $scoredWithPercent
-            ->filter(fn (array $row) => ((int) ($row['score_percent'] ?? 0)) >= 35)
+            ->filter(fn (array $row) => ((int) ($row['score_percent'] ?? 0)) >= 20)
             ->pluck('item')
             ->take(5);
 
@@ -1459,6 +1513,9 @@ class ChatbotService
             'menu', 'rekomendasi', 'apa', 'ada', 'nya', 'nih', 'dong',
             'murah', 'mahal', 'paling', 'buat', 'lagi', 'enaknya', 'enak',
             'cari', 'minta', 'dong', 'nih', 'kak', 'bang', 'mba',
+            'makan', 'makanan', 'minum', 'minuman', 'pengen', 'ingin', 'pengin',
+            'pesan', 'beli', 'coba', 'seperti', 'yaitu', 'ada', 'adalah',
+            'hallo', 'halo', 'hai', 'oi', 'hello',
         ];
 
         return collect($parts)

@@ -25,6 +25,7 @@ Route::group(['prefix' => 'v1/auth'], function ($router) {
     Route::get('me', [AuthController::class, 'me'])->middleware('auth:api');
     Route::put('update', [AuthController::class, 'updateProfile'])->middleware('auth:api');
     Route::put('change-password', [AuthController::class, 'changePassword'])->middleware('auth:api');
+    Route::post('upload-avatar', [AuthController::class, 'uploadAvatar'])->middleware('auth:api');
 });
 
 Route::group(['prefix' => 'v1/menus'], function ($router) {
