@@ -4,6 +4,8 @@ namespace App\Domains\Chatbot\Services;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use App\Models\MenuItem;
 
 class GeminiNluService
 {
@@ -75,7 +77,8 @@ class GeminiNluService
                     'responseMimeType' => 'application/json',
                 ],
             ]);
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            Log::error('Gemini connection error: ' . $e->getMessage());
             return [
                 'error_reason' => 'network_error',
             ];
@@ -115,15 +118,127 @@ class GeminiNluService
             ];
         }
 
+        // Parse legacy entities structure from criteria
+        $legacyEntities = $this->mapCriteriaToLegacyEntities($decoded['criteria'] ?? null);
+
         return [
-            'scope' => (string) ($decoded['scope'] ?? ''),
             'intent' => (string) ($decoded['intent'] ?? ''),
+            'isRestaurantContext' => (bool) ($decoded['isRestaurantContext'] ?? true),
             'confidence' => (float) ($decoded['confidence'] ?? 0),
-            'reason_short' => (string) ($decoded['reason_short'] ?? ''),
-            'conversational_reply' => (string) ($decoded['conversational_reply'] ?? ''),
-            'needs_clarification' => (bool) ($decoded['needs_clarification'] ?? false),
-            'entities' => is_array($decoded['entities'] ?? null) ? $decoded['entities'] : [],
+            'criteria' => is_array($decoded['criteria'] ?? null) ? $decoded['criteria'] : null,
+            'recommendationSlots' => is_array($decoded['recommendationSlots'] ?? null) ? $decoded['recommendationSlots'] : [],
+            'entities' => $legacyEntities
         ];
+    }
+
+    private function mapCriteriaToLegacyEntities(?array $criteria): array
+    {
+        if (empty($criteria)) {
+            return [];
+        }
+
+        $taste = null;
+        if (!empty($criteria['taste'])) {
+            $t = $criteria['taste'][0];
+            $taste = $t === 'pedas' ? 'spicy' : ($t === 'manis' ? 'sweet' : ($t === 'segar' ? 'fresh' : null));
+        }
+
+        $category = null;
+        if (!empty($criteria['category'])) {
+            $cat = strtolower(trim($criteria['category']));
+            if ($cat === 'makanan' || $cat === 'makanan utama') {
+                $category = 'makanan utama';
+            } elseif ($cat === 'minuman') {
+                $category = 'minuman';
+            } elseif ($cat === 'cemilan') {
+                $category = 'cemilan';
+            }
+        }
+
+        $priceMode = null;
+        $maxPrice = null;
+        if (($criteria['pricePreference'] ?? '') === 'murah') {
+            $priceMode = 'cheap';
+            $maxPrice = 20000;
+        }
+
+        return [
+            'taste' => $taste,
+            'taste_intensity' => 'normal',
+            'category' => $category,
+            'light' => ($criteria['portion'] ?? '') === 'ringan',
+            'filling' => ($criteria['portion'] ?? '') === 'mengenyangkan',
+            'required_tags' => $criteria['tags'] ?? [],
+            'preferred_tags' => $criteria['tags'] ?? [],
+            'price_mode' => $priceMode,
+            'max_price' => $maxPrice,
+            'query_text' => $criteria['menuName'] ?? '',
+            'menu_name' => $criteria['menuName'] ?? null,
+        ];
+    }
+
+    public function generateNaturalResponse(string $userMessage, array $backendResult, string $intent): ?string
+    {
+        $apiKey = trim((string) config('services.gemini.api_key'));
+        $model = trim((string) config('services.gemini.model', 'gemini-2.0-flash-lite'));
+
+        if ($apiKey === '') {
+            return null;
+        }
+
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+            . urlencode($model)
+            . ':generateContent?key='
+            . urlencode($apiKey);
+
+        $backendJson = json_encode($backendResult, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        $prompt = <<<PROMPT
+Kamu adalah KedaiBot, chatbot ramah dan santai dari KedaiKlik.
+Tugasmu adalah membuat balasan (reply) percakapan dalam bahasa Indonesia yang natural dan santai berdasarkan hasil backend restoran kami.
+
+Gaya bahasa:
+- Maksimal 2-3 kalimat. Singkat dan manusiawi.
+- Jangan terlalu formal atau kaku. Gunakan bahasa santai ("aku", "kamu", "ya", "dong", "nih").
+- Sebutkan alasan singkat mengapa menu tersebut direkomendasikan.
+- Jangan mengulang-ulang kalimat template yang sama.
+- Jika tidak ada menu yang cocok persis, berikan alternatif terdekat.
+- Jika user bingung atau detail maunya belum jelas, tawarkan pilihan kategori (makanan utama, cemilan, minuman).
+- Jangan pernah mengarang menu, stok, atau harga di luar data backend yang diberikan!
+
+Data dari backend:
+{$backendJson}
+
+Intent: {$intent}
+Pesan customer sebelumnya: "{$userMessage}"
+
+Balas HANYA dengan string teks balasan chatbot saja, tanpa penjelasan tambahan, tanpa format markdown, tanpa JSON, tanpa tanda kutip di luar teks.
+PROMPT;
+
+        try {
+            $response = Http::timeout(8)->acceptJson()->post($url, [
+                'contents' => [
+                    [
+                        'role' => 'user',
+                        'parts' => [
+                            ['text' => $prompt],
+                        ],
+                    ],
+                ],
+                'generationConfig' => [
+                    'temperature' => 0.7,
+                ],
+            ]);
+
+            if ($response->successful()) {
+                $text = (string) data_get($response->json(), 'candidates.0.content.parts.0.text', '');
+                return trim($text) !== '' ? trim($text) : null;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Failed to generate natural response from Gemini: ' . $e->getMessage());
+        }
+
+        return null;
     }
 
     private function normalizeMessageForCache(string $message): string
@@ -145,56 +260,107 @@ class GeminiNluService
 
     private function buildPrompt(string $message): string
     {
+        $categoryTags = config('menu_taxonomy.category_tags', []);
+
+        // Dinamisasi kategori dari config taxonomy
+        $categoriesList = array_map(function($c) {
+            return ucwords(trim($c)); // e.g. "Makanan Utama", "Minuman", "Cemilan"
+        }, array_keys($categoryTags));
+        $validCategories = implode(', ', $categoriesList);
+
+        $allowedTags = implode(', ', config('menu_taxonomy.allowed_tags', []));
+
+        // Ambil menu summary aktif (stock > 0)
+        $activeMenus = [];
+        try {
+            $activeMenus = MenuItem::where('stock', '>', 0)
+                ->get(['_id', 'name', 'category', 'tags', 'price'])
+                ->map(fn($item) => [
+                    'id' => (string) $item->_id,
+                    'name' => $item->name,
+                    'category' => ucwords($item->category),
+                    'tags' => $item->tags ?? [],
+                    'price' => (int) $item->price
+                ])
+                ->all();
+        } catch (\Throwable $e) {
+            Log::warning('Failed to fetch active menus for Gemini NLU prompt: ' . $e->getMessage());
+        }
+        $activeMenuSummaryJson = json_encode($activeMenus, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
         return <<<PROMPT
-Klasifikasikan intent chat user untuk aplikasi food order.
-Balas HANYA JSON valid (tanpa markdown), format:
-{"scope":"...","intent":"...","confidence":0.0,"reason_short":"...","conversational_reply":"...","needs_clarification":false,"entities":{}}
+Kamu adalah NLU parser untuk chatbot restoran bernama KedaiBot.
 
-scope yang diizinkan:
-- restaurant_in_scope
-- out_of_scope
+Tugasmu bukan menjawab customer secara bebas.
+Tugasmu hanya mengubah pesan customer menjadi JSON intent, criteria, dan recommendationSlots untuk pencarian menu.
 
-Intent yang diizinkan:
-- greeting
-- small_talk
-- out_of_scope
-- order_menu
-- tracking_order
-- menu_recommendation
-- view_cart
-- checkout_request
-- cancel_order_request
-- unknown_or_ambiguous
+Selalu anggap pesan customer masih berhubungan dengan restoran, makanan, minuman, rekomendasi, rasa, harga, porsi, mood makan, keranjang, atau pemesanan, kecuali benar-benar jelas di luar konteks.
+
+Gunakan hanya kategori yang tersedia:
+[{$validCategories}]
+
+Gunakan hanya tags/metadata yang tersedia:
+[{$allowedTags}]
+
+Daftar menu aktif yang tersedia saat ini (stock > 0):
+{$activeMenuSummaryJson}
+
+Intent yang valid:
+- RECOMMEND_MENU
+- ASK_MENU_DETAIL
+- ASK_PRICE
+- ASK_CATEGORY
+- ADD_TO_CART
+- REMOVE_FROM_CART
+- VIEW_CART
+- CHECK_ORDER
+- SMALL_TALK_RESTAURANT
+- OUT_OF_SCOPE
+
+Output harus JSON valid saja, tanpa markdown, tanpa penjelasan tambahan.
+
+Format output:
+{
+  "intent": "...",
+  "isRestaurantContext": true,
+  "confidence": 0.0,
+  "criteria": {
+    "category": null,
+    "tags": [],
+    "taste": [],
+    "portion": null,
+    "pricePreference": null,
+    "popularity": null,
+    "mood": null,
+    "menuName": null
+  },
+  "recommendationSlots": []
+}
 
 Aturan:
-- Jangan hasilkan intent konfirmasi transaksi.
-- Untuk topik di luar konteks restoran/food ordering, gunakan out_of_scope.
-- Jika topik di luar restoran, set scope=out_of_scope, intent=out_of_scope, dan reason_short singkat.
-- Jika topik masih seputar restoran/food order, set scope=restaurant_in_scope.
-- Jika tidak yakin, pakai unknown_or_ambiguous.
-- conversational_reply:
-  - Untuk scope restaurant_in_scope, isi dengan kalimat natural singkat (maks 2 kalimat) untuk membantu user.
-  - Boleh berupa pertanyaan klarifikasi (contoh: preferensi rasa/kategori/budget).
-  - Jangan menyebut data stok/harga spesifik yang tidak pasti.
-  - Untuk out_of_scope boleh kosong.
-- needs_clarification:
-  - true jika user masih ambigu dan kamu perlu tanya balik dulu sebelum rekomendasi final.
-  - false jika informasi sudah cukup untuk menampilkan rekomendasi.
-- Untuk menu_recommendation, entities boleh memuat:
-  - taste: spicy|sweet|fresh
-  - taste_intensity: normal|high
-  - category: makanan utama|cemilan|minuman
-  - required_tags: array tag dari daftar [pedas,gurih,manis,asam,segar,ringan,mengenyangkan,renyah,berkuah,sarapan,makan_siang,makan_malam,ramah_anak,sharing_bersama]
-  - light: boolean
-  - filling: boolean
-  - calorie_level: low|medium|high
-  - max_price: integer
-  - query_text: salin pesan user
-- Jika user menyebut constraint sempit (contoh: "buat berbagi"), masukkan di required_tags sebagai filter WAJIB.
-- Jangan isi field yang tidak relevan.
-- entities juga bisa memuat menu_name, quantity untuk order.
+- Jika customer meminta satu kebutuhan saja, isi criteria.
+- Jika customer meminta beberapa kebutuhan sekaligus, isi recommendationSlots (dan set criteria ke null).
+- Jangan gabungkan beberapa kebutuhan berbeda menjadi satu criteria yang mustahil.
+- Contoh multi-slot:
+  'makanan pedas, cemilan gurih, minuman segar'
+  harus menjadi 3 slot di recommendationSlots:
+  1. {"slotName": "makanan_pedas", "category": "Makanan Utama", "criteria": {"tags": ["pedas"], "taste": ["pedas"]}}
+  2. {"slotName": "cemilan_gurih", "category": "Cemilan", "criteria": {"tags": ["gurih"], "taste": ["gurih"]}}
+  3. {"slotName": "minuman_segar", "category": "Minuman", "criteria": {"tags": ["segar"], "taste": ["segar"]}}
+- Jika customer berkata 'aku laper', 'makan siang', atau 'makan berat', arahkan ke portion: "mengenyangkan".
+- Jika customer berkata 'lagi hujan', arahkan ke mood: "hujan" atau tags: ["hangat"].
+- Jika customer berkata 'yang aman', 'yang enak', 'rekomendasiin', atau 'bingung', arahkan ke popularity: "populer" atau mood: "bingung".
+- Jika customer berkata 'bokek', 'hemat', 'ga mahal', arahkan ke pricePreference: "murah".
+- Jika customer berkata 'seger', 'adem', 'dingin', arahkan ke category: "Minuman" atau taste: ["segar"].
+- Jangan mengarang menu di luar daftar menu aktif yang diberikan.
+- Jika customer menyebutkan menu yang ada di daftar menu aktif (atau sangat mirip/typo/singkatan), isi criteria.menuName dengan nama menu persis yang ada di daftar menu aktif (misal customer bilang "gepreknya ada?" maka menuName diset "Nasi Ayam Geprek Joss").
+- Jangan mengarang tags di luar daftar tags yang tersedia.
+- Jangan mengarang kategori di luar daftar kategori yang tersedia.
+- Jika tidak yakin tapi masih konteks restoran, tetap pilih RECOMMEND_MENU atau SMALL_TALK_RESTAURANT dengan confidence sedang/rendah.
+- Gunakan OUT_OF_SCOPE hanya jika pesan benar-benar tidak berkaitan dengan restoran (misalnya pertanyaan politik, coding, berita umum).
 
-User message: {$message}
+Pesan customer:
+{$message}
 PROMPT;
     }
 }

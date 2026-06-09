@@ -10,9 +10,11 @@ use App\Models\Order;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class ChatbotService
 {
+    private string $currentChannel = 'mobile_chatbot';
     private const RESPONSE_VERSION = '1.1';
     private const PAID_STATUSES = ['PAID', 'SUCCESS', 'SETTLEMENT'];
     private const AI_ALLOWED_INTENTS = [
@@ -54,72 +56,89 @@ class ChatbotService
     ) {
     }
 
-    public function handleMessage(User $user, string $message, string $action = ''): array
+    public function handleMessage(User $user, string $message, string $action = '', string $channel = 'mobile_chatbot'): array
     {
+        $this->currentChannel = $channel;
         $startedAt = microtime(true);
-        $aiPayload = null;
         $normalizedMessage = strtolower(trim($message));
+
+        $hasThroatIssues = $this->containsAnyPhrase($normalizedMessage, [
+            'batuk',
+            'sakit tenggorokan',
+            'radang',
+            'tenggorokan sakit',
+            'tenggorokan gatal',
+            'tenggorokan gatel',
+            'serak',
+            'panas dalam'
+        ]);
+
+        // Load simple context conversation memory from Cache early
+        $contextKey = 'chatbot:context:' . $user->_id;
+        $sessionContext = [
+            'lastIntent' => null,
+            'lastCriteria' => null,
+            'lastRecommendationSlots' => null,
+            'lastRecommendations' => [],
+            'pendingAction' => null
+        ];
+        try {
+            if (Cache::getFacadeApplication() !== null) {
+                $sessionContext = Cache::get($contextKey, $sessionContext);
+            }
+        } catch (\Throwable $e) {
+            // safe fallback for unit tests
+        }
+        
+        // 1. Detect intent and criteria using rule-based parser
         $intentPayload = $this->intentService->detect($message, $action);
-        $intent = (string) ($intentPayload['intent'] ?? 'unknown_or_ambiguous');
-        $entities = (array) ($intentPayload['entities'] ?? []);
-        if ($intent === 'menu_recommendation' && !isset($entities['query_text'])) {
-            $entities['query_text'] = $message;
-        }
         $source = 'rule_based';
-        $aiConfidence = null;
-        $aiDecision = 'not_used';
 
-        if ($this->shouldUseGeminiContextGate($intent, $action, $normalizedMessage)) {
-            $contextGateResponse = $this->contextGateWithGemini($message, $action, $source, $aiConfidence, $aiDecision, $aiPayload);
-            if (is_array($contextGateResponse)) {
-                $normalized = $this->normalizeResponse($contextGateResponse);
-                $this->logTelemetry(
-                    userId: (string) ($user->_id ?? ''),
-                    source: $source,
-                    intentRuleBased: $intent,
-                    intentResolved: (string) ($normalized['intent'] ?? 'unknown_or_ambiguous'),
-                    aiDecision: $aiDecision,
-                    aiConfidence: $aiConfidence,
-                    action: $action,
-                    latencyMs: (int) round((microtime(true) - $startedAt) * 1000)
-                );
-                return $normalized;
-            }
-        } else {
-            $aiDecision = 'context_gate_skipped';
-        }
-
-        if ($intent === 'menu_recommendation') {
-            if ($this->shouldReturnCheapClarificationForRecommendation($normalizedMessage, $entities)) {
-                $response = $this->cheapRecommendationClarificationResponse();
-                $normalized = $this->normalizeResponse($response);
-                $this->logTelemetry(
-                    userId: (string) ($user->_id ?? ''),
-                    source: $source,
-                    intentRuleBased: $intent,
-                    intentResolved: (string) ($normalized['intent'] ?? 'unknown_or_ambiguous'),
-                    aiDecision: 'cheap_clarification',
-                    aiConfidence: null,
-                    action: $action,
-                    latencyMs: (int) round((microtime(true) - $startedAt) * 1000)
-                );
-                return $normalized;
-            }
-
-            if (!$this->shouldUseGeminiRecommendationEnrichment($normalizedMessage, $entities)) {
-                $aiDecision = 'recommendation_enrichment_skipped';
+        // Intercept "semua" or "semuanya" contextually
+        if ($normalizedMessage === 'semua' || $normalizedMessage === 'semuanya') {
+            if (($sessionContext['pendingAction'] ?? null) === 'CART_ADJUST_SELECTION') {
+                $intentPayload = [
+                    'intent' => 'REMOVE_FROM_CART',
+                    'isRestaurantContext' => true,
+                    'confidence' => 1.0,
+                    'criteria' => [
+                        'clear_cart' => true
+                    ],
+                    'recommendationSlots' => [],
+                    'entities' => []
+                ];
+            } elseif (($sessionContext['pendingAction'] ?? null) === 'ADD_RECOMMENDATIONS_TO_CART') {
+                $intentPayload = [
+                    'intent' => 'ADD_TO_CART',
+                    'isRestaurantContext' => true,
+                    'confidence' => 1.0,
+                    'criteria' => [
+                        'confirm_last_recommendation' => true
+                    ],
+                    'recommendationSlots' => [],
+                    'entities' => [
+                        'confirm_last_recommendation' => true
+                    ]
+                ];
             } else {
-            $entities = $this->enrichRecommendationEntitiesFromGemini(
-                $message,
-                $entities,
-                $source,
-                $aiConfidence,
-                $aiDecision,
-                $aiPayload
-            );
+                // Default fallback: clear cart
+                $intentPayload = [
+                    'intent' => 'REMOVE_FROM_CART',
+                    'isRestaurantContext' => true,
+                    'confidence' => 1.0,
+                    'criteria' => [
+                        'clear_cart' => true
+                    ],
+                    'recommendationSlots' => [],
+                    'entities' => []
+                ];
             }
         }
+        
+        $intent = $intentPayload['intent'] ?? 'unknown_or_ambiguous';
+        $confidence = $intentPayload['confidence'] ?? ($intent === 'unknown_or_ambiguous' ? 0.0 : 1.0);
 
+        // Cheap Clarification Guards to avoid unnecessary Gemini NLU calls for very short/generic inputs
         if ($intent === 'unknown_or_ambiguous' && $this->shouldReturnCheapClarificationForUnknown($normalizedMessage)) {
             $response = $this->cheapClarificationResponse();
             $normalized = $this->normalizeResponse($response);
@@ -127,118 +146,635 @@ class ChatbotService
                 userId: (string) ($user->_id ?? ''),
                 source: $source,
                 intentRuleBased: $intent,
-                intentResolved: (string) ($normalized['intent'] ?? 'unknown_or_ambiguous'),
-                aiDecision: 'cheap_clarification',
+                intentResolved: 'unknown_or_ambiguous',
+                aiDecision: 'cheap_clarification_guard',
                 aiConfidence: null,
                 action: $action,
-                latencyMs: (int) round((microtime(true) - $startedAt) * 1000)
+                latencyMs: (int) round((microtime(true) - $startedAt) * 1000),
+                channel: $channel
             );
             return $normalized;
         }
 
-        $response = match ($intent) {
-            'greeting' => $this->greetingResponse(),
-            'small_talk' => $this->smallTalkResponse(),
-            'best_seller' => $this->bestSellerResponse(),
-            'tracking_order' => $this->trackingResponse($user),
-            'view_cart' => $this->cartResponse($user),
-            'cart_increase_qty' => $this->cartAdjustResponse($user, $entities, true),
-            'cart_decrease_qty' => $this->cartAdjustResponse($user, $entities, false),
-            'clear_cart_request' => $this->clearCartResponse($user),
-            'order_menu' => $this->orderMenuResponse($user, $entities),
-            'menu_recommendation' => $this->recommendationResponse($entities),
-            'checkout_request' => $this->checkoutPromptResponse(),
-            'confirm_checkout' => $this->checkoutConfirmResponse(),
-            'checkout_type_select' => $this->checkoutTypeSelectedResponse((string) ($entities['checkout_type'] ?? '')),
-            'cancel_order_request' => $this->cancelPromptResponse($user),
-            'confirm_cancel' => $this->cancelConfirmResponse($user, (string) ($entities['order_id'] ?? '')),
-            default => $this->fallbackOrClarify($user, $message, $normalizedMessage, $source, $aiConfidence, $aiDecision, $aiPayload),
-        };
+        if ($intent === 'RECOMMEND_MENU' || $intent === 'menu_recommendation') {
+            $legacyEntitiesForGuard = $intentPayload['entities'] ?? [];
+            if ($this->shouldReturnCheapClarificationForRecommendation($normalizedMessage, $legacyEntitiesForGuard)) {
+                $response = $this->cheapRecommendationClarificationResponse();
+                // Map the legacy recommendation intent name for tests
+                $response['intent'] = 'menu_recommendation';
+                $normalized = $this->normalizeResponse($response);
+                $this->logTelemetry(
+                    userId: (string) ($user->_id ?? ''),
+                    source: $source,
+                    intentRuleBased: $intent,
+                    intentResolved: 'menu_recommendation',
+                    aiDecision: 'cheap_clarification_guard',
+                    aiConfidence: null,
+                    action: $action,
+                    latencyMs: (int) round((microtime(true) - $startedAt) * 1000),
+                    channel: $channel
+                );
+                return $normalized;
+            }
+        }
+        
+        // 2. Call Gemini NLU if confidence is low and it's a message-based input
+        if ($confidence < 0.8 && $action === '') {
+            $geminiService = $this->getGeminiService();
+            $aiPayload = $geminiService?->detectIntent($message);
+            if ($aiPayload && !isset($aiPayload['error_reason'])) {
+                $geminiConfidence = $aiPayload['confidence'] ?? 0.0;
+                // Only upgrade the payload if Gemini NLU is confident
+                if ($geminiConfidence >= 0.8) {
+                    $intentPayload = $aiPayload;
+                    $source = 'gemini_nlu';
+                    $confidence = $geminiConfidence;
+                }
+            }
+        }
+        
+        $intentMap = [
+            'greeting' => 'SMALL_TALK_RESTAURANT',
+            'small_talk' => 'SMALL_TALK_RESTAURANT',
+            'menu_recommendation' => 'RECOMMEND_MENU',
+            'best_seller' => 'RECOMMEND_MENU',
+            'order_menu' => 'ADD_TO_CART',
+            'cart_increase_qty' => 'ADD_TO_CART',
+            'cart_decrease_qty' => 'REMOVE_FROM_CART',
+            'clear_cart_request' => 'REMOVE_FROM_CART',
+            'tracking_order' => 'CHECK_ORDER',
+            'view_cart' => 'VIEW_CART',
+            'out_of_scope' => 'OUT_OF_SCOPE'
+        ];
+        
+        $intent = $intentPayload['intent'] ?? 'unknown_or_ambiguous';
+        if (isset($intentMap[$intent])) {
+            $intent = $intentMap[$intent];
+        }
+        
+        $isRestaurantContext = $intentPayload['isRestaurantContext'] ?? true;
+        $criteria = $intentPayload['criteria'] ?? null;
+        $recommendationSlots = $intentPayload['recommendationSlots'] ?? [];
+        $entities = $intentPayload['entities'] ?? [];
+
+        // Check if out of scope
+        if (!$isRestaurantContext || $intent === 'OUT_OF_SCOPE') {
+            $outOfScopeResponse = $this->outOfScopeResponse();
+            $normalized = $this->normalizeResponse($outOfScopeResponse);
+            $this->logTelemetry(
+                userId: (string) ($user->_id ?? ''),
+                source: $source,
+                intentRuleBased: $intentPayload['intent'] ?? '',
+                intentResolved: 'OUT_OF_SCOPE',
+                aiDecision: 'out_of_scope_detected',
+                aiConfidence: $confidence,
+                action: $action,
+                latencyMs: (int) round((microtime(true) - $startedAt) * 1000),
+                channel: $channel
+            );
+            return $normalized;
+        }
+
+
+        $reply = '';
+        $data = null;
+        $actions = [];
+        $cards = [];
+        $pendingAction = null;
+        $recommendations = [];
+        $responseOverride = [];
+
+        // Main Router
+        if ($intent === 'ADD_TO_CART' && ($criteria['confirm_last_recommendation'] ?? false)) {
+            // Confirmation flow for last recommendation
+            $lastRecs = $sessionContext['lastRecommendations'] ?? [];
+            $lastPending = $sessionContext['pendingAction'] ?? null;
+            
+            if ($lastPending === 'ADD_RECOMMENDATIONS_TO_CART' && !empty($lastRecs)) {
+                $addedItems = [];
+                $targetIndex = $criteria['target_index'] ?? null;
+                
+                if ($targetIndex !== null && isset($lastRecs[$targetIndex])) {
+                    // Add only the target item
+                    $item = $lastRecs[$targetIndex];
+                    $res = $this->cartService->addOrUpdateItem((string)$user->_id, $item['menuId'], 1);
+                    if ($res['ok'] ?? false) {
+                        $addedItems[] = $item;
+                    }
+                } else {
+                    // Add all items
+                    foreach ($lastRecs as $item) {
+                        $res = $this->cartService->addOrUpdateItem((string)$user->_id, $item['menuId'], 1);
+                        if ($res['ok'] ?? false) {
+                            $addedItems[] = $item;
+                        }
+                    }
+                }
+                
+                if (!empty($addedItems)) {
+                    $itemNames = implode(', ', array_map(fn($it) => $it['name'], $addedItems));
+                    $fallbackReply = "Oke, " . $itemNames . " sudah aku masukkan ke keranjang ya! Mau langsung checkout?";
+                    
+                    $backendResult = [
+                        'intent' => 'ADD_TO_CART',
+                        'added_items' => $addedItems,
+                        'message' => 'Items added successfully'
+                    ];
+                    
+                    $reply = $this->generateReply($message, $backendResult, 'ADD_TO_CART', $fallbackReply);
+                    $intent = 'ADD_TO_CART';
+                    $data = [
+                        'added_items' => $addedItems,
+                        'suggestedAction' => 'VIEW_CART'
+                    ];
+                    $actions = [
+                        ['type' => 'quick_reply', 'label' => 'Lihat Keranjang', 'value' => 'greeting_view_cart'],
+                        ['type' => 'quick_reply', 'label' => 'Checkout', 'value' => 'confirm_checkout']
+                    ];
+                } else {
+                    $reply = "Maaf, gagal menambahkan menu ke keranjang. Coba beri tahu nama menunya secara langsung ya.";
+                }
+                
+                // Clear pending action
+                try {
+                    if (Cache::getFacadeApplication() !== null) {
+                        Cache::forget($contextKey);
+                    }
+                } catch (\Throwable $e) {
+                    // safe fallback for unit tests
+                }
+            } else {
+                $reply = "Belum ada rekomendasi menu sebelumnya yang bisa ditambahkan. Mau aku carikan rekomendasi menu?";
+                $actions = [
+                    ['type' => 'quick_reply', 'label' => 'Rekomendasi Menu', 'value' => 'greeting_recommendation']
+                ];
+            }
+        } elseif ($intent === 'RECOMMEND_MENU') {
+            // Recommendation flow
+            if (!empty($recommendationSlots)) {
+                // Multi-slot recommendation
+                $recommendations = [];
+                foreach ($recommendationSlots as $slot) {
+                    $slotName = $slot['slotName'] ?? 'rekomendasi';
+                    $slotCategory = $slot['category'] ?? '';
+                    $slotCriteria = $slot['criteria'] ?? [];
+                    $slotCriteria['category'] = $slotCategory;
+                    if ($hasThroatIssues) {
+                        $slotCriteria['throat_issues'] = true;
+                    }
+                    
+                    $candidates = $this->getRecommendationsForCriteria($slotCriteria);
+                    if (!empty($candidates)) {
+                        $selected = $candidates[0];
+                        $reason = "pilihan pas untuk " . ($slotCategory !== '' ? strtolower($slotCategory) : 'menu') . " " . implode(', ', $slotCriteria['tags'] ?? []);
+                        $recommendations[] = [
+                            'slot' => $slotName,
+                            'menuId' => (string) $selected->_id,
+                            'name' => (string) $selected->name,
+                            'reason' => (string) ($selected->recommendation_note !== '' ? $selected->recommendation_note : $reason)
+                        ];
+                        $cards[] = ['type' => 'menu_card', 'menu' => $this->mapMenuCard($selected)];
+                    } else {
+                        // Fallback alternative: category matched but tags relaxed
+                        $relaxedCriteria = ['category' => $slotCategory];
+                        if ($hasThroatIssues) {
+                            $relaxedCriteria['throat_issues'] = true;
+                        }
+                        $alternativeCandidates = $this->getRecommendationsForCriteria($relaxedCriteria);
+                        if (!empty($alternativeCandidates)) {
+                            $alternative = $alternativeCandidates[0];
+                            $recommendations[] = [
+                                'slot' => $slotName,
+                                'menuId' => (string) $alternative->_id,
+                                'name' => (string) $alternative->name,
+                                'reason' => "alternatif terdekat karena kriteria " . implode(', ', $slotCriteria['tags'] ?? []) . " belum tersedia"
+                            ];
+                            $cards[] = ['type' => 'menu_card', 'menu' => $this->mapMenuCard($alternative)];
+                        }
+                    }
+                }
+            } else {
+                // Single-slot / general criteria recommendation
+                if ($hasThroatIssues) {
+                    $criteria['throat_issues'] = true;
+                }
+                $candidates = $this->getRecommendationsForCriteria($criteria ?? []);
+                
+                $hasConstraints = $hasThroatIssues 
+                    || !empty($criteria['taste'] ?? []) 
+                    || !empty($criteria['tags'] ?? []) 
+                    || ($criteria['portion'] ?? null) !== null 
+                    || ($criteria['pricePreference'] ?? null) !== null;
+
+                if (empty($candidates) && !$hasConstraints) {
+                    // Fallback to all menu items ONLY if no constraints are present
+                    $candidates = MenuItem::where('stock', '>', 0)->limit(3)->get()->all();
+                }
+                
+                $recommendations = [];
+                foreach (array_slice($candidates, 0, 3) as $selected) {
+                    $reason = $selected->recommendation_note ?: "rekomendasi menu " . strtolower($selected->category);
+                    $recommendations[] = [
+                        'slot' => 'rekomendasi',
+                        'menuId' => (string) $selected->_id,
+                        'name' => (string) $selected->name,
+                        'reason' => (string) $reason
+                    ];
+                    $cards[] = ['type' => 'menu_card', 'menu' => $this->mapMenuCard($selected)];
+                }
+            }
+            
+            if (!empty($recommendations)) {
+                $pendingAction = 'ADD_RECOMMENDATIONS_TO_CART';
+                $sessionContext = [
+                    'lastIntent' => 'RECOMMEND_MENU',
+                    'lastCriteria' => $criteria,
+                    'lastRecommendationSlots' => $recommendationSlots,
+                    'lastRecommendations' => $recommendations,
+                    'pendingAction' => $pendingAction
+                ];
+                try {
+                    if (Cache::getFacadeApplication() !== null) {
+                        Cache::put($contextKey, $sessionContext, 900); // 15 mins cache TTL
+                    }
+                } catch (\Throwable $e) {
+                    // safe fallback for unit tests
+                }
+                
+                $recsString = implode(', ', array_map(fn($it) => $it['name'], $recommendations));
+                $fallbackReply = "Aku rekomendasikan: " . $recsString . ". Mau aku tambahkan ke keranjang?";
+                
+                $backendResult = [
+                    'intent' => 'RECOMMEND_MENU',
+                    'recommendations' => $recommendations,
+                    'suggestedAction' => 'ADD_RECOMMENDATIONS_TO_CART'
+                ];
+                
+                $reply = $this->generateReply($message, $backendResult, 'RECOMMEND_MENU', $fallbackReply);
+                
+                // Filter recommendations and cards based on final generated reply
+                list($filteredRecs, $filteredCards) = $this->filterRecommendationsByReply($reply, $recommendations, $cards);
+                if (count($filteredRecs) !== count($recommendations)) {
+                    $recommendations = $filteredRecs;
+                    $cards = $filteredCards;
+                    
+                    $sessionContext['lastRecommendations'] = $recommendations;
+                    try {
+                        if (Cache::getFacadeApplication() !== null) {
+                            Cache::put($contextKey, $sessionContext, 900); // 15 mins cache TTL
+                        }
+                    } catch (\Throwable $e) {
+                        // safe fallback for unit tests
+                    }
+                }
+
+                $data = [
+                    'recommendations' => $recommendations,
+                    'suggestedAction' => 'ADD_RECOMMENDATIONS_TO_CART'
+                ];
+                
+                $actions = array_map(fn($it) => [
+                    'type' => 'quick_reply',
+                    'label' => 'Pesan ' . $it['name'],
+                    'value' => 'suggest_menu:' . $it['menuId']
+                ], array_slice($recommendations, 0, 3));
+                
+                if (!empty($recommendations)) {
+                    $actions[] = ['type' => 'quick_reply', 'label' => 'Ya, Tambahkan Semua', 'value' => 'iya'];
+                }
+            } else {
+                $reply = "Maaf, aku belum menemukan menu yang cocok. Coba tanyakan menu favorit lainnya ya.";
+            }
+        } elseif ($intent === 'ADD_TO_CART') {
+            // Map legacy to orderMenuResponse
+            $response = $this->orderMenuResponse($user, $entities);
+            return $this->normalizeResponse($response);
+        } elseif ($intent === 'REMOVE_FROM_CART') {
+            if ($criteria['clear_cart'] ?? false) {
+                $response = $this->clearCartResponse($user);
+            } else {
+                $response = $this->cartAdjustResponse($user, $entities, false);
+            }
+            return $this->normalizeResponse($response);
+        } elseif ($intent === 'VIEW_CART') {
+            $response = $this->cartResponse($user);
+            return $this->normalizeResponse($response);
+        } elseif ($intent === 'CHECK_ORDER') {
+            $response = $this->trackingResponse($user);
+            return $this->normalizeResponse($response);
+        } elseif ($intent === 'ASK_MENU_DETAIL' || $intent === 'ASK_PRICE') {
+            $menuName = $criteria['menuName'] ?? $entities['menu_name'] ?? '';
+            $menu = MenuItem::where('name', 'like', '%' . $menuName . '%')->where('stock', '>', 0)->first();
+            if ($menu) {
+                $fallbackReply = $menu->name . " harganya " . $this->formatCurrency($menu->price) . ". " . ($menu->description ? $menu->description : '');
+                $backendResult = [
+                    'intent' => $intent,
+                    'menu' => $this->mapMenuCard($menu)
+                ];
+                $reply = $this->generateReply($message, $backendResult, $intent, $fallbackReply);
+                $data = [
+                    'menu' => $this->mapMenuCard($menu)
+                ];
+                $actions = [
+                    ['type' => 'quick_reply', 'label' => 'Pesan ' . $menu->name, 'value' => 'suggest_menu:' . $menu->_id],
+                    ['type' => 'quick_reply', 'label' => 'Lihat Menu Lain', 'value' => 'greeting_order']
+                ];
+                $cards = [['type' => 'menu_card', 'menu' => $this->mapMenuCard($menu)]];
+            } else {
+                $reply = "Maaf, menu tersebut tidak ditemukan atau sedang habis.";
+                $actions = [
+                    ['type' => 'quick_reply', 'label' => 'Rekomendasi Menu', 'value' => 'greeting_recommendation']
+                ];
+            }
+        } elseif ($intent === 'ASK_CATEGORY') {
+            $category = $criteria['category'] ?? '';
+            $mappedCategory = $this->mapCategoryToBackend($category);
+            
+            $limitMode = $criteria['limitMode'] ?? 'default';
+            $query = MenuItem::where('category', $mappedCategory)->where('stock', '>', 0);
+            if ($limitMode === 'all') {
+                $menus = $query->get();
+            } else {
+                $menus = $query->limit(5)->get();
+            }
+
+            if ($menus->isNotEmpty()) {
+                $menuNames = implode(', ', $menus->pluck('name')->toArray());
+                if ($limitMode === 'all') {
+                    $fallbackReply = "Ini daftar semua menu pada kategori " . $category . ": " . $menuNames . ". Mau pesan yang mana?";
+                } else {
+                    $fallbackReply = "Untuk kategori " . $category . ", kami punya: " . $menuNames . ". Mau pesan yang mana?";
+                }
+
+                $backendResult = [
+                    'intent' => 'ASK_CATEGORY',
+                    'category' => $category,
+                    'menus' => $menus->map(fn($m) => $this->mapMenuCard($m))->toArray(),
+                    'limit_mode' => $limitMode
+                ];
+                $reply = $this->generateReply($message, $backendResult, 'ASK_CATEGORY', $fallbackReply);
+                $data = [
+                    'category' => $category,
+                    'menus' => $menus->map(fn($m) => $this->mapMenuCard($m))->toArray()
+                ];
+                $actions = $menus->take(3)->map(fn($m) => [
+                    'type' => 'quick_reply',
+                    'label' => 'Pesan ' . $m->name,
+                    'value' => 'suggest_menu:' . $m->_id
+                ])->toArray();
+                $cards = $menus->map(fn($m) => ['type' => 'menu_card', 'menu' => $this->mapMenuCard($m)])->toArray();
+
+                $responseOverride = [
+                    'result_mode' => $limitMode === 'all' ? 'list_all' : 'recommendation',
+                    'limit_applied' => $limitMode === 'all' ? false : true,
+                    'limit_mode' => $limitMode
+                ];
+            } else {
+                $reply = "Kategori tersebut belum tersedia saat ini.";
+            }
+        } elseif ($intent === 'SMALL_TALK_RESTAURANT') {
+            $fallbackReply = "Halo! Aku KedaiBot, chatbot KedaiKlik. Aku bisa bantu kamu pesan makanan, lacak pesanan, rekomendasi menu, atau lihat keranjang.";
+            $backendResult = [
+                'intent' => 'SMALL_TALK_RESTAURANT',
+            ];
+            $reply = $this->generateReply($message, $backendResult, 'SMALL_TALK_RESTAURANT', $fallbackReply);
+            $actions = [
+                ['type' => 'quick_reply', 'label' => 'Pesan Makanan', 'value' => 'greeting_order'],
+                ['type' => 'quick_reply', 'label' => 'Lacak Pesanan', 'value' => 'greeting_tracking'],
+                ['type' => 'quick_reply', 'label' => 'Rekomendasi Menu', 'value' => 'greeting_recommendation']
+            ];
+        } else {
+            // Fallback for standard checkout/cancel flows to keep backward compatibility
+            $response = match ($intent) {
+                'checkout_request' => $this->checkoutPromptResponse(),
+                'confirm_checkout' => $this->checkoutConfirmResponse(),
+                'checkout_type_select' => $this->checkoutTypeSelectedResponse((string) ($entities['checkout_type'] ?? '')),
+                'cancel_order_request' => $this->cancelPromptResponse($user),
+                'confirm_cancel' => $this->cancelConfirmResponse($user, (string) ($entities['order_id'] ?? '')),
+                default => $this->fallbackResponse()
+            };
+            return $this->normalizeResponse($response);
+        }
+
+        // Standardized response
+        $response = array_merge([
+            'reply' => $reply,
+            'intent' => $intent,
+            'data' => $data,
+            'actions' => $actions,
+            'cards' => $cards
+        ], $responseOverride ?? []);
+
+        // 8. Debug Logging
+        $latencyMs = (int) round((microtime(true) - $startedAt) * 1000);
+        try {
+            Log::info('chatbot.debug_log', [
+                'raw_user_message' => $message,
+                'normalized_message' => $normalizedMessage,
+                'detected_intent' => $intent,
+                'parsed_criteria' => $criteria,
+                'recommendation_slots' => $recommendationSlots,
+                'confidence' => $confidence,
+                'source' => $source,
+                'scoring_results' => $recommendations,
+                'pending_action' => $pendingAction,
+                'final_reply' => $reply,
+                'latency_ms' => $latencyMs
+            ]);
+        } catch (\Throwable $e) {
+            // safe fallback for unit tests
+        }
 
         $normalized = $this->normalizeResponse($response);
+        
         $this->logTelemetry(
             userId: (string) ($user->_id ?? ''),
             source: $source,
-            intentRuleBased: $intent,
-            intentResolved: (string) ($normalized['intent'] ?? 'unknown_or_ambiguous'),
-            aiDecision: $aiDecision,
-            aiConfidence: $aiConfidence,
+            intentRuleBased: $intentPayload['intent'] ?? '',
+            intentResolved: $intent,
+            aiDecision: $pendingAction ?: 'direct_resolved',
+            aiConfidence: $confidence,
             action: $action,
-            latencyMs: (int) round((microtime(true) - $startedAt) * 1000)
+            latencyMs: $latencyMs,
+            channel: $channel
         );
 
         return $normalized;
     }
 
-    private function fallbackOrClarify(
-        User $user,
-        string $message,
-        string $normalizedMessage,
-        string &$source,
-        ?float &$aiConfidence,
-        string &$aiDecision,
-        ?array &$aiPayload
-    ): array {
-        $apiKey = null;
-        try {
-            $apiKey = config('services.gemini.api_key');
-        } catch (\Throwable $e) {
-            $apiKey = null;
+    private function generateReply(string $userMessage, array $backendResult, string $intent, string $fallbackReply): string
+    {
+        $geminiService = $this->getGeminiService();
+        if ($geminiService) {
+            try {
+                $reply = $geminiService->generateNaturalResponse($userMessage, $backendResult, $intent);
+                if ($reply !== null && trim($reply) !== '') {
+                    return $reply;
+                }
+            } catch (\Throwable $e) {
+                // Safe fallback for unit tests where mock is not configured for generateNaturalResponse
+            }
         }
-
-        if (!empty($apiKey)) {
-            return $this->fallbackWithGemini($user, $message, $source, $aiConfidence, $aiDecision, $aiPayload);
-        }
-
-        if (!$this->shouldUseGeminiFallback($normalizedMessage)) {
-            $aiDecision = 'fallback_cheap_clarification';
-            return $this->cheapClarificationResponse();
-        }
-
-        return $this->fallbackWithGemini($user, $message, $source, $aiConfidence, $aiDecision, $aiPayload);
+        return $fallbackReply;
     }
 
-    private function shouldUseGeminiContextGate(string $intent, string $action, string $normalizedMessage): bool
+    private function mapCategoryToBackend(string $category): string
     {
-        if (trim($action) !== '' || $intent !== 'unknown_or_ambiguous') {
-            return false;
+        $catLower = strtolower(trim($category));
+        if ($catLower === 'makanan' || $catLower === 'makanan utama') {
+            return 'makanan utama';
+        } elseif ($catLower === 'minuman') {
+            return 'minuman';
+        } elseif ($catLower === 'cemilan') {
+            return 'cemilan';
         }
-
-        if ($this->isShortOrGenericMessage($normalizedMessage)) {
-            return false;
-        }
-
-        if ($this->hasStrongFoodOrderingSignal($normalizedMessage)) {
-            return false;
-        }
-
-        return true;
+        return 'makanan utama';
     }
 
-    private function shouldUseGeminiFallback(string $normalizedMessage): bool
+    private function getRecommendationsForCriteria(array $criteria): array
     {
-        if ($this->isShortOrGenericMessage($normalizedMessage)) {
-            return false;
+        $category = (string) ($criteria['category'] ?? '');
+        $tags = (array) ($criteria['tags'] ?? []);
+        $taste = (array) ($criteria['taste'] ?? []);
+        $portion = (string) ($criteria['portion'] ?? '');
+        $pricePreference = (string) ($criteria['pricePreference'] ?? '');
+        $popularity = (string) ($criteria['popularity'] ?? '');
+        $menuName = (string) ($criteria['menuName'] ?? '');
+        $throatIssues = (bool) ($criteria['throat_issues'] ?? false);
+
+        // Map category to backend category name
+        $mappedCategory = null;
+        if ($category !== '') {
+            $mappedCategory = $this->mapCategoryToBackend($category);
         }
 
-        if ($this->hasStrongFoodOrderingSignal($normalizedMessage)) {
-            return true;
+        // Build query
+        $query = MenuItem::query()->where('stock', '>', 0);
+        if ($mappedCategory !== null) {
+            $query->where('category', $mappedCategory);
         }
 
-        return $this->looksLikeNaturalSentence($normalizedMessage);
-    }
-
-    private function shouldUseGeminiRecommendationEnrichment(string $normalizedMessage, array $entities): bool
-    {
-        if ($this->isShortOrGenericMessage($normalizedMessage)) {
-            return false;
+        // Apply throat issues query filter
+        if ($throatIssues) {
+            $userRequestedSpicy = in_array('pedas', $taste, true) || in_array('pedas', $tags, true);
+            if (!$userRequestedSpicy) {
+                $query->where(function ($q) {
+                    $q->whereNull('spice_level')
+                      ->orWhere('spice_level', '<=', 1);
+                });
+                $query->where(function ($q) {
+                    $q->whereNull('tags')
+                      ->orWhere('tags', '!=', 'pedas');
+                });
+            }
         }
 
-        if (!$this->looksLikeNaturalSentence($normalizedMessage)) {
-            return false;
+        // Price preference
+        if ($pricePreference === 'murah') {
+            $query->where('price', '<=', 25000);
         }
 
-        return $this->hasInsufficientRecommendationSignals($entities);
+        // If menu name is specified
+        if ($menuName !== '') {
+            $query->where('name', 'like', '%' . $menuName . '%');
+        }
+
+        // Fetch candidates
+        $menus = $query->limit(80)->get();
+
+        // Score candidates
+        $scored = $menus->map(function (MenuItem $item) use ($tags, $taste, $portion, $pricePreference, $popularity, $throatIssues) {
+            $score = 0;
+            $itemTags = collect($item->tags ?? [])->map(fn($t) => strtolower(trim((string)$t)))->toArray();
+
+            // Base score for category matching
+            if ($item->category === 'makanan utama') {
+                $score += 1;
+            }
+
+            // Taste scoring
+            foreach ($taste as $t) {
+                if ($t === 'pedas') {
+                    if (($item->spice_level ?? 0) > 0 || in_array('pedas', $itemTags, true)) {
+                        $score += 5;
+                    }
+                }
+                if ($t === 'manis') {
+                    if (($item->sweet_level ?? 0) > 0 || in_array('manis', $itemTags, true)) {
+                        $score += 5;
+                    }
+                }
+                if ($t === 'segar') {
+                    if (($item->fresh_level ?? 0) > 0 || in_array('segar', $itemTags, true) || str_contains(strtolower($item->name), 'es')) {
+                        $score += 5;
+                    }
+                }
+                if ($t === 'gurih') {
+                    if (in_array('gurih', $itemTags, true) || in_array('asin', $itemTags, true)) {
+                        $score += 5;
+                    }
+                }
+            }
+
+            // Portion scoring
+            if ($portion === 'mengenyangkan') {
+                if ($item->category === 'makanan utama' || in_array('mengenyangkan', $itemTags, true)) {
+                    $score += 4;
+                }
+            } elseif ($portion === 'ringan') {
+                if ($item->category === 'cemilan' || in_array('ringan', $itemTags, true)) {
+                    $score += 4;
+                }
+            }
+
+            // Tags scoring
+            foreach ($tags as $tag) {
+                $tagLower = strtolower($tag);
+                if (in_array($tagLower, $itemTags, true)) {
+                    $score += 3;
+                }
+            }
+
+            // Prioritize hangat, berkuah, ringan for throat issues
+            if ($throatIssues) {
+                if (in_array('hangat', $itemTags, true)) {
+                    $score += 5;
+                }
+                if (in_array('berkuah', $itemTags, true)) {
+                    $score += 5;
+                }
+                if (in_array('ringan', $itemTags, true)) {
+                    $score += 3;
+                }
+                if (($item->spice_level ?? 0) > 1 || in_array('pedas', $itemTags, true)) {
+                    $score -= 20; // Double safeguard
+                }
+            }
+
+            // Popularity
+            if ($popularity === 'populer' && in_array('populer', $itemTags, true)) {
+                $score += 3;
+            }
+
+            // Price matching (cheaper is preferred if budget constraint exists)
+            if ($pricePreference === 'murah') {
+                $score += max(0, 5 - (int)($item->price / 5000));
+            }
+
+            return [
+                'item' => $item,
+                'score' => $score
+            ];
+        })->sortByDesc('score')->values();
+
+        // Filter out items with very low score if we had filters
+        $hasFilters = !empty($taste) || !empty($tags) || $portion !== '' || $pricePreference !== '' || $popularity !== '' || $throatIssues;
+        if ($hasFilters) {
+            $minScore = $throatIssues ? 3 : 1;
+            $scored = $scored->filter(fn($row) => $row['score'] >= $minScore);
+        }
+
+        return $scored->pluck('item')->all();
     }
 
     private function shouldReturnCheapClarificationForUnknown(string $normalizedMessage): bool
@@ -277,6 +813,11 @@ class ChatbotService
         $text = trim($normalizedMessage);
         if ($text === '') {
             return true;
+        }
+
+        // Messages with explicit price/budget signals are never generic.
+        if ($this->hasExplicitPriceSignal($text)) {
+            return false;
         }
 
         if ($this->containsAnyPhrase($text, [
@@ -351,7 +892,7 @@ class ChatbotService
     private function cheapRecommendationClarificationResponse(): array
     {
         return [
-            'reply' => 'Kamu mau rekomendasi yang seperti apa? Pilih dulu preferensinya ya.',
+            'reply' => "Kamu mau rekomendasi yang seperti apa? Pilih dulu preferensinya di bawah, atau ketik langsung kriteria menu yang kamu inginkan (misal: 'makanan pedas murah' atau 'minuman segar').",
             'intent' => 'menu_recommendation',
             'data' => ['clarification_required' => true],
             'actions' => [
@@ -379,14 +920,7 @@ class ChatbotService
             return null;
         }
 
-        $geminiService = $this->geminiNluService;
-        if ($geminiService === null) {
-            try {
-                $geminiService = app(GeminiNluService::class);
-            } catch (\Throwable) {
-                $geminiService = null;
-            }
-        }
+        $geminiService = $this->getGeminiService();
 
         if (!is_array($aiPayload)) {
             $aiPayload = $geminiService?->detectIntent($message);
@@ -430,14 +964,7 @@ class ChatbotService
             return $baseEntities;
         }
 
-        $geminiService = $this->geminiNluService;
-        if ($geminiService === null) {
-            try {
-                $geminiService = app(GeminiNluService::class);
-            } catch (\Throwable) {
-                $geminiService = null;
-            }
-        }
+        $geminiService = $this->getGeminiService();
 
         if (!is_array($aiPayload)) {
             $aiPayload = $geminiService?->detectIntent($text);
@@ -521,14 +1048,7 @@ class ChatbotService
         ?array &$aiPayload
     ): array
     {
-        $geminiService = $this->geminiNluService;
-        if ($geminiService === null) {
-            try {
-                $geminiService = app(GeminiNluService::class);
-            } catch (\Throwable) {
-                $geminiService = null;
-            }
-        }
+        $geminiService = $this->getGeminiService();
 
         if (!is_array($aiPayload)) {
             $aiPayload = $geminiService?->detectIntent($message);
@@ -614,7 +1134,18 @@ class ChatbotService
             'cart_decrease_qty' => $this->cartAdjustResponse($user, $entities, false),
             'clear_cart_request' => $this->clearCartResponse($user),
             'order_menu' => $this->orderMenuResponse($user, $entities),
-            'menu_recommendation' => $this->recommendationResponse($entities),
+            'menu_recommendation' => $this->recommendationResponse(array_merge($entities, [
+                'throat_issues' => $this->containsAnyPhrase(strtolower(trim($message)), [
+                    'batuk',
+                    'sakit tenggorokan',
+                    'radang',
+                    'tenggorokan sakit',
+                    'tenggorokan gatal',
+                    'tenggorokan gatel',
+                    'serak',
+                    'panas dalam'
+                ])
+            ])),
             'checkout_request' => $this->checkoutPromptResponse(),
             'cancel_order_request' => $this->cancelPromptResponse($user),
             default => $this->fallbackResponse(),
@@ -896,9 +1427,27 @@ class ChatbotService
         }
 
         if ($matched === null) {
-            if ($items->count() > 1) {
+            if (!$isIncrease || $items->count() > 1) {
+                $contextKey = 'chatbot:context:' . $user->_id;
+                try {
+                    if (Cache::getFacadeApplication() !== null) {
+                        Cache::put($contextKey, [
+                            'lastIntent' => $isIncrease ? 'ADD_TO_CART' : 'REMOVE_FROM_CART',
+                            'pendingAction' => 'CART_ADJUST_SELECTION',
+                            'cart_adjust_operation' => $isIncrease ? 'increase' : 'decrease',
+                            'cart_adjust_delta' => $delta
+                        ], 900);
+                    }
+                } catch (\Throwable $e) {
+                    // safe fallback
+                }
+
+                $replyMsg = $items->count() > 1
+                    ? 'Di keranjang kamu ada lebih dari satu menu. Mau ' . ($isIncrease ? 'tambah' : 'kurangi') . ' yang mana? Balas sesuai nama di ringkasan pesanan.'
+                    : 'Mau hapus menu yang mana?';
+
                 return [
-                    'reply' => 'Di keranjang kamu ada lebih dari satu menu. Mau ' . ($isIncrease ? 'tambah' : 'kurangi') . ' yang mana? Balas sesuai nama di ringkasan pesanan.',
+                    'reply' => $replyMsg,
                     'intent' => $isIncrease ? 'cart_increase_qty' : 'cart_decrease_qty',
                     'data' => [
                         'requires_menu_selection' => true,
@@ -935,6 +1484,16 @@ class ChatbotService
                 ];
             }
 
+            // Forget context key
+            $contextKey = 'chatbot:context:' . $user->_id;
+            try {
+                if (Cache::getFacadeApplication() !== null) {
+                    Cache::forget($contextKey);
+                }
+            } catch (\Throwable $e) {
+                // safe fallback
+            }
+
             return [
                 'reply' => $targetName . ' dihapus dari keranjang.',
                 'intent' => $isIncrease ? 'cart_increase_qty' : 'cart_decrease_qty',
@@ -957,6 +1516,16 @@ class ChatbotService
                 'data' => null,
                 'actions' => [],
             ];
+        }
+
+        // Forget context key
+        $contextKey = 'chatbot:context:' . $user->_id;
+        try {
+            if (Cache::getFacadeApplication() !== null) {
+                Cache::forget($contextKey);
+            }
+        } catch (\Throwable $e) {
+            // safe fallback
         }
 
         return [
@@ -991,6 +1560,16 @@ class ChatbotService
 
         foreach ($menuIds as $menuId) {
             $this->cartService->removeItem((string) $user->_id, (string) $menuId);
+        }
+
+        // Forget context key
+        $contextKey = 'chatbot:context:' . $user->_id;
+        try {
+            if (Cache::getFacadeApplication() !== null) {
+                Cache::forget($contextKey);
+            }
+        } catch (\Throwable $e) {
+            // safe fallback
         }
 
         return [
@@ -1166,6 +1745,21 @@ class ChatbotService
 
         $query = MenuItem::query();
 
+        $throatIssues = (bool) ($entities['throat_issues'] ?? false);
+        if ($throatIssues) {
+            $userRequestedSpicy = ($taste === 'spicy') || in_array('pedas', $requiredTags, true) || in_array('pedas', $preferredTags, true);
+            if (!$userRequestedSpicy) {
+                $query->where(function ($q) {
+                    $q->whereNull('spice_level')
+                      ->orWhere('spice_level', '<=', 1);
+                });
+                $query->where(function ($q) {
+                    $q->whereNull('tags')
+                      ->orWhere('tags', '!=', 'pedas');
+                });
+            }
+        }
+
         if ($priceMode === 'range' && $minPrice !== null && $minPrice > 0 && $maxPrice !== null && $maxPrice > 0) {
             $query->whereBetween('price', [min($minPrice, $maxPrice), max($minPrice, $maxPrice)]);
         } elseif ($priceMode === 'around' && $targetPrice !== null && $targetPrice > 0) {
@@ -1232,7 +1826,7 @@ class ChatbotService
 
         $menus = $query->where('stock', '>', 0)->limit(80)->get();
         $scored = $menus
-            ->map(function (MenuItem $item) use ($lightRequested, $fillingRequested, $taste, $queryKeywords, $tasteIntensity, $preferredTags, $calorieLevel) {
+            ->map(function (MenuItem $item) use ($lightRequested, $fillingRequested, $taste, $queryKeywords, $tasteIntensity, $preferredTags, $calorieLevel, $throatIssues) {
                 $score = 0;
                 $tags = $this->normalizeMenuTags($item);
 
@@ -1304,6 +1898,22 @@ class ChatbotService
                     $score += $this->scoreRecommendationNote((string) $item->recommendation_note, $queryKeywords);
                 }
 
+                // Prioritize hangat, berkuah, ringan for throat issues
+                if ($throatIssues) {
+                    if (in_array('hangat', $tags, true)) {
+                        $score += 5;
+                    }
+                    if (in_array('berkuah', $tags, true)) {
+                        $score += 5;
+                    }
+                    if (in_array('ringan', $tags, true)) {
+                        $score += 3;
+                    }
+                    if (($item->spice_level ?? 0) > 1 || in_array('pedas', $tags, true)) {
+                        $score -= 20; // Double safeguard
+                    }
+                }
+
                 return [
                     'item' => $item,
                     'score' => $score,
@@ -1326,7 +1936,7 @@ class ChatbotService
         $menus = $scoredWithPercent
             ->filter(fn (array $row) => ((int) ($row['score_percent'] ?? 0)) >= 20)
             ->pluck('item')
-            ->take(5);
+            ->take(3);
 
         if ($menus->isEmpty() && $priceMode === 'around' && $targetPrice !== null && $targetPrice > 0) {
             $relaxedMin = max(0, (int) floor($targetPrice * 0.7));
@@ -1335,7 +1945,7 @@ class ChatbotService
             if ($category !== '') {
                 $relaxedQuery->where('category', $category);
             }
-            $relaxedMenus = $relaxedQuery->limit(5)->get();
+            $relaxedMenus = $relaxedQuery->limit(3)->get();
             if ($relaxedMenus->isNotEmpty()) {
                 return [
                     'reply' => 'Aku longgarkan sedikit budgetnya (sekitar ±30%). Ini opsi yang paling mendekati.',
@@ -1359,7 +1969,7 @@ class ChatbotService
             }
             $nearestMenus = $nearestQuery->limit(50)->get()
                 ->sortBy(fn (MenuItem $item) => abs(((float) ($item->price ?? 0)) - $targetPrice))
-                ->take(5)
+                ->take(3)
                 ->values();
 
             if ($nearestMenus->isNotEmpty()) {
@@ -1387,7 +1997,7 @@ class ChatbotService
             if ($category !== '') {
                 $relaxedQuery->where('category', $category);
             }
-            $relaxedMenus = $relaxedQuery->limit(5)->get();
+            $relaxedMenus = $relaxedQuery->limit(3)->get();
             if ($relaxedMenus->isNotEmpty()) {
                 return [
                     'reply' => 'Aku belum menemukan ' . ($category !== '' ? $category : 'menu') . ' di range ' . $this->formatCurrency($minPrice) . '-' . $this->formatCurrency($maxPrice) . ', tapi ini yang paling dekat dari budget kamu.',
@@ -1412,7 +2022,7 @@ class ChatbotService
             }
             $nearestMenus = $nearestQuery->limit(50)->get()
                 ->sortBy(fn (MenuItem $item) => abs(((float) ($item->price ?? 0)) - $midpoint))
-                ->take(5)
+                ->take(3)
                 ->values();
 
             if ($nearestMenus->isNotEmpty()) {
@@ -1581,6 +2191,33 @@ class ChatbotService
                 return true;
             }
         }
+        return false;
+    }
+
+    /**
+     * Check if the message contains explicit price/budget signals.
+     * E.g. "di bawah 20rb", "budget 15000", "harga maksimal 25rb".
+     */
+    private function hasExplicitPriceSignal(string $text): bool
+    {
+        if ($this->containsAnyPhrase($text, [
+            'harga',
+            'budget',
+            'di bawah',
+            'dibawah',
+            'kurang dari',
+            'maksimal',
+            'sekitar',
+            'kisaran',
+        ])) {
+            return true;
+        }
+
+        // Price with suffix: "20rb", "15ribu", "20k"
+        if (preg_match('/\d+\s*(rb|ribu|k)\b/u', $text) === 1) {
+            return true;
+        }
+
         return false;
     }
 
@@ -1864,10 +2501,72 @@ class ChatbotService
             ], $card);
         }, $cards);
 
+        $intent = (string) ($response['intent'] ?? 'unknown_or_ambiguous');
+
+        // Resolve result_mode & limit_applied
+        $resultMode = $response['result_mode'] ?? 'recommendation';
+        $limitApplied = isset($response['limit_applied']) ? (bool) $response['limit_applied'] : true;
+
+        if (!isset($response['result_mode'])) {
+            if ($intent === 'RECOMMEND_MENU' || $intent === 'menu_recommendation') {
+                $recs = $response['recommendations'] ?? ($response['data']['recommendations'] ?? []);
+                $fallbackReason = $response['data']['fallback_reason'] ?? '';
+                if (empty($recs) && $fallbackReason === 'recommendation_no_result') {
+                    $resultMode = 'no_relevant_result';
+                    $limitApplied = false;
+                } else {
+                    $resultMode = 'recommendation';
+                    $limitApplied = true;
+                }
+            } elseif ($intent === 'ASK_CATEGORY') {
+                $limitMode = $response['limit_mode'] ?? ($response['data']['limit_mode'] ?? 'default');
+                if ($limitMode === 'all') {
+                    $resultMode = 'list_all';
+                    $limitApplied = false;
+                } else {
+                    $resultMode = 'recommendation';
+                    $limitApplied = true;
+                }
+            } else {
+                $resultMode = 'recommendation';
+                $limitApplied = true;
+            }
+        }
+
+        // Resolve recommendations
+        $recommendations = $response['recommendations'] ?? [];
+        if (empty($recommendations) && isset($response['data']['recommendations'])) {
+            $recommendations = $response['data']['recommendations'];
+        }
+        if (empty($recommendations) && ($intent === 'RECOMMEND_MENU' || $intent === 'menu_recommendation' || $intent === 'ASK_CATEGORY')) {
+            foreach ($cards as $card) {
+                if (($card['type'] ?? '') === 'menu_card' && isset($card['menu'])) {
+                    $m = $card['menu'];
+                    $recommendations[] = [
+                        'slot' => $intent === 'ASK_CATEGORY' ? 'kategori' : 'rekomendasi',
+                        'menuId' => (string) ($m['menu_id'] ?? ''),
+                        'name' => (string) ($m['menu_name'] ?? ''),
+                        'reason' => (string) ($m['description'] ?? '') ?: 'rekomendasi menu ' . strtolower($m['category'] ?? '')
+                    ];
+                }
+            }
+        }
+
+        if ($resultMode === 'no_relevant_result') {
+            $recommendations = [];
+        }
+
+        // Resolve source_type
+        $sourceType = ($this->currentChannel === 'admin_simulation') ? 'admin_simulation' : 'customer_mobile';
+
         return [
             'response_version' => self::RESPONSE_VERSION,
             'reply' => (string) ($response['reply'] ?? ''),
-            'intent' => (string) ($response['intent'] ?? 'unknown_or_ambiguous'),
+            'intent' => $intent,
+            'recommendations' => array_values($recommendations),
+            'result_mode' => $resultMode,
+            'limit_applied' => $limitApplied,
+            'source_type' => $sourceType,
             'data' => $response['data'] ?? null,
             'actions' => array_values($normalizedActions),
             'cards' => array_values($normalizedCards),
@@ -1882,7 +2581,8 @@ class ChatbotService
         string $aiDecision,
         ?float $aiConfidence,
         string $action,
-        int $latencyMs
+        int $latencyMs,
+        string $channel = 'mobile_chatbot'
     ): void {
         try {
             ChatbotMetric::create([
@@ -1894,7 +2594,7 @@ class ChatbotService
                 'ai_confidence' => $aiConfidence,
                 'action' => $action,
                 'latency_ms' => $latencyMs,
-                'channel' => 'mobile_chatbot',
+                'channel' => $channel,
             ]);
 
             Log::info('chatbot.message.resolved', [
@@ -1947,5 +2647,59 @@ class ChatbotService
     private function formatCurrency(int $value): string
     {
         return 'Rp' . number_format(max(0, $value), 0, ',', '.');
+    }
+
+    private function filterRecommendationsByReply(string $reply, array $recommendations, array $cards): array
+    {
+        if (trim($reply) === '') {
+            return [$recommendations, $cards];
+        }
+
+        $filteredRecs = [];
+        $filteredCards = [];
+        $mentionedMenuIds = [];
+        $lowerReply = strtolower($reply);
+
+        foreach ($recommendations as $rec) {
+            $menuName = $rec['name'] ?? '';
+            if ($menuName !== '') {
+                $lowerName = strtolower($menuName);
+                if (str_contains($lowerReply, $lowerName)) {
+                    $filteredRecs[] = $rec;
+                    if (isset($rec['menuId'])) {
+                        $mentionedMenuIds[] = (string) $rec['menuId'];
+                    }
+                }
+            }
+        }
+
+        if (empty($filteredRecs)) {
+            return [$recommendations, $cards];
+        }
+
+        foreach ($cards as $card) {
+            if ($card['type'] === 'menu_card' && isset($card['menu']['menu_id'])) {
+                if (in_array((string) $card['menu']['menu_id'], $mentionedMenuIds, true)) {
+                    $filteredCards[] = $card;
+                }
+            } else {
+                $filteredCards[] = $card;
+            }
+        }
+
+        return [$filteredRecs, $filteredCards];
+    }
+
+    private function getGeminiService(): ?GeminiNluService
+    {
+        if ($this->geminiNluService !== null) {
+            return $this->geminiNluService;
+        }
+
+        try {
+            return app(GeminiNluService::class);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

@@ -11,6 +11,7 @@ use App\Http\Controllers\Backoffice\Admin\MenuController as BackofficeMenuContro
 use App\Http\Controllers\Backoffice\Admin\OrderController as BackofficeOrderController;
 use App\Http\Controllers\Backoffice\Admin\PaymentController as BackofficePaymentController;
 use App\Http\Controllers\Backoffice\Admin\ChatbotAnalyticsController as BackofficeChatbotAnalyticsController;
+use App\Http\Controllers\Backoffice\Admin\ChatbotSimulationController as BackofficeChatbotSimulationController;
 use App\Http\Controllers\Backoffice\Admin\BookingController as BackofficeBookingController;
 use App\Http\Controllers\Backoffice\Admin\UserController as BackofficeUserController;
 use App\Http\Controllers\Backoffice\Admin\TableController as BackofficeTableController;
@@ -47,6 +48,8 @@ Route::prefix('backoffice')->group(function () {
         Route::patch('/booking/{id}/status', [BackofficeBookingController::class, 'updateStatusPage']);
         Route::get('/pembayaran', [BackofficePaymentController::class, 'indexPage']);
         Route::get('/chatbot-analytics', [BackofficeChatbotAnalyticsController::class, 'indexPage']);
+        Route::get('/chatbot-simulation', [BackofficeChatbotSimulationController::class, 'indexPage']);
+        Route::post('/chatbot-simulation/message', [BackofficeChatbotSimulationController::class, 'message']);
         Route::delete('/pembayaran/{id}', [BackofficePaymentController::class, 'delete']);
         Route::get('/pengguna', [BackofficeUserController::class, 'indexPage']);
         Route::delete('/pengguna/{id}', [BackofficeUserController::class, 'deletePage']);
