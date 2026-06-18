@@ -5,8 +5,9 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use MongoDB\Laravel\Auth\User as Authenticatable;
+use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use PHPOpenSourceSaver\JWTAuth\Contracts\JWTSubject;
 
 class User extends Authenticatable implements JWTSubject
@@ -19,7 +20,14 @@ class User extends Authenticatable implements JWTSubject
      *
      * @var list<string>
      */
-    protected $collection = 'users';
+    protected $table = 'users';
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var list<string>
+     */
+    protected $primaryKey = 'id';
 
     /**
      * The attributes that are mass assignable.
@@ -27,10 +35,11 @@ class User extends Authenticatable implements JWTSubject
      * @var list<string>
      */
     protected $fillable = [
+        'name',
+        'email',
         'username',
         'email',
         'password',
-        'name',
         'no_telp',
         'role',
         'avatar_url',
@@ -65,7 +74,7 @@ class User extends Authenticatable implements JWTSubject
      */
     public function getJWTIdentifier()
     {
-        return (string) $this->getKey();
+        return $this->getKey();
     }
 
     /**
@@ -83,19 +92,24 @@ class User extends Authenticatable implements JWTSubject
      *
      * @return string
      */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class, 'customer_id', 'id');
+    }
+
+    /**
+     * Get the password for the user.
+     *
+     * @return string
+     */
     public function getAuthPassword()
     {
         return $this->password;
     }
 
-    /**
-     * Get the name of the unique identifier for the user.
-     *
-     * @return string
-     */
     public function getAuthIdentifierName()
     {
-        return '_id';
+        return 'id';
     }
 
     /**

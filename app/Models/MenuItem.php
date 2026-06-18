@@ -2,13 +2,13 @@
 
 namespace App\Models;
 
-use MongoDB\Laravel\Eloquent\Model;
+use Illuminate\Database\Eloquent\Model;
 
 class MenuItem extends Model
 {
-    protected $collection = 'menu_item';
+    protected $table = 'menu_items';
 
-    protected $primaryKey = '_id';
+    protected $primaryKey = 'id';
 
     protected $attributes = [
         'stock' => 0,

@@ -63,13 +63,22 @@
                         </div>
                         <p class="text-sm font-semibold text-[var(--philippine-bronze)]">Rp {{ number_format((float) $menu->price, 0, ',', '.') }}</p>
                         <div class="flex items-center gap-2">
+<<<<<<< Updated upstream
                             <a href="/backoffice/daftar_menu?edit={{ urlencode((string) $menu->_id) }}" data-modal-link class="inline-flex items-center rounded-lg bg-[var(--rajah)] hover:brightness-95 text-[var(--philippine-bronze)] text-sm font-bold px-3.5 py-2 transition">Edit Menu</a>
                             <form action="/backoffice/daftar_menu/{{ urlencode((string) $menu->_id) }}" method="POST" class="menu-delete-form" data-menu-name="{{ $menu->name }}">
+=======
+                            <a href="/backoffice/daftar_menu?edit={{ urlencode((string) $menu->id) }}" class="inline-flex items-center rounded-lg bg-[var(--rajah)] hover:brightness-95 text-[var(--philippine-bronze)] text-sm font-bold px-3.5 py-2 transition">Edit Menu</a>
+                            <form action="/backoffice/daftar_menu/{{ urlencode((string) $menu->id) }}" method="POST" class="menu-delete-form" data-menu-name="{{ $menu->name }}">
+>>>>>>> Stashed changes
                                 @csrf
                                 @method('DELETE')
                                 <button type="submit" class="inline-flex items-center rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold px-3.5 py-2 transition">Hapus Menu</button>
                             </form>
+<<<<<<< Updated upstream
                             <a href="/backoffice/daftar_menu?detail={{ urlencode((string) $menu->_id) }}" data-modal-link class="ml-auto inline-flex items-center rounded-xl border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-sm font-bold px-5 py-2.5 transition">Lihat Detail</a>
+=======
+                            <a href="/backoffice/daftar_menu?detail={{ urlencode((string) $menu->id) }}" class="ml-auto inline-flex items-center rounded-xl border border-[#2563EB] bg-white hover:bg-blue-50 text-[#2563EB] text-sm font-bold px-5 py-2.5 transition">See Detail</a>
+>>>>>>> Stashed changes
                         </div>
                     </div>
                 </article>

@@ -64,25 +64,25 @@ class MenuService
 
     public function listPaginated(int $perPage)
     {
-        return MenuItem::orderBy('_id', 'asc')->paginate($perPage);
+        return MenuItem::orderBy('id', 'asc')->paginate($perPage);
     }
 
     public function listAll()
     {
-        return MenuItem::orderBy('_id', 'asc')->get();
+        return MenuItem::orderBy('id', 'asc')->get();
     }
 
     public function searchByName(string $name)
     {
         return MenuItem::where('name', 'like', "%{$name}%")
-            ->orderBy('_id', 'asc')
+            ->orderBy('id', 'asc')
             ->get();
     }
 
     public function filterByCategory(string $category)
     {
         return MenuItem::where('category', $category)
-            ->orderBy('_id', 'asc')
+            ->orderBy('id', 'asc')
             ->get();
     }
 
