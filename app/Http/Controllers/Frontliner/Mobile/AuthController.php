@@ -4,205 +4,210 @@ namespace App\Http\Controllers\Frontliner\Mobile;
 
 use App\Http\Controllers\Controller;
 use App\Domains\Auth\Services\AuthService;
+use App\Models\PasswordResetToken;
+use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
-	public function __construct(private readonly AuthService $authService)
-	{
-	}
+    public function __construct(private readonly AuthService $authService)
+    {
+    }
 
-	public function register(Request $request)
-	{
-		$request->merge([
-			'username' => strtolower(trim((string) $request->input('username'))),
-		]);
+    public function register(Request $request)
+    {
+        $request->merge(['username' => strtolower(trim((string) $request->input('username')))]);
+        $validator = Validator::make($request->all(), [
+            'username' => 'required|string|max:255|unique:users,username',
+            'email'    => 'required|string|email|max:255|unique:users,email',
+            'name'     => 'required|string|max:255',
+            'no_telp'  => 'required|string|max:20',
+            'password' => 'required|string|min:6',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'message' => 'Validasi gagal', 'data' => $validator->errors()], 422);
+        }
+        $user = $this->authService->registerCustomer($validator->validated());
+        return response()->json(['status' => 'success', 'message' => 'Akun berhasil didaftarkan', 'data' => $this->authService->userPayload($user)], 201);
+    }
 
-		$validator = Validator::make($request->all(), [
-			'username' => 'required|string|max:255|unique:users,username',
-			'email'    => 'required|string|email|max:255|unique:users,email',
-			'name'     => 'required|string|max:255',
-			'no_telp'  => 'required|string|max:20',
-			'password' => 'required|string|min:6',
-		]);
+    public function login(Request $request)
+    {
+        $request->merge(['username' => strtolower(trim((string) $request->input('username')))]);
+        $validator = Validator::make($request->all(), [
+            'username' => 'required|string',
+            'password' => 'required|string|min:6',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'message' => 'Validasi gagal', 'data' => $validator->errors()], 422);
+        }
+        $token = $this->authService->attemptLogin($request->only(['username', 'password']));
+        if (!$token) {
+            return response()->json(['status' => 'error', 'message' => 'Username atau password salah'], 401);
+        }
+        return $this->respondWithToken($token);
+    }
 
-		if ($validator->fails()) {
-			return response()->json([
-				'status' => 'error',
-				'message' => 'Validation error',
-				'data' => $validator->errors()
-			], 422);
-		}
+    public function me()
+    {
+        $user = $this->authService->currentUser();
+        return response()->json(['status' => 'success', 'message' => 'Data pengguna saat ini', 'data' => $this->authService->userPayload($user)]);
+    }
 
-		$user = $this->authService->registerCustomer($validator->validated());
+    public function logout()
+    {
+        $this->authService->logout();
+        return response()->json(['status' => 'success', 'message' => 'Berhasil keluar', 'data' => null]);
+    }
 
-		return response()->json([
-			'status' => 'success',
-			'message' => 'Customer registered',
-			'data' => $this->authService->userPayload($user)
-		], 201);
-	}
+    public function refresh()
+    {
+        return $this->respondWithToken($this->authService->refreshToken());
+    }
 
-	public function login(Request $request)
-	{
-		$request->merge([
-			'username' => strtolower(trim((string) $request->input('username'))),
-		]);
+    protected function respondWithToken($token)
+    {
+        $user = $this->authService->currentUser();
+        return response()->json(['status' => 'success', 'message' => 'Login berhasil', 'data' => ['token' => $token, 'user' => $this->authService->userPayload($user)]]);
+    }
 
-		$validator = Validator::make($request->all(), [
-			'username' => 'required|string',
-			'password' => 'required|string|min:6',
-		]);
+    public function updateProfile(Request $request)
+    {
+        $user = $this->authService->currentUser();
+        if (!$user) return response()->json(['status' => 'error', 'message' => 'Tidak terautentikasi'], 401);
+        $request->merge(['username' => strtolower(trim((string) $request->input('username')))]);
+        $validator = Validator::make($request->all(), [
+            'username'   => 'required|string|max:255|unique:users,username,' . $user->id . ',_id',
+            'name'       => 'required|string|max:255',
+            'no_telp'    => 'required|string|max:20',
+            'avatar_url' => 'nullable|string|max:2048',
+        ]);
+        if ($validator->fails()) return response()->json(['status' => 'error', 'message' => 'Validasi gagal', 'data' => $validator->errors()], 422);
+        $validated = $validator->validated();
+        $user->update(['username' => $validated['username'], 'name' => $validated['name'], 'no_telp' => $validated['no_telp']]);
+        if (array_key_exists('avatar_url', $validated)) $user->update(['avatar_url' => $validated['avatar_url']]);
+        return response()->json(['status' => 'success', 'message' => 'Profil berhasil diperbarui', 'data' => $this->authService->userPayload($user)]);
+    }
 
-		if ($validator->fails()) {
-			return response()->json([
-				'status' => 'error',
-				'message' => 'Validation error',
-				'data' => $validator->errors()
-			], 422);
-		}
+    public function changePassword(Request $request)
+    {
+        $user = $this->authService->currentUser();
+        if (!$user) return response()->json(['status' => 'error', 'message' => 'Tidak terautentikasi'], 401);
+        $validator = Validator::make($request->all(), [
+            'current_password'          => 'required|string|min:6',
+            'new_password'              => 'required|string|min:6|different:current_password',
+            'new_password_confirmation' => 'required|string|same:new_password',
+        ]);
+        if ($validator->fails()) return response()->json(['status' => 'error', 'message' => 'Validasi gagal', 'data' => $validator->errors()], 422);
+        if (!Hash::check($request->input('current_password'), $user->password)) {
+            return response()->json(['status' => 'error', 'message' => 'Password saat ini salah.'], 400);
+        }
+        $user->update(['password' => Hash::make($request->input('new_password'))]);
+        return response()->json(['status' => 'success', 'message' => 'Password berhasil diubah.']);
+    }
 
-		$credentials = $request->only(['username', 'password']);
-		$token = $this->authService->attemptLogin($credentials);
+    public function forgotPassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), ['email' => 'required|string|email|max:255']);
+        if ($validator->fails()) return response()->json(['status' => 'error', 'message' => 'Validasi gagal', 'data' => $validator->errors()], 422);
 
-		if (! $token) {
-			return response()->json([
-				'status' => 'error',
-				'message' => 'Invalid username or password'
-			], 401);
-		}
+        $email = strtolower(trim((string) $request->input('email')));
+        $user  = User::where('email', $email)->first();
 
-		return $this->respondWithToken($token);
-	}
+        if (!$user) {
+            return response()->json(['status' => 'success', 'message' => 'Jika email terdaftar, kode OTP akan dikirimkan ke email kamu.']);
+        }
 
-	public function me()
-	{
-		$user = $this->authService->currentUser();
+        PasswordResetToken::where('email', $email)->whereNull('used_at')->delete();
 
-		return response()->json([
-			'status' => 'success',
-			'message' => 'Current user',
-			'data' => $this->authService->userPayload($user)
-		]);
-	}
+        $otp       = (string) random_int(100000, 999999);
+        $expiresAt = now()->addMinutes(15);
 
-	public function logout()
-	{
-		$this->authService->logout();
+        PasswordResetToken::create(['email' => $email, 'token' => $otp, 'expires_at' => $expiresAt]);
 
-		return response()->json([
-			'status' => 'success',
-			'message' => 'Successfully logged out',
-			'data' => null,
-		]);
-	}
+        try {
+            $this->sendOtpViaResend(email: $email, userName: $user->name, otp: $otp, expiredAt: $expiresAt->setTimezone('Asia/Jakarta')->format('d M Y, H.i') . ' WIB');
+        } catch (\Throwable $e) {
+            Log::error('Gagal mengirim email OTP', ['email' => $email, 'error' => $e->getMessage()]);
+            return response()->json(['status' => 'error', 'message' => 'Gagal mengirimkan email. Silakan coba lagi.'], 500);
+        }
 
-	public function refresh()
-	{
-		return $this->respondWithToken($this->authService->refreshToken());
-	}
+        return response()->json(['status' => 'success', 'message' => 'Kode OTP telah dikirimkan ke email kamu. Berlaku selama 15 menit.']);
+    }
 
-	protected function respondWithToken($token)
-	{
-		$user = $this->authService->currentUser();
+    public function verifyOtp(Request $request)
+    {
+        $validator = Validator::make($request->all(), ['email' => 'required|string|email|max:255', 'otp' => 'required|string|size:6']);
+        if ($validator->fails()) return response()->json(['status' => 'error', 'message' => 'Validasi gagal', 'data' => $validator->errors()], 422);
 
-		return response()->json([
-			'status' => 'success',
-			'message' => 'Login successful',
-			'data' => [
-				'token' => $token,
-				'user' => $this->authService->userPayload($user)
-			]
-		]);
-	}
+        $email  = strtolower(trim((string) $request->input('email')));
+        $otp    = trim((string) $request->input('otp'));
+        $record = PasswordResetToken::where('email', $email)->where('token', $otp)->whereNull('used_at')->latest()->first();
 
-	public function updateProfile(Request $request)
-	{
-		$user = $this->authService->currentUser();
-		if (!$user) {
-			return response()->json([
-				'status' => 'error',
-				'message' => 'Unauthorized'
-			], 401);
-		}
+        if (!$record || $record->isExpired()) {
+            return response()->json(['status' => 'error', 'message' => 'Kode OTP tidak valid atau sudah kedaluwarsa.'], 400);
+        }
 
-		$request->merge([
-			'username' => strtolower(trim((string) $request->input('username'))),
-		]);
+        $resetToken = Str::random(64);
+        $record->update(['token' => $resetToken, 'expires_at' => now()->addMinutes(10)]);
 
-		$validator = Validator::make($request->all(), [
-			'username' => 'required|string|max:255|unique:users,username,' . $user->id . ',_id',
-			'name'     => 'required|string|max:255',
-			'no_telp'  => 'required|string|max:20',
-			'avatar_url' => 'nullable|string|max:2048',
-		]);
+        return response()->json(['status' => 'success', 'message' => 'OTP valid. Silakan lanjutkan untuk membuat password baru.', 'data' => ['reset_token' => $resetToken]]);
+    }
 
-		if ($validator->fails()) {
-			return response()->json([
-				'status' => 'error',
-				'message' => 'Validation error',
-				'data' => $validator->errors()
-			], 422);
-		}
+    public function resetPassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email'                 => 'required|string|email|max:255',
+            'reset_token'           => 'required|string',
+            'password'              => 'required|string|min:6',
+            'password_confirmation' => 'required|string|same:password',
+        ]);
+        if ($validator->fails()) return response()->json(['status' => 'error', 'message' => 'Validasi gagal', 'data' => $validator->errors()], 422);
 
-		$validated = $validator->validated();
-		$user->update([
-			'username' => $validated['username'],
-			'name' => $validated['name'],
-			'no_telp' => $validated['no_telp'],
-		]);
+        $email      = strtolower(trim((string) $request->input('email')));
+        $resetToken = trim((string) $request->input('reset_token'));
+        $record     = PasswordResetToken::where('email', $email)->where('token', $resetToken)->whereNull('used_at')->latest()->first();
 
-		if (array_key_exists('avatar_url', $validated)) {
-			$user->update(['avatar_url' => $validated['avatar_url']]);
-		}
+        if (!$record || $record->isExpired()) {
+            return response()->json(['status' => 'error', 'message' => 'Token reset tidak valid atau sudah kedaluwarsa.'], 400);
+        }
 
-		return response()->json([
-			'status' => 'success',
-			'message' => 'Profile updated successfully',
-			'data' => $this->authService->userPayload($user)
-		]);
-	}
+        $user = User::where('email', $email)->first();
+        if (!$user) return response()->json(['status' => 'error', 'message' => 'Pengguna tidak ditemukan.'], 404);
 
-	public function changePassword(Request $request)
-	{
-		$user = $this->authService->currentUser();
-		if (!$user) {
-			return response()->json([
-				'status' => 'error',
-				'message' => 'Unauthorized'
-			], 401);
-		}
+        $user->update(['password' => Hash::make($request->input('password'))]);
+        $record->update(['used_at' => now()]);
 
-		$validator = Validator::make($request->all(), [
-			'current_password' => 'required|string|min:6',
-			'new_password'     => 'required|string|min:6|different:current_password',
-			'new_password_confirmation' => 'required|string|same:new_password',
-		]);
+        return response()->json(['status' => 'success', 'message' => 'Password berhasil direset. Silakan login dengan password baru kamu.']);
+    }
 
-		if ($validator->fails()) {
-			return response()->json([
-				'status' => 'error',
-				'message' => 'Validation error',
-				'data' => $validator->errors()
-			], 422);
-		}
+    private function sendOtpViaResend(string $email, string $userName, string $otp, string $expiredAt): void
+    {
+        $resendApiKey = trim((string) config('services.resend.api_key', ''));
+        if ($resendApiKey === '') throw new \RuntimeException('Resend API key belum dikonfigurasi');
 
-		if (!Hash::check($request->input('current_password'), $user->password)) {
-			return response()->json([
-				'status' => 'error',
-				'message' => 'Password sekarang yang Anda masukkan salah.'
-			], 400);
-		}
+        $fromEmail = trim((string) config('mail.from.address', 'onboarding@resend.dev'));
+        $fromName  = trim((string) config('mail.from.name', 'KedaiKlik'));
 
-		$user->update([
-			'password' => Hash::make($request->input('new_password')),
-		]);
+        $html = view('emails.password-reset', ['userName' => $userName, 'resetToken' => $otp, 'expiredAt' => $expiredAt])->render();
 
-		return response()->json([
-			'status' => 'success',
-			'message' => 'Password berhasil diubah.'
-		]);
-	}
+        $response = Http::withToken($resendApiKey)
+            ->acceptJson()
+            ->timeout(20)
+            ->post('https://api.resend.com/emails', [
+                'from'    => "$fromName <$fromEmail>",
+                'to'      => [$email],
+                'subject' => 'Reset Password - KedaiKlik',
+                'html'    => $html,
+            ]);
+
+        if (!$response->successful()) {
+            throw new \RuntimeException('Resend API gagal: HTTP ' . $response->status() . ' ' . $response->body());
+        }
+    }
 }

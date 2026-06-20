@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -19,6 +19,9 @@ use App\Http\Controllers\Integrations\MidtransWebhookController;
 
 Route::group(['prefix' => 'v1/auth'], function ($router) {
     Route::post('register', [AuthController::class, 'register']);
+    Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
+    Route::post('verify-otp',      [AuthController::class, 'verifyOtp']);
+    Route::post('reset-password',  [AuthController::class, 'resetPassword']);
     Route::post('login', [AuthController::class, 'login']);
     Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:api');
     Route::post('refresh', [AuthController::class, 'refresh'])->middleware('auth:api');
@@ -106,3 +109,4 @@ Route::group(['prefix' => 'v1/payments'], function () {
 Route::group(['prefix' => 'v1/overview', 'middleware' => ['auth:api', 'role:ADMIN']], function () {
     Route::get('/', [AdminOverviewController::class, 'get']);
 });
+

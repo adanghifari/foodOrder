@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 return [
 
@@ -22,7 +22,7 @@ return [
         'key' => env('RESEND_API_KEY'),
     ],
 
-    'sendgrid' => [
+    'resend' => ['api_key' => env('RESEND_API_KEY'),],'sendgrid' => [
         'api_key' => env('SENDGRID_API_KEY'),
     ],
 
@@ -68,3 +68,4 @@ return [
     ],
 
 ];
+
