@@ -26,6 +26,11 @@ Route::group(['prefix' => 'v1/auth'], function ($router) {
     Route::put('update', [AuthController::class, 'updateProfile'])->middleware('auth:api');
     Route::put('change-password', [AuthController::class, 'changePassword'])->middleware('auth:api');
     Route::post('upload-avatar', [AuthController::class, 'uploadAvatar'])->middleware('auth:api');
+    
+    // Forgot Password routes
+    Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
+    Route::post('verify-otp', [AuthController::class, 'verifyOtp']);
+    Route::post('reset-password', [AuthController::class, 'resetPassword']);
 });
 
 Route::group(['prefix' => 'v1/menus'], function ($router) {

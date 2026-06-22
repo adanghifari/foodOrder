@@ -7,6 +7,11 @@ use App\Domains\Auth\Services\AuthService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Http;
+use App\Models\User;
+use App\Models\PasswordResetOtp;
+
 
 class AuthController extends Controller
 {
@@ -432,5 +437,226 @@ class AuthController extends Controller
 		}
 
 		return sha1(implode('&', $parts) . $apiSecret);
+	}
+
+	public function forgotPassword(Request $request)
+	{
+		$validator = Validator::make($request->all(), [
+			'email' => 'required|string|email|max:255',
+		]);
+
+		if ($validator->fails()) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Format email tidak valid.',
+				'data' => $validator->errors()
+			], 422);
+		}
+
+		$email = strtolower(trim((string) $request->input('email')));
+
+		// Cek apakah user dengan email tersebut terdaftar
+		$user = User::where('email', $email)->first();
+		if (!$user) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Email tidak terdaftar.'
+			], 404);
+		}
+
+		// Cek apakah role-nya customer
+		if (strtoupper($user->role ?? '') !== 'CUSTOMER') {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Hanya akun Customer yang dapat mereset password melalui aplikasi mobile.'
+			], 403);
+		}
+
+		// Generate 6 digit OTP acak
+		$otp = (string) rand(100000, 999999);
+
+		// Simpan atau perbarui OTP di DB
+		PasswordResetOtp::updateOrCreate(
+			['email' => $email],
+			[
+				'otp' => $otp,
+				'token' => null, // Reset token sebelumnya
+				'expired_at' => now()->addMinutes(15),
+				'is_verified' => false,
+			]
+		);
+
+		// Kirim email
+		try {
+			$this->sendOtpEmailViaSendgrid($email, $otp, $user->username);
+		} catch (\Exception $e) {
+			\Illuminate\Support\Facades\Log::error('Gagal mengirim email OTP: ' . $e->getMessage());
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Gagal mengirimkan email OTP. Silakan coba beberapa saat lagi.'
+			], 500);
+		}
+
+		return response()->json([
+			'status' => 'success',
+			'message' => 'Kode OTP berhasil dikirim ke email Anda.'
+		]);
+	}
+
+	public function verifyOtp(Request $request)
+	{
+		$validator = Validator::make($request->all(), [
+			'email' => 'required|string|email|max:255',
+			'otp'   => 'required|string|min:6|max:6',
+		]);
+
+		if ($validator->fails()) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Validasi gagal.',
+				'data' => $validator->errors()
+			], 422);
+		}
+
+		$email = strtolower(trim((string) $request->input('email')));
+		$otp = trim((string) $request->input('otp'));
+
+		$resetRecord = PasswordResetOtp::where('email', $email)->first();
+
+		if (!$resetRecord || $resetRecord->otp !== $otp) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Kode OTP salah.'
+			], 400);
+		}
+
+		if (now()->greaterThan($resetRecord->expired_at)) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Kode OTP sudah kedaluwarsa.'
+			], 400);
+		}
+
+		// Generate secure token untuk proses reset
+		$token = Str::random(60);
+
+		$resetRecord->update([
+			'is_verified' => true,
+			'token' => $token,
+			'expired_at' => now()->addMinutes(15), // token berlaku selama 15 menit
+		]);
+
+		return response()->json([
+			'status' => 'success',
+			'message' => 'Kode OTP berhasil diverifikasi.',
+			'data' => [
+				'token' => $token
+			]
+		]);
+	}
+
+	public function resetPassword(Request $request)
+	{
+		$validator = Validator::make($request->all(), [
+			'email'    => 'required|string|email|max:255',
+			'token'    => 'required|string',
+			'password' => 'required|string|min:6|confirmed',
+		]);
+
+		if ($validator->fails()) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Validasi gagal.',
+				'data' => $validator->errors()
+			], 422);
+		}
+
+		$email = strtolower(trim((string) $request->input('email')));
+		$token = $request->input('token');
+
+		$resetRecord = PasswordResetOtp::where('email', $email)->first();
+
+		if (!$resetRecord || !$resetRecord->is_verified || $resetRecord->token !== $token) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Token reset tidak valid atau sesi verifikasi telah kedaluwarsa.'
+			], 400);
+		}
+
+		if (now()->greaterThan($resetRecord->expired_at)) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Sesi reset password telah kedaluwarsa.'
+			], 400);
+		}
+
+		// Update user password
+		$user = User::where('email', $email)->first();
+		if (!$user) {
+			return response()->json([
+				'status' => 'error',
+				'message' => 'User tidak ditemukan.'
+			], 404);
+		}
+
+		$user->update([
+			'password' => Hash::make($request->input('password')),
+		]);
+
+		// Hapus record OTP
+		$resetRecord->delete();
+
+		return response()->json([
+			'status' => 'success',
+			'message' => 'Password Anda berhasil diperbarui.'
+		]);
+	}
+
+	private function sendOtpEmailViaSendgrid(string $email, string $otp, string $username): void
+	{
+		$sendgridApiKey = trim((string) config('services.sendgrid.api_key', ''));
+		if ($sendgridApiKey === '') {
+			throw new \RuntimeException('SendGrid API key is not configured');
+		}
+
+		$fromEmail = trim((string) config('mail.from.address', ''));
+		if ($fromEmail === '') {
+			throw new \RuntimeException('MAIL_FROM_ADDRESS is not configured');
+		}
+
+		$fromName = trim((string) config('mail.from.name', 'KedaiKlik'));
+		$htmlContent = view('emails.forgot-password', [
+			'otp' => $otp,
+			'username' => $username,
+		])->render();
+
+		$payload = [
+			'from' => [
+				'email' => $fromEmail,
+				'name' => $fromName,
+			],
+			'personalizations' => [[
+				'to' => [[
+					'email' => $email,
+				]],
+				'subject' => 'Kode Verifikasi OTP Lupa Password KedaiKlik',
+			]],
+			'content' => [[
+				'type' => 'text/html',
+				'value' => $htmlContent,
+			]],
+		];
+
+		$response = Http::withToken($sendgridApiKey)
+			->acceptJson()
+			->timeout(20)
+			->connectTimeout(8)
+			->post('https://api.sendgrid.com/v3/mail/send', $payload);
+
+		if (!$response->successful()) {
+			throw new \RuntimeException(
+				'SendGrid API failed: HTTP ' . $response->status() . ' ' . $response->body()
+			);
+		}
 	}
 }
