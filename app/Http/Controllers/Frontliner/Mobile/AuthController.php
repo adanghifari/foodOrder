@@ -139,6 +139,7 @@ class AuthController extends Controller
 
 		$validator = Validator::make($request->all(), [
 			'username' => 'required|string|max:255|unique:users,username,' . $user->id . ',_id',
+			'email'    => 'required|string|email|max:255|unique:users,email,' . $user->id . ',_id',
 			'name'     => 'required|string|max:255',
 			'no_telp'  => 'required|string|max:20',
 			'avatar_url' => 'nullable|string|max:2048',
@@ -155,6 +156,7 @@ class AuthController extends Controller
 		$validated = $validator->validated();
 		$user->update([
 			'username' => $validated['username'],
+			'email' => $validated['email'],
 			'name' => $validated['name'],
 			'no_telp' => $validated['no_telp'],
 		]);
