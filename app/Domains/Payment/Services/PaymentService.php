@@ -72,6 +72,13 @@ class PaymentService
 
         $grossAmount = (int) round((float) ($order->total_price ?? 0));
 
+        $items = collect(is_array($order->items) ? $order->items : []);
+        $subtotal = (int) round((float) $items->sum(fn ($item) => (float) ($item['price'] ?? 0)));
+        if ($subtotal > $grossAmount) {
+            $subtotal = $grossAmount;
+        }
+        $serviceFee = max(0, $grossAmount - $subtotal);
+
         if ($grossAmount <= 0) {
             return [
                 'ok' => false,
@@ -115,10 +122,16 @@ class PaymentService
             'item_details' => [
                 [
                     'id' => (string) $order->_id,
-                    'name' => 'Order #' . strtoupper(substr((string) $order->_id, -6)),
-                    'price' => $grossAmount,
+                    'name' => 'Pesanan #' . strtoupper(substr((string) $order->_id, -6)),
+                    'price' => $subtotal,
                     'quantity' => 1,
                 ],
+                ...($serviceFee > 0 ? [[
+                    'id' => (string) $order->_id . '-service-fee',
+                    'name' => 'Biaya Layanan',
+                    'price' => $serviceFee,
+                    'quantity' => 1,
+                ]] : []),
             ],
             'enabled_payments' => ['qris', 'gopay', 'bank_transfer', 'echannel', 'cstore'],
         ];
