@@ -1,3 +1,12 @@
+# Stage 1: Build frontend assets
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# Stage 2: Final PHP application
 FROM php:8.4-cli
 
 # Install system dependencies
@@ -23,6 +32,9 @@ WORKDIR /app
 
 # Copy project files
 COPY . .
+
+# Copy built assets from Stage 1
+COPY --from=frontend-builder /app/public/build ./public/build
 
 # Install dependencies
 RUN composer install --no-dev --optimize-autoloader
