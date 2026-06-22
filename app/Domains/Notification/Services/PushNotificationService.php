@@ -147,23 +147,32 @@ class PushNotificationService
             return $cached;
         }
 
-        if (!is_file($serviceAccountPath) || !is_readable($serviceAccountPath)) {
-            Log::warning('FCM service account file is not readable', [
-                'path' => $serviceAccountPath,
-            ]);
-            return null;
-        }
+        $serviceAccount = null;
+        if (str_starts_with(trim($serviceAccountPath), '{')) {
+            $serviceAccount = json_decode($serviceAccountPath, true);
+            if (!is_array($serviceAccount)) {
+                Log::warning('FCM service account JSON string invalid');
+                return null;
+            }
+        } else {
+            if (!is_file($serviceAccountPath) || !is_readable($serviceAccountPath)) {
+                Log::warning('FCM service account file is not readable', [
+                    'path' => $serviceAccountPath,
+                ]);
+                return null;
+            }
 
-        $raw = @file_get_contents($serviceAccountPath);
-        if ($raw === false || trim($raw) === '') {
-            Log::warning('FCM service account file is empty', ['path' => $serviceAccountPath]);
-            return null;
-        }
+            $raw = @file_get_contents($serviceAccountPath);
+            if ($raw === false || trim($raw) === '') {
+                Log::warning('FCM service account file is empty', ['path' => $serviceAccountPath]);
+                return null;
+            }
 
-        $serviceAccount = json_decode($raw, true);
-        if (!is_array($serviceAccount)) {
-            Log::warning('FCM service account JSON invalid', ['path' => $serviceAccountPath]);
-            return null;
+            $serviceAccount = json_decode($raw, true);
+            if (!is_array($serviceAccount)) {
+                Log::warning('FCM service account JSON invalid', ['path' => $serviceAccountPath]);
+                return null;
+            }
         }
 
         $clientEmail = trim((string) ($serviceAccount['client_email'] ?? ''));
