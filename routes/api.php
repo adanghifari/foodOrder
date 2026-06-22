@@ -77,6 +77,7 @@ Route::group(['prefix' => 'v1/orders', 'middleware' => 'auth:api'], function () 
     Route::group(['middleware' => 'role:CUSTOMER'], function () {
         Route::post('/', [CustomerOrderController::class, 'create']);
         Route::get('/me', [CustomerOrderController::class, 'myOrders']);
+        Route::get('/{orderId}/receipt/pdf', [CustomerOrderController::class, 'downloadReceiptPdf']);
     });
 });
 
