@@ -64,7 +64,7 @@ class OrderController extends Controller
 	public function downloadReceiptPdf(Request $request, string $orderId)
 	{
 		$user = $request->user();
-		$order = \App\Models\Order::where('_id', $orderId)
+		$order = \App\Models\Order::with('customer')->where('_id', $orderId)
 			->where('customer_id', (string) $user->_id)
 			->first();
 
@@ -85,7 +85,7 @@ class OrderController extends Controller
 
 		$orderStatus = strtoupper((string) ($order->status ?? 'CONFIRMED'));
 		$paymentPayload = is_array($order->payment_payload ?? null) ? $order->payment_payload : [];
-		$paymentTypeRaw = trim((string) ($order->payment_type ?? ''));
+		$paymentTypeRaw = trim((string) ($order->payment_type ?? ($paymentPayload['payment_type'] ?? '')));
 		$paymentTypeLabel = match (strtolower($paymentTypeRaw)) {
 			'bank_transfer' => 'Bank Transfer',
 			'echannel' => 'Mandiri Bill',
@@ -94,6 +94,15 @@ class OrderController extends Controller
 			'qris' => 'QRIS',
 			default => $paymentTypeRaw !== '' ? ucwords(str_replace('_', ' ', $paymentTypeRaw)) : '-',
 		};
+
+		$customerName = trim((string) ($order->customer_name ?? ($order->customer?->name ?? $user->name ?? '-')));
+		if ($customerName === '') {
+			$customerName = '-';
+		}
+		$customerEmail = trim((string) ($order->customer_email ?? ($order->customer?->email ?? $order->customer?->username ?? $user->email ?? $user->username ?? '-')));
+		if ($customerEmail === '') {
+			$customerEmail = '-';
+		}
 
 		$vaNumber = '-';
 		if (!empty($paymentPayload['va_numbers']) && is_array($paymentPayload['va_numbers'])) {
@@ -157,6 +166,8 @@ class OrderController extends Controller
 			'extraCharge' => $extraCharge,
 			'total' => $total,
 			'displayOrderId' => $displayOrderId,
+			'customerName' => $customerName,
+			'customerEmail' => $customerEmail,
 			'paymentTypeLabel' => $paymentTypeLabel,
 			'vaNumber' => $vaNumber,
 			'paymentLabel' => $paymentLabel,
