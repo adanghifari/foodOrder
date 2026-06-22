@@ -23,11 +23,23 @@ class AuthService
 
     public function attemptLogin(array $credentials): ?string
     {
-        if (isset($credentials['username'])) {
-            $credentials['username'] = strtolower(trim((string) $credentials['username']));
+        $loginInput = strtolower(trim((string) ($credentials['username'] ?? '')));
+        $password = $credentials['password'] ?? '';
+
+        // Jika input berupa email, gunakan email sebagai kunci pencarian
+        if (filter_var($loginInput, FILTER_VALIDATE_EMAIL)) {
+            $authCredentials = [
+                'email' => $loginInput,
+                'password' => $password,
+            ];
+        } else {
+            $authCredentials = [
+                'username' => $loginInput,
+                'password' => $password,
+            ];
         }
 
-        $token = auth('api')->attempt($credentials);
+        $token = auth('api')->attempt($authCredentials);
 
         return $token ?: null;
     }
@@ -49,6 +61,10 @@ class AuthService
 
     public function userPayload($user): array
     {
+        $avatarUrl = $user->avatar_url;
+        if ($avatarUrl && !str_starts_with($avatarUrl, 'http://') && !str_starts_with($avatarUrl, 'https://')) {
+            $avatarUrl = url($avatarUrl);
+        }
         return [
             'id' => $user->_id,
             'username' => $user->username,
@@ -56,7 +72,7 @@ class AuthService
             'name' => $user->name,
             'no_telp' => $user->no_telp,
             'role' => $user->role,
-            'avatar_url' => $user->avatar_url,
+            'avatar_url' => $avatarUrl,
         ];
     }
 }

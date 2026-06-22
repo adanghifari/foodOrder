@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Cache;
 
 class CartService
 {
+    private const SERVICE_FEE = 5000;
+
     public function __construct(
         private readonly TableService $tableService,
         private readonly OrderService $orderService,
@@ -306,6 +308,9 @@ class CartService
             }
         }
 
+        $serviceFee = self::SERVICE_FEE;
+        $totalPrice += $serviceFee;
+
         if (($orderType === 'dine_in' || $orderType === 'booking_dine_in') && $tableNumber) {
             $lock = Cache::lock('checkout:table:' . (int) $tableNumber, 10);
             $lockAcquired = $lock->get();
@@ -403,6 +408,7 @@ class CartService
                 'bookingStartAt' => $order->booking_start_at,
                 'durationHours' => $order->duration_hours,
                 'items' => $itemsResponse,
+                'serviceFee' => $serviceFee,
                 'paymentStatus' => $order->payment_status,
                 'queueNumber' => $order->queue_number,
                 'status' => $order->status,

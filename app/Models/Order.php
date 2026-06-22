@@ -36,6 +36,7 @@ class Order extends Model
         'queue_number',
         'status',
         'total_price',
+        'service_fee',
         'extra_charge',
         'items', // Array of embedded items
     ];

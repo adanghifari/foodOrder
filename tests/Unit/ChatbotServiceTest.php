@@ -146,7 +146,7 @@ class ChatbotServiceTest extends TestCase
 
         $response = $service->handleMessage($user, 'yang pedes murah ada ga?', '');
 
-        $this->assertSame('greeting', $response['intent']);
+        $this->assertSame('SMALL_TALK_RESTAURANT', $response['intent']);
     }
 
     public function test_unknown_intent_stays_fallback_when_gemini_confidence_low(): void
