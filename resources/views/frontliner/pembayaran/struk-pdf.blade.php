@@ -66,8 +66,8 @@
             <div class="card">
                 <table class="row">
                     <tr><td class="label">Order ID</td><td class="value">{{ $displayOrderId }}</td></tr>
-                    <tr><td class="label">Nama Pemesan</td><td class="value">{{ (string) ($order->customer_name ?? '-') !== '' ? (string) ($order->customer_name ?? '-') : '-' }}</td></tr>
-                    <tr><td class="label">Email Pemesan</td><td class="value">{{ (string) ($order->customer_email ?? '-') !== '' ? (string) ($order->customer_email ?? '-') : '-' }}</td></tr>
+                    <tr><td class="label">Nama Pemesan</td><td class="value">{{ $customerName ?? ((string) ($order->customer_name ?? '-') !== '' ? (string) ($order->customer_name ?? '-') : '-') }}</td></tr>
+                    <tr><td class="label">Email Pemesan</td><td class="value">{{ $customerEmail ?? ((string) ($order->customer_email ?? '-') !== '' ? (string) ($order->customer_email ?? '-') : '-') }}</td></tr>
                     <tr><td class="label">Midtrans ID</td><td class="value">{{ $order->midtrans_order_id ?? '-' }}</td></tr>
                     <tr><td class="label">Meja</td><td class="value">{{ (int) ($order->table_number ?? 0) }}</td></tr>
                     <tr><td class="label">Waktu Bayar</td><td class="value">{{ $paidAtLabel }}</td></tr>

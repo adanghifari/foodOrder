@@ -158,6 +158,8 @@ class PaymentController extends Controller
             'payment_status' => 'PENDING',
             'table_cleared_at' => null,
             'queue_number' => $queueNumber,
+            'service_fee' => $serviceFee,
+            'extra_charge' => 0,
             'total_price' => $totalPrice,
             'items' => $embeddedItems,
         ]);
