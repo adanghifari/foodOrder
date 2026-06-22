@@ -35,6 +35,9 @@ COPY . .
 
 # Copy built assets from Stage 1
 COPY --from=frontend-builder /app/public/build ./public/build
+# Create required Laravel storage directories and set permissions
+RUN mkdir -p storage/logs storage/framework/cache storage/framework/sessions storage/framework/views
+RUN chmod -R 775 storage bootstrap/cache
 
 # Install dependencies
 RUN composer install --no-dev --optimize-autoloader
