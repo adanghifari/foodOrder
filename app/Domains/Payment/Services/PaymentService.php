@@ -144,6 +144,14 @@ class PaymentService
             ];
         }
 
+        if ($callbackUrl !== '') {
+            if (!isset($payload['callbacks'])) {
+                $payload['callbacks'] = [];
+            }
+            $payload['callbacks']['notification_url'] = $callbackUrl;
+        }
+
+
         $snapUrl = $isProduction
             ? 'https://app.midtrans.com/snap/v1/transactions'
             : 'https://app.sandbox.midtrans.com/snap/v1/transactions';
