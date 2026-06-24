@@ -170,6 +170,31 @@ Route::get('/debug-midtrans', function () {
     ]);
 });
 
+Route::get('/debug-midtrans-connect', function () {
+    $serverKey = (string) config('services.midtrans.server_key');
+    $statusUrl = 'https://api.sandbox.midtrans.com/v2/ORDER-dummy-test-12345/status';
+
+    try {
+        $response = Illuminate\Support\Facades\Http::withBasicAuth($serverKey, '')
+            ->acceptJson()
+            ->get($statusUrl);
+
+        return response()->json([
+            'ok' => true,
+            'http_status' => $response->status(),
+            'body' => $response->json() ?: ['raw' => $response->body()],
+        ]);
+    } catch (\Throwable $e) {
+        return response()->json([
+            'ok' => false,
+            'error_class' => get_class($e),
+            'message' => $e->getMessage(),
+            'trace' => substr($e->getTraceAsString(), 0, 500),
+        ], 500);
+    }
+});
+
+
 
 
 # buat debugging ngecek tableId di session pake dibawah ini ya ges, 
