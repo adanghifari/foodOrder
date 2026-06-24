@@ -137,6 +137,40 @@ Route::get('/test-mail-debug', function (Request $request) {
     ];
 });
 
+Route::get('/debug-midtrans', function () {
+    $serverKey = (string) config('services.midtrans.server_key');
+    $clientKey = (string) config('services.midtrans.client_key');
+    $merchantId = (string) config('services.midtrans.merchant_id');
+    $callbackUrl = (string) config('services.midtrans.callback_url');
+    $isProd = config('services.midtrans.is_production');
+
+    return response()->json([
+        'server_key' => [
+            'configured' => $serverKey !== '',
+            'length' => strlen($serverKey),
+            'prefix' => substr($serverKey, 0, 11),
+            'suffix' => substr($serverKey, -4),
+        ],
+        'client_key' => [
+            'configured' => $clientKey !== '',
+            'length' => strlen($clientKey),
+            'prefix' => substr($clientKey, 0, 11),
+            'suffix' => substr($clientKey, -4),
+        ],
+        'merchant_id' => [
+            'configured' => $merchantId !== '',
+            'value' => $merchantId,
+        ],
+        'callback_url' => [
+            'configured' => $callbackUrl !== '',
+            'value' => $callbackUrl,
+        ],
+        'is_production' => $isProd,
+        'app_url' => config('app.url'),
+    ]);
+});
+
+
 
 # buat debugging ngecek tableId di session pake dibawah ini ya ges, 
 // Route::get('/debug/table-session', function (Request $request) {
