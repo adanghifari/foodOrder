@@ -15,6 +15,11 @@ RUN apt-get update && apt-get install -y \
 RUN docker-php-ext-install zip
 RUN pecl install mongodb && docker-php-ext-enable mongodb
 
+# Increase PHP execution limits so Midtrans API calls don't cause 502
+RUN echo "max_execution_time=120" >> /usr/local/etc/php/conf.d/custom.ini \
+ && echo "default_socket_timeout=60" >> /usr/local/etc/php/conf.d/custom.ini \
+ && echo "memory_limit=256M" >> /usr/local/etc/php/conf.d/custom.ini
+
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
