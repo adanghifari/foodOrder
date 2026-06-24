@@ -293,4 +293,47 @@ class ChatbotIntegrationTest extends TestCase
         $recNames = collect($response['recommendations'])->pluck('name')->toArray();
         $this->assertCount(5, $recNames);
     }
+
+    public function test_hot_weather_context_recommends_cold_refreshing_drinks(): void
+    {
+        // Mock GeminiNluService
+        $mockGemini = $this->createMock(\App\Domains\Chatbot\Services\GeminiNluService::class);
+        $mockGemini->method('detectIntent')
+            ->willReturn([
+                'intent' => 'RECOMMEND_MENU',
+                'isRestaurantContext' => true,
+                'confidence' => 0.9,
+                'criteria' => [
+                    'category' => 'Minuman',
+                    'taste' => ['segar'],
+                    'tags' => ['segar', 'dingin', 'cocok_cuaca_panas']
+                ]
+            ]);
+        
+        $this->app->instance(\App\Domains\Chatbot\Services\GeminiNluService::class, $mockGemini);
+        $chatbotService = $this->app->make(ChatbotService::class);
+
+        // Send a recommendation query about cuaca panas
+        $response = $chatbotService->handleMessage($this->user, 'cuaca lagi panas enaknya minum apa');
+
+        $this->assertSame('RECOMMEND_MENU', $response['intent']);
+        $recNames = collect($response['recommendations'])->pluck('name')->toArray();
+        
+        // Assert Es Jeruk (fresh/cold drink) is recommended
+        $this->assertContains('Es Jeruk', $recNames);
+    }
+
+    public function test_hot_weather_context_fallback_rules_match_es_jeruk(): void
+    {
+        // Test rule-based parsing logic for hot weather when Gemini is not called
+        // "cuaca lagi panas" should normalize "panas" to "segar" because of the weather context regex
+        $service = new \App\Domains\Chatbot\Services\ChatbotIntentService();
+        $result = $service->detect('cuaca lagi panas enaknya minum apa');
+
+        $this->assertSame('RECOMMEND_MENU', $result['intent']);
+        // Because of our regex, it maps 'panas' to 'segar', extracting category Minuman and taste segar
+        $this->assertSame('Minuman', $result['criteria']['category']);
+        $this->assertContains('segar', $result['criteria']['taste']);
+    }
 }
+
