@@ -89,6 +89,25 @@ class PaymentController extends Controller
         ], (int) ($result['status'] ?? 500));
     }
 
+    public function checkStatus(Request $request, string $orderId)
+    {
+        $order = $this->findCustomerOrder($request, $orderId);
+        if (!$order) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Order tidak ditemukan.',
+            ], 404);
+        }
+
+        $result = $this->paymentService->syncStatusByOrderId((string) $order->_id);
+
+        return response()->json([
+            'status'  => $result['ok'] ? 'success' : 'error',
+            'message' => $result['message'],
+            'data'    => $result['data'] ?? null,
+        ], (int) ($result['status'] ?? 500));
+    }
+
     public function changeMethod(Request $request, string $orderId)
     {
         $order = $this->findCustomerOrder($request, $orderId);
