@@ -7,6 +7,8 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -29,7 +31,7 @@ class AuthController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Validation error',
+				'message' => 'Validation error',
                 'data' => $validator->errors(),
             ], 422);
         }
@@ -37,9 +39,25 @@ class AuthController extends Controller
         $username = strtolower(trim((string) $request->input('username')));
         $password = (string) $request->input('password');
 
+        // Rate Limiting Key: username + IP address
+        $throttleKey = Str::transliterate($username . '|' . $request->ip());
+
+        // Proteksi lockout: batasi maksimal 5 kali percobaan salah
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            $seconds = RateLimiter::availableIn($throttleKey);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Terlalu banyak percobaan login yang gagal. Silakan coba lagi dalam ' . $seconds . ' detik.',
+            ], 429);
+        }
+
         $user = User::where('username', $username)->first();
 
         if (!$user || !Hash::check($password, (string) $user->password)) {
+            // Catat kegagalan (kunci selama 60 detik jika melebihi limit)
+            RateLimiter::hit($throttleKey, 60);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Username atau password tidak valid.',
@@ -52,6 +70,9 @@ class AuthController extends Controller
                 'message' => 'Akun ini bukan akun admin backoffice.',
             ], 403);
         }
+
+        // Bersihkan limiter jika berhasil
+        RateLimiter::clear($throttleKey);
 
         $request->session()->regenerate();
         $request->session()->put('backoffice_is_admin', true);
