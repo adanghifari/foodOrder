@@ -91,6 +91,8 @@ Route::post('/kedai/pembayaran/create', [FrontlinerPaymentController::class, 'cr
     ->middleware('throttle:20,1');
 Route::get('/kedai/pembayaran/{id}/pilih-metode', [FrontlinerPaymentController::class, 'resumePendingPayment'])
     ->middleware('throttle:20,1');
+Route::post('/kedai/pembayaran/{id}/ganti-metode', [FrontlinerPaymentController::class, 'forceChangePaymentMethod'])
+    ->middleware('throttle:10,1');
 Route::post('/kedai/pembayaran/{id}/batalkan', [FrontlinerPaymentController::class, 'cancelPendingPayment'])
     ->middleware('throttle:20,1');
 Route::get('/kedai/pembayaran/selesai', [FrontlinerPaymentController::class, 'finishRedirect'])

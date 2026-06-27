@@ -260,6 +260,58 @@ class PaymentController extends Controller
             return redirect('/kedai/pembayaran/struk');
         }
 
+        // Smart reuse: jika snap token Midtrans masih valid (< 24 jam), redirect langsung
+        // tanpa perlu cancel + buat transaksi baru. Ini menjaga payment method yang sudah
+        // dipilih user tetap ada di halaman Midtrans.
+        $existingPaymentUrl      = trim((string) ($order->payment_url ?? ''));
+        $existingMidtransOrderId = trim((string) ($order->midtrans_order_id ?? ''));
+
+        if ($existingPaymentUrl !== '' && $existingMidtransOrderId !== '') {
+            $tokenTimestamp = $this->extractTimestampFromMidtransOrderId($existingMidtransOrderId);
+            $isTokenValid   = $tokenTimestamp > 0 && (now()->timestamp - $tokenTimestamp) < 86400;
+
+            if ($isTokenValid) {
+                // Token masih valid — redirect langsung, tidak ada HTTP call ke Midtrans.
+                return redirect()->away($existingPaymentUrl);
+            }
+        }
+
+        // Token sudah expired atau belum ada transaksi — buat transaksi baru.
+        if ($existingMidtransOrderId !== '') {
+            $this->paymentService->cancelTransaction($existingMidtransOrderId, false);
+        }
+
+        $finishRedirectUrl = rtrim($request->getSchemeAndHttpHost(), '/') . '/kedai/pembayaran/selesai';
+        $result = $this->paymentService->createTransaction((string) $order->_id, [
+            'name'  => (string) ($order->customer_name ?? 'Customer'),
+            'email' => (string) ($order->customer_email ?? 'customer@example.com'),
+            'phone' => null,
+        ], $finishRedirectUrl, true);
+
+        if (!($result['ok'] ?? false) || empty($result['data']['redirect_url'])) {
+            return redirect('/kedai/pembayaran/struk')->with('error', 'Link pembayaran belum bisa dibuka. Coba lagi sebentar.');
+        }
+
+        return redirect()->away((string) $result['data']['redirect_url']);
+    }
+
+    /**
+     * Paksa ganti metode pembayaran — selalu cancel transaksi lama dan buat baru.
+     * Dipanggil hanya saat user eksplisit ingin mengganti metode yang sudah pernah dipilih.
+     */
+    public function forceChangePaymentMethod(Request $request, string $id)
+    {
+        $order = Order::find($id);
+
+        if (! $order || ! $this->canAccessReceiptOrder($request, $order)) {
+            return redirect('/kedai/pembayaran/struk')->with('error', 'Order pembayaran tidak ditemukan untuk sesi ini.');
+        }
+
+        $paymentStatus = strtoupper((string) ($order->payment_status ?? 'PENDING'));
+        if ($paymentStatus !== 'PENDING') {
+            return redirect('/kedai/pembayaran/struk')->with('error', 'Pembayaran ini sudah tidak bisa diubah.');
+        }
+
         $existingMidtransOrderId = trim((string) ($order->midtrans_order_id ?? ''));
         if ($existingMidtransOrderId !== '') {
             $this->paymentService->cancelTransaction($existingMidtransOrderId, false);
@@ -267,13 +319,13 @@ class PaymentController extends Controller
 
         $finishRedirectUrl = rtrim($request->getSchemeAndHttpHost(), '/') . '/kedai/pembayaran/selesai';
         $result = $this->paymentService->createTransaction((string) $order->_id, [
-            'name' => (string) ($order->customer_name ?? 'Customer'),
+            'name'  => (string) ($order->customer_name ?? 'Customer'),
             'email' => (string) ($order->customer_email ?? 'customer@example.com'),
             'phone' => null,
         ], $finishRedirectUrl, true);
 
         if (!($result['ok'] ?? false) || empty($result['data']['redirect_url'])) {
-            return redirect('/kedai/pembayaran/struk')->with('error', 'Link pembayaran belum bisa dibuka. Coba lagi sebentar.');
+            return redirect('/kedai/pembayaran/struk')->with('error', 'Gagal membuat transaksi baru. Coba lagi sebentar.');
         }
 
         return redirect()->away((string) $result['data']['redirect_url']);
@@ -466,6 +518,20 @@ class PaymentController extends Controller
             'invoiceIndex' => 0,
             'allowDownloadPdf' => false,
         ]);
+    }
+
+    /**
+     * Ekstrak unix timestamp dari midtrans_order_id dengan format ORDER-{orderId}-{timestamp}.
+     * Digunakan untuk mengecek apakah snap token Midtrans (berlaku 24 jam) masih valid.
+     */
+    private function extractTimestampFromMidtransOrderId(string $midtransOrderId): int
+    {
+        $parts = explode('-', $midtransOrderId);
+        if (count($parts) < 3) {
+            return 0;
+        }
+        $last = (int) end($parts);
+        return $last > 0 ? $last : 0;
     }
 
     private function canAccessReceiptOrder(Request $request, Order $order): bool
