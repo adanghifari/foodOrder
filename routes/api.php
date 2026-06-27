@@ -106,6 +106,8 @@ Route::group(['prefix' => 'v1/payments'], function () {
         ->middleware(['auth:api', 'role:CUSTOMER', 'throttle:30,1']);
     Route::post('/cancel/{orderId}', [MobilePaymentController::class, 'cancelPending'])
         ->middleware(['auth:api', 'role:CUSTOMER', 'throttle:30,1']);
+    Route::post('/check-status/{orderId}', [MobilePaymentController::class, 'checkStatus'])
+        ->middleware(['auth:api', 'role:CUSTOMER', 'throttle:60,1']);
     Route::get('/webhook', [MidtransWebhookController::class, 'landing'])->middleware('throttle:20,1');
     Route::post('/webhook', [MidtransWebhookController::class, 'handle'])->middleware('throttle:120,1');
 });

@@ -144,11 +144,22 @@ class PaymentService
             ];
         }
 
+        if ($callbackUrl !== '') {
+            if (!isset($payload['callbacks'])) {
+                $payload['callbacks'] = [];
+            }
+            $payload['callbacks']['notification_url'] = $callbackUrl;
+        }
+
+
         $snapUrl = $isProduction
             ? 'https://app.midtrans.com/snap/v1/transactions'
             : 'https://app.sandbox.midtrans.com/snap/v1/transactions';
 
-        $request = Http::withBasicAuth($serverKey, '')->acceptJson();
+        $request = Http::withBasicAuth($serverKey, '')
+            ->timeout(30)
+            ->connectTimeout(10)
+            ->acceptJson();
 
         if ($callbackUrl !== '') {
             $request = $request->withHeaders([
@@ -284,6 +295,8 @@ class PaymentService
             . '/v2/' . urlencode($midtransOrderId) . '/status';
 
         $response = Http::withBasicAuth($serverKey, '')
+            ->timeout(20)
+            ->connectTimeout(8)
             ->acceptJson()
             ->get($statusUrl);
 
@@ -341,6 +354,46 @@ class PaymentService
                 'payment_status' => $paymentStatus,
             ],
         ];
+    }
+
+    /**
+     * Sync payment status by local Order ID.
+     * Called from mobile after returning from Midtrans payment page.
+     */
+    public function syncStatusByOrderId(string $orderId): array
+    {
+        $orderId = trim($orderId);
+        if ($orderId === '') {
+            return [
+                'ok'      => false,
+                'status'  => 422,
+                'message' => 'order_id is required',
+            ];
+        }
+
+        $order = Order::find($orderId);
+        if (!$order) {
+            return [
+                'ok'      => false,
+                'status'  => 404,
+                'message' => 'Order not found',
+            ];
+        }
+
+        $midtransOrderId = trim((string) ($order->midtrans_order_id ?? ''));
+        if ($midtransOrderId === '') {
+            return [
+                'ok'      => false,
+                'status'  => 422,
+                'message' => 'Order belum memiliki transaksi Midtrans',
+                'data'    => [
+                    'order_id'        => $orderId,
+                    'payment_status'  => strtoupper((string) ($order->payment_status ?? 'PENDING')),
+                ],
+            ];
+        }
+
+        return $this->syncTransactionStatus($midtransOrderId);
     }
 
     public function cancelTransaction(string $midtransOrderId, bool $syncLocal = true): array

@@ -188,6 +188,13 @@ class ChatbotIntentService
                 || $criteria['mood'] !== null;
             if (!$hasSignals) {
                 $confidence = 0.5; // Trigger Gemini NLU fallback
+            } else {
+                // Loosen fallback: if the query is a natural sentence or contains weather/ambiguous words, trigger Gemini
+                $weatherOrAmbiguous = $this->containsAny($normalizedText, ['cuaca', 'panas', 'hujan', 'dingin', 'segar', 'seger', 'anget', 'hangat']);
+                $wordCount = str_word_count($normalizedText);
+                if ($weatherOrAmbiguous || $wordCount > 3) {
+                    $confidence = 0.7; // Trigger Gemini NLU fallback (< 0.8 threshold)
+                }
             }
         }
 
@@ -213,6 +220,17 @@ class ChatbotIntentService
         // Normalize multiple spaces
         $text = preg_replace('/\s+/', ' ', $text);
         $text = trim($text);
+
+        // Prioritize weather-related panas detection
+        if (preg_match('/\b(cuaca|hari|udara|suhu|lingkungan|luar)\b.*\bpanas\b/u', $text) === 1 || 
+            preg_match('/\bpanas\b.*\b(cuaca|hari|udara|suhu|lingkungan|luar)\b/u', $text) === 1 ||
+            str_contains($text, 'lagi panas') ||
+            str_contains($text, 'panas gini') ||
+            str_contains($text, 'panas banget') ||
+            str_contains($text, 'panas sekali')) {
+            // Replace weather-related 'panas' with 'segar' to avoid mapping to 'hangat'
+            $text = str_replace('panas', 'segar', $text);
+        }
         
         // Pemetaan sinonim & slang (asin tidak dipetakan ke gurih agar kompatibel dengan tag asin)
         $slangMap = [

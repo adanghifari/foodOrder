@@ -352,6 +352,7 @@ Aturan:
 - Jika customer berkata 'yang aman', 'yang enak', 'rekomendasiin', atau 'bingung', arahkan ke popularity: "populer" atau mood: "bingung".
 - Jika customer berkata 'bokek', 'hemat', 'ga mahal', arahkan ke pricePreference: "murah".
 - Jika customer berkata 'seger', 'adem', 'dingin', arahkan ke category: "Minuman" atau taste: ["segar"].
+- Jika customer berkata 'cuaca panas', 'lagi panas', 'panas banget', atau 'panas gini', arahkan ke category: "Minuman" atau taste: ["segar"] atau tags: ["segar", "dingin", "cocok_cuaca_panas"].
 - Jangan mengarang menu di luar daftar menu aktif yang diberikan.
 - Jika customer menyebutkan menu yang ada di daftar menu aktif (atau sangat mirip/typo/singkatan), isi criteria.menuName dengan nama menu persis yang ada di daftar menu aktif (misal customer bilang "gepreknya ada?" maka menuName diset "Nasi Ayam Geprek Joss").
 - Jangan mengarang tags di luar daftar tags yang tersedia.

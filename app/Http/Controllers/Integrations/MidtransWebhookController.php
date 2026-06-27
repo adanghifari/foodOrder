@@ -14,7 +14,18 @@ class MidtransWebhookController extends Controller
 
     public function handle(Request $request)
     {
-        $result = $this->paymentService->processWebhook($request->all());
+        $payload = $request->all();
+        $result = $this->paymentService->processWebhook($payload);
+
+        try {
+            \Illuminate\Support\Facades\DB::collection('webhook_debug_log')->insert([
+                'created_at' => now(),
+                'payload' => $payload,
+                'result' => $result,
+            ]);
+        } catch (\Throwable $e) {
+            // safe fallback
+        }
 
         return response()->json([
             'status' => $result['ok'] ? 'success' : 'error',
