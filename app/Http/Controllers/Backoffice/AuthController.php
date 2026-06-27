@@ -42,9 +42,11 @@ class AuthController extends Controller
         // Rate Limiting Key: username + IP address
         $throttleKey = Str::transliterate($username . '|' . $request->ip());
 
+        $limiter = app(\App\Domains\Auth\Services\LoginRateLimiter::class);
+
         // Proteksi lockout: batasi maksimal 5 kali percobaan salah
-        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
-            $seconds = RateLimiter::availableIn($throttleKey);
+        if ($limiter->tooManyAttempts($throttleKey, 5)) {
+            $seconds = $limiter->availableIn($throttleKey);
 
             return response()->json([
                 'status' => 'error',
@@ -56,7 +58,7 @@ class AuthController extends Controller
 
         if (!$user || !Hash::check($password, (string) $user->password)) {
             // Catat kegagalan (kunci selama 60 detik jika melebihi limit)
-            RateLimiter::hit($throttleKey, 60);
+            $limiter->hit($throttleKey, 60);
 
             return response()->json([
                 'status' => 'error',
@@ -72,7 +74,7 @@ class AuthController extends Controller
         }
 
         // Bersihkan limiter jika berhasil
-        RateLimiter::clear($throttleKey);
+        $limiter->clear($throttleKey);
 
         $request->session()->regenerate();
         $request->session()->put('backoffice_is_admin', true);
