@@ -73,16 +73,11 @@ class AuthController extends Controller
 		// Rate Limiting Key: username + IP address
 		$throttleKey = Str::transliterate(strtolower($request->input('username')) . '|' . $request->ip());
 
-		\Illuminate\Support\Facades\Log::info('RateLimiter Debug:', [
-			'key' => $throttleKey,
-			'attempts' => RateLimiter::attempts($throttleKey),
-			'too_many' => RateLimiter::tooManyAttempts($throttleKey, 5),
-			'cache_driver' => config('cache.default'),
-		]);
+		$limiter = app(\App\Domains\Auth\Services\LoginRateLimiter::class);
 
 		// Proteksi lockout: batasi maksimal 5 kali percobaan salah
-		if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
-			$seconds = RateLimiter::availableIn($throttleKey);
+		if ($limiter->tooManyAttempts($throttleKey, 5)) {
+			$seconds = $limiter->availableIn($throttleKey);
 
 			return response()->json([
 				'status' => 'error',
@@ -95,7 +90,7 @@ class AuthController extends Controller
 
 		if (! $token) {
 			// Tambahkan hit kegagalan (kunci selama 60 detik jika mencapai limit)
-			RateLimiter::hit($throttleKey, 60);
+			$limiter->hit($throttleKey, 60);
 
 			return response()->json([
 				'status' => 'error',
@@ -104,7 +99,7 @@ class AuthController extends Controller
 		}
 
 		// Bersihkan limiter jika login berhasil
-		RateLimiter::clear($throttleKey);
+		$limiter->clear($throttleKey);
 
 		return $this->respondWithToken($token);
 	}
