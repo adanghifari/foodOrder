@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;
 use App\Models\User;
 use App\Models\PasswordResetOtp;
+use Illuminate\Support\Facades\RateLimiter;
 
 
 class AuthController extends Controller
@@ -69,15 +70,34 @@ class AuthController extends Controller
 			], 422);
 		}
 
+		// Rate Limiting Key: username + IP address
+		$throttleKey = Str::transliterate(strtolower($request->input('username')) . '|' . $request->ip());
+
+		// Proteksi lockout: batasi maksimal 5 kali percobaan salah
+		if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+			$seconds = RateLimiter::availableIn($throttleKey);
+
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Terlalu banyak percobaan login yang gagal. Silakan coba lagi dalam ' . $seconds . ' detik.'
+			], 429);
+		}
+
 		$credentials = $request->only(['username', 'password']);
 		$token = $this->authService->attemptLogin($credentials);
 
 		if (! $token) {
+			// Tambahkan hit kegagalan (kunci selama 60 detik jika mencapai limit)
+			RateLimiter::hit($throttleKey, 60);
+
 			return response()->json([
 				'status' => 'error',
 				'message' => 'Invalid username or password'
 			], 401);
 		}
+
+		// Bersihkan limiter jika login berhasil
+		RateLimiter::clear($throttleKey);
 
 		return $this->respondWithToken($token);
 	}
