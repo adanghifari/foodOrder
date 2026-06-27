@@ -71,6 +71,32 @@ class PaymentController extends Controller
             ], 409);
         }
 
+        // Smart reuse: jika snap token Midtrans masih valid (< 24 jam), langsung kembalikan redirect_url yang ada
+        $existingPaymentUrl      = trim((string) ($order->payment_url ?? ''));
+        $existingMidtransOrderId = trim((string) ($order->midtrans_order_id ?? ''));
+
+        if ($existingPaymentUrl !== '' && $existingMidtransOrderId !== '') {
+            $tokenTimestamp = $this->extractTimestampFromMidtransOrderId($existingMidtransOrderId);
+            $isTokenValid   = $tokenTimestamp > 0 && (now()->timestamp - $tokenTimestamp) < 86400;
+
+            if ($isTokenValid) {
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Payment transaction reused (valid)',
+                    'data' => [
+                        'order_id' => (string) $order->_id,
+                        'midtrans_order_id' => $existingMidtransOrderId,
+                        'redirect_url' => $existingPaymentUrl,
+                    ],
+                ], 200);
+            }
+        }
+
+        // Jika expired atau belum ada transaksi, batalkan transaksi lama jika ada
+        if ($existingMidtransOrderId !== '') {
+            $this->paymentService->cancelTransaction($existingMidtransOrderId, false);
+        }
+
         $finishRedirectUrl = $request->filled('finish_redirect_url')
             ? (string) $request->input('finish_redirect_url')
             : null;
@@ -79,7 +105,7 @@ class PaymentController extends Controller
             (string) $order->_id,
             null,
             $finishRedirectUrl,
-            false
+            true // forceNewTransaction = true karena reuse sudah kita handle di atas
         );
 
         return response()->json([
@@ -87,6 +113,20 @@ class PaymentController extends Controller
             'message' => $result['message'],
             'data' => $result['data'] ?? null,
         ], (int) ($result['status'] ?? 500));
+    }
+
+    /**
+     * Ekstrak unix timestamp dari midtrans_order_id dengan format ORDER-{orderId}-{timestamp}.
+     * Digunakan untuk mengecek apakah snap token Midtrans (berlaku 24 jam) masih valid.
+     */
+    private function extractTimestampFromMidtransOrderId(string $midtransOrderId): int
+    {
+        $parts = explode('-', $midtransOrderId);
+        if (count($parts) < 3) {
+            return 0;
+        }
+        $last = (int) end($parts);
+        return $last > 0 ? $last : 0;
     }
 
     public function checkStatus(Request $request, string $orderId)
