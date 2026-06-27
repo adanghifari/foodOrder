@@ -310,9 +310,23 @@ class PaymentService
         }
 
         $payload = (array) $response->json();
-        $transactionStatus = strtolower((string) ($payload['transaction_status'] ?? ''));
-        $fraudStatus = strtolower((string) ($payload['fraud_status'] ?? ''));
-        $paymentType = (string) ($payload['payment_type'] ?? '');
+        $transactionStatus   = strtolower((string) ($payload['transaction_status'] ?? ''));
+        $midtransBodyStatus  = (string) ($payload['status_code'] ?? '');
+        $fraudStatus         = strtolower((string) ($payload['fraud_status'] ?? ''));
+        $paymentType         = (string) ($payload['payment_type'] ?? '');
+
+        // Midtrans kadang mengembalikan HTTP 200 tapi dengan status_code "404" di dalam body JSON
+        // (terjadi ketika user belum memilih metode pembayaran di halaman Snap — transaksi belum
+        // diinisiasi di sisi Midtrans). Jika transaction_status kosong atau body mengindikasikan
+        // 404, jangan update DB agar payment_status yang sudah ada tidak tertimpa empty string.
+        if ($transactionStatus === '' || $midtransBodyStatus === '404') {
+            return [
+                'ok'      => false,
+                'status'  => 404,
+                'message' => 'Transaksi belum diinisiasi di Midtrans (user belum memilih metode pembayaran).',
+                'data'    => $payload,
+            ];
+        }
 
         $order = Order::where('midtrans_order_id', $midtransOrderId)->first();
 
@@ -328,10 +342,10 @@ class PaymentService
 
         if (!$order) {
             return [
-                'ok' => false,
+                'ok'     => false,
                 'status' => 404,
                 'message' => 'Order not found',
-                'data' => $payload,
+                'data'   => $payload,
             ];
         }
 
@@ -339,9 +353,9 @@ class PaymentService
 
         $this->applyPaymentUpdate($order, [
             'midtrans_order_id' => $midtransOrderId,
-            'payment_status' => $paymentStatus,
-            'payment_type' => $paymentType,
-            'payment_payload' => $this->sanitizePaymentPayload($payload),
+            'payment_status'    => $paymentStatus,
+            'payment_type'      => $paymentType,
+            'payment_payload'   => $this->sanitizePaymentPayload($payload),
         ]);
 
         return [
