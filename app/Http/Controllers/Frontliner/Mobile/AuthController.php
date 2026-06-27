@@ -73,6 +73,13 @@ class AuthController extends Controller
 		// Rate Limiting Key: username + IP address
 		$throttleKey = Str::transliterate(strtolower($request->input('username')) . '|' . $request->ip());
 
+		\Illuminate\Support\Facades\Log::info('RateLimiter Debug:', [
+			'key' => $throttleKey,
+			'attempts' => RateLimiter::attempts($throttleKey),
+			'too_many' => RateLimiter::tooManyAttempts($throttleKey, 5),
+			'cache_driver' => config('cache.default'),
+		]);
+
 		// Proteksi lockout: batasi maksimal 5 kali percobaan salah
 		if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
 			$seconds = RateLimiter::availableIn($throttleKey);
