@@ -369,17 +369,35 @@ class PaymentController extends Controller
             return $this->emptyReceiptView($receiptData['message']);
         }
 
+        // Auto-sync: jika PENDING + punya midtrans_order_id + payment_type belum tercatat,
+        // berarti user kemungkinan sudah memilih metode di Midtrans lalu kembali via back browser
+        // (bukan via tombol "X" Midtrans yang sudah redirect ke finishRedirectUrl).
+        // Sync diam-diam agar label tombol dan informasi metode pembayaran selalu akurat.
+        $order           = $receiptData['order'];
+        $paymentStatus   = strtoupper((string) ($order->payment_status ?? 'PENDING'));
+        $midtransOrderId = trim((string) ($order->midtrans_order_id ?? ''));
+        $paymentType     = trim((string) ($order->payment_type ?? ''));
+
+        if ($paymentStatus === 'PENDING' && $midtransOrderId !== '' && $paymentType === '') {
+            try {
+                $this->paymentService->syncTransactionStatus($midtransOrderId);
+                $order->refresh(); // reload data terbaru dari DB setelah sync
+            } catch (\Throwable) {
+                // Best-effort — gagal sync tidak mengganggu tampilan struk
+            }
+        }
+
         return view('frontliner.pembayaran.struk', [
-            'order' => $receiptData['order'],
-            'items' => $receiptData['items'],
-            'subtotal' => $receiptData['subtotal'],
-            'serviceFee' => $receiptData['serviceFee'],
-            'extraCharge' => $receiptData['extraCharge'] ?? 0,
-            'total' => $receiptData['total'],
+            'order'              => $order,
+            'items'              => $receiptData['items'],
+            'subtotal'           => $receiptData['subtotal'],
+            'serviceFee'         => $receiptData['serviceFee'],
+            'extraCharge'        => $receiptData['extraCharge'] ?? 0,
+            'total'              => $receiptData['total'],
             'emptyReceiptMessage' => null,
-            'invoiceCount' => $receiptData['invoiceCount'],
-            'invoiceIndex' => $receiptData['invoiceIndex'],
-            'allowDownloadPdf' => true,
+            'invoiceCount'       => $receiptData['invoiceCount'],
+            'invoiceIndex'       => $receiptData['invoiceIndex'],
+            'allowDownloadPdf'   => true,
         ]);
     }
 
